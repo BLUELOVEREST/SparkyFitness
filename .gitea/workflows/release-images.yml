@@ -1,0 +1,65 @@
+name: Build And Push Eric SparkyFitness Images
+
+on:
+  push:
+    tags:
+      - 'v*-eric.*'
+
+jobs:
+  build-and-push:
+    runs-on: ci
+
+    defaults:
+      run:
+        shell: sh
+
+    env:
+      REGISTRY: 192.168.200.101:54453
+      FRONTEND_IMAGE_REPOSITORY: zhangzhicheng/sparkyfitness
+      SERVER_IMAGE_REPOSITORY: zhangzhicheng/sparkyfitness-server
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show environment
+        run: |
+          uname -a
+          cat /etc/os-release || true
+          docker version
+          echo "Tag: ${GITHUB_REF_NAME}"
+          echo "Commit: ${GITHUB_SHA}"
+
+      - name: Login to Gitea Registry
+        run: |
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${REGISTRY} -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+
+      - name: Build server image
+        run: |
+          docker build \
+            -f docker/Dockerfile.backend \
+            -t ${REGISTRY}/${SERVER_IMAGE_REPOSITORY}:${GITHUB_REF_NAME} \
+            -t ${REGISTRY}/${SERVER_IMAGE_REPOSITORY}:latest \
+            -t ${REGISTRY}/${SERVER_IMAGE_REPOSITORY}:sha-${GITHUB_SHA} \
+            .
+
+      - name: Build frontend image
+        run: |
+          docker build \
+            -f docker/Dockerfile.frontend \
+            -t ${REGISTRY}/${FRONTEND_IMAGE_REPOSITORY}:${GITHUB_REF_NAME} \
+            -t ${REGISTRY}/${FRONTEND_IMAGE_REPOSITORY}:latest \
+            -t ${REGISTRY}/${FRONTEND_IMAGE_REPOSITORY}:sha-${GITHUB_SHA} \
+            .
+
+      - name: Push server image tags
+        run: |
+          docker push ${REGISTRY}/${SERVER_IMAGE_REPOSITORY}:${GITHUB_REF_NAME}
+          docker push ${REGISTRY}/${SERVER_IMAGE_REPOSITORY}:latest
+          docker push ${REGISTRY}/${SERVER_IMAGE_REPOSITORY}:sha-${GITHUB_SHA}
+
+      - name: Push frontend image tags
+        run: |
+          docker push ${REGISTRY}/${FRONTEND_IMAGE_REPOSITORY}:${GITHUB_REF_NAME}
+          docker push ${REGISTRY}/${FRONTEND_IMAGE_REPOSITORY}:latest
+          docker push ${REGISTRY}/${FRONTEND_IMAGE_REPOSITORY}:sha-${GITHUB_SHA}
