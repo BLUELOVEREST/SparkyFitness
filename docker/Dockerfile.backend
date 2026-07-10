@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.4
-
 # Stage 1: Install workspace dependencies and deploy server
 FROM --platform=$BUILDPLATFORM node:24-alpine AS backend_builder
 
@@ -48,5 +46,4 @@ HEALTHCHECK --interval=5s --timeout=10s --retries=5 CMD ["/usr/bin/curl", "-f", 
 
 # Command to run the backend server (tsx handles .ts imports transparently)
 CMD ["./node_modules/.bin/tsx", "index.ts"]
-
 
