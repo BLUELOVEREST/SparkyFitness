@@ -81,3 +81,33 @@ export interface WeeklyGoalPlan {
   saturday_preset_id: string | null;
   sunday_preset_id: string | null;
 }
+
+export type CarbCycleDayType = 'high' | 'medium' | 'low';
+
+export interface CarbCycleInput {
+  weekStartDate: string;
+  bodyWeightKg: number;
+  carbsPerKg: number;
+  proteinPerKg: number;
+  fatPerKg: number;
+}
+
+export interface CarbCycleDayTarget {
+  date: string;
+  dayType: CarbCycleDayType;
+  calories: number;
+  carbs: number;
+  protein: number;
+  fat: number;
+}
+
+export interface CarbCycleWeekResult {
+  weekStartDate: string;
+  weekTotals: {
+    calories: number;
+    carbs: number;
+    protein: number;
+    fat: number;
+  };
+  days: CarbCycleDayTarget[];
+}

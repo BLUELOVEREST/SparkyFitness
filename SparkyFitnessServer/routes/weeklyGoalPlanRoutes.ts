@@ -2,6 +2,46 @@ import express from 'express';
 import { authenticate } from '../middleware/authMiddleware.js';
 import weeklyGoalPlanService from '../services/weeklyGoalPlanService.js';
 const router = express.Router();
+
+function isCarbCycleInputError(error: unknown): error is Error {
+  if (!(error instanceof Error)) return false;
+
+  return (
+    error.message.includes('must be greater than 0') ||
+    error.message.includes('weekStartDate must be a valid date') ||
+    error.message.includes('template is not supported by this endpoint')
+  );
+}
+
+router.post('/carb-cycle/preview', authenticate, async (req, res, next) => {
+  try {
+    const preview = await weeklyGoalPlanService.previewCarbCycleWeek(req.body);
+    res.status(200).json(preview);
+  } catch (error) {
+    if (isCarbCycleInputError(error)) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+router.post('/carb-cycle/apply', authenticate, async (req, res, next) => {
+  try {
+    const applied = await weeklyGoalPlanService.applyCarbCycleWeek(
+      req.userId,
+      req.body
+    );
+    res.status(200).json(applied);
+  } catch (error) {
+    if (isCarbCycleInputError(error)) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
 /**
  * @swagger
  * /weekly-goal-plans:

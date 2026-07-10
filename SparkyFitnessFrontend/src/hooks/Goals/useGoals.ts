@@ -4,9 +4,11 @@ import { goalKeys } from '@/api/keys/goals';
 
 import { loadGoals, saveGoals } from '@/api/Goals/goals';
 import {
+  applyCarbCycleWeek,
   createGoalPreset,
   deleteGoalPreset,
   getGoalPresets,
+  previewCarbCycleWeek,
   updateGoalPreset,
 } from '@/api/Goals/goals';
 import {
@@ -15,7 +17,12 @@ import {
   getWeeklyGoalPlans,
   updateWeeklyGoalPlan,
 } from '@/api/Goals/goals';
-import type { ExpandedGoals, GoalPreset, WeeklyGoalPlan } from '@/types/goals';
+import type {
+  CarbCycleInput,
+  ExpandedGoals,
+  GoalPreset,
+  WeeklyGoalPlan,
+} from '@/types/goals';
 import { DEFAULT_GOALS } from '@/constants/goals';
 
 // --- DAILY GOALS ---
@@ -244,6 +251,36 @@ export const useDeleteWeeklyPlanMutation = () => {
       errorMessage: t(
         'goals.goalsSettings.errorDeletingWeeklyPlan',
         'Failed to delete weekly plan.'
+      ),
+    },
+  });
+};
+
+export const usePreviewCarbCycleMutation = () => {
+  return useMutation({
+    mutationFn: (input: CarbCycleInput) => previewCarbCycleWeek(input),
+    meta: {
+      errorMessage: 'Failed to preview carb cycle goals.',
+    },
+  });
+};
+
+export const useApplyCarbCycleMutation = () => {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: (input: CarbCycleInput) => applyCarbCycleWeek(input),
+    onSuccess: () => {
+      return queryClient.invalidateQueries({
+        queryKey: goalKeys.daily.all(),
+      });
+    },
+    meta: {
+      successMessage: t('goals.carbCycle.applied', 'Carb cycle goals applied.'),
+      errorMessage: t(
+        'goals.carbCycle.applyFailed',
+        'Failed to apply carb cycle goals.'
       ),
     },
   });

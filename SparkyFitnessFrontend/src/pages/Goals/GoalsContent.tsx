@@ -17,6 +17,7 @@ import { GoalPresetsSection } from './GoalPresetsSection';
 import { DailyGoals } from './DailyGoals';
 import { ResetOnboarding } from './ResetOnboarding';
 import { GoalPresetDialog } from './GoalPresetDialog';
+import { CarbCyclePlannerCard } from './CarbCyclePlannerCard';
 import { useCustomNutrients } from '@/hooks/Foods/useCustomNutrients';
 import { DEFAULT_GOALS } from '@/constants/goals';
 
@@ -161,6 +162,8 @@ export const GoalsContent = ({
         setGoals={setGoals}
         visibleNutrients={visibleNutrients}
       />
+
+      <CarbCyclePlannerCard />
 
       {/* Goal Presets Section */}
       <GoalPresetsSection

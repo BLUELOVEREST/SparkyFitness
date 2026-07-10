@@ -1,6 +1,12 @@
 import { apiCall } from '@/api/api';
 import { DEFAULT_GOALS, PREDEFINED_GOAL_KEYS } from '@/constants/goals';
-import type { ExpandedGoals, GoalPreset, WeeklyGoalPlan } from '@/types/goals';
+import type {
+  CarbCycleInput,
+  CarbCycleWeekResult,
+  ExpandedGoals,
+  GoalPreset,
+  WeeklyGoalPlan,
+} from '@/types/goals';
 
 function flattenCustomNutrients<
   T extends { custom_nutrients?: Record<string, number> },
@@ -110,6 +116,24 @@ export async function updateWeeklyGoalPlan(
 export async function deleteWeeklyGoalPlan(id: string): Promise<void> {
   return apiCall(`/weekly-goal-plans/${id}`, {
     method: 'DELETE',
+  });
+}
+
+export async function previewCarbCycleWeek(
+  input: CarbCycleInput
+): Promise<CarbCycleWeekResult> {
+  return apiCall('/weekly-goal-plans/carb-cycle/preview', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+export async function applyCarbCycleWeek(
+  input: CarbCycleInput
+): Promise<CarbCycleWeekResult> {
+  return apiCall('/weekly-goal-plans/carb-cycle/apply', {
+    method: 'POST',
+    body: input,
   });
 }
 

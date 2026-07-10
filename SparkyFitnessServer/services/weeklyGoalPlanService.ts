@@ -1,5 +1,52 @@
 import weeklyGoalPlanRepository from '../models/weeklyGoalPlanRepository.js';
+import goalRepository from '../models/goalRepository.js';
 import { log } from '../config/logging.js';
+import {
+  calculateCarbCycleWeek,
+  type CalculateCarbCycleWeekInput,
+} from './carbCyclePlannerService.js';
+
+const EMPTY_GOAL_FIELDS = {
+  water_goal_ml: 0,
+  saturated_fat: 0,
+  polyunsaturated_fat: 0,
+  monounsaturated_fat: 0,
+  trans_fat: 0,
+  cholesterol: 0,
+  sodium: 0,
+  potassium: 0,
+  dietary_fiber: 0,
+  sugars: 0,
+  vitamin_a: 0,
+  vitamin_c: 0,
+  calcium: 0,
+  iron: 0,
+  target_exercise_calories_burned: 0,
+  target_exercise_duration_minutes: 0,
+  protein_percentage: null,
+  carbs_percentage: null,
+  fat_percentage: null,
+  breakfast_percentage: 25,
+  lunch_percentage: 25,
+  dinner_percentage: 25,
+  snacks_percentage: 25,
+  custom_meal_percentages: {},
+  custom_nutrients: {},
+};
+
+function normalizeCarbCycleInput(input: CalculateCarbCycleWeekInput) {
+  if (input.template !== undefined) {
+    throw new Error('template is not supported by this endpoint');
+  }
+
+  return {
+    weekStartDate: input.weekStartDate,
+    bodyWeightKg: input.bodyWeightKg,
+    carbsPerKg: input.carbsPerKg,
+    proteinPerKg: input.proteinPerKg,
+    fatPerKg: input.fatPerKg,
+  };
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function createWeeklyGoalPlan(userId: any, planData: any) {
   try {
@@ -85,15 +132,50 @@ async function deleteWeeklyGoalPlan(planId: any, userId: any) {
     throw new Error('Failed to delete weekly goal plan.', { cause: error });
   }
 }
+
+async function previewCarbCycleWeek(input: CalculateCarbCycleWeekInput) {
+  return calculateCarbCycleWeek(normalizeCarbCycleInput(input));
+}
+
+async function applyCarbCycleWeek(
+  userId: string,
+  input: CalculateCarbCycleWeekInput
+) {
+  const plan = calculateCarbCycleWeek(normalizeCarbCycleInput(input));
+
+  for (const day of plan.days) {
+    const existingGoal =
+      (await goalRepository.getGoalByDate(userId, day.date)) ??
+      (await goalRepository.getMostRecentGoalBeforeDate(userId, day.date));
+
+    await goalRepository.upsertGoal({
+      ...EMPTY_GOAL_FIELDS,
+      ...existingGoal,
+      user_id: userId,
+      goal_date: day.date,
+      calories: day.calories,
+      protein: day.protein,
+      carbs: day.carbs,
+      fat: day.fat,
+    });
+  }
+
+  return plan;
+}
+
 export { createWeeklyGoalPlan };
 export { getWeeklyGoalPlans };
 export { getActiveWeeklyGoalPlan };
 export { updateWeeklyGoalPlan };
 export { deleteWeeklyGoalPlan };
+export { previewCarbCycleWeek };
+export { applyCarbCycleWeek };
 export default {
   createWeeklyGoalPlan,
   getWeeklyGoalPlans,
   getActiveWeeklyGoalPlan,
   updateWeeklyGoalPlan,
   deleteWeeklyGoalPlan,
+  previewCarbCycleWeek,
+  applyCarbCycleWeek,
 };
