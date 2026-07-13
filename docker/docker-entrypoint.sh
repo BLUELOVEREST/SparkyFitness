@@ -32,6 +32,7 @@ echo "  NGINX_ACCESS_LOG=${NGINX_ACCESS_LOG}"
 echo "  NGINX_ERROR_LOG=${NGINX_ERROR_LOG}"
 echo "  NGINX_DUMP_CONFIG=${NGINX_DUMP_CONFIG:-false}"
 echo "  SPARKY_FITNESS_FRONTEND_URL=${SPARKY_FITNESS_FRONTEND_URL}"
+echo "  SPARKY_FITNESS_BACKEND_WAIT_TIMEOUT=${SPARKY_FITNESS_BACKEND_WAIT_TIMEOUT:-180}"
 
 # Substitute environment variables in the nginx template
 echo "Generating nginx configuration from template..."
@@ -63,6 +64,24 @@ if ! nginx "${NGINX_TEST_CONFIG_ARG}"; then
     exit 1
 fi
 
+BACKEND_HEALTH_URL="http://${SPARKY_FITNESS_SERVER_HOST}:${SPARKY_FITNESS_SERVER_PORT}/api/health"
+BACKEND_WAIT_TIMEOUT="${SPARKY_FITNESS_BACKEND_WAIT_TIMEOUT:-180}"
+BACKEND_WAIT_INTERVAL=2
+BACKEND_WAIT_ELAPSED=0
+
+echo "Waiting for backend health check: ${BACKEND_HEALTH_URL}"
+until curl -fsS "${BACKEND_HEALTH_URL}" >/dev/null; do
+    if [ "${BACKEND_WAIT_ELAPSED}" -ge "${BACKEND_WAIT_TIMEOUT}" ]; then
+        echo "ERROR: Backend did not become healthy within ${BACKEND_WAIT_TIMEOUT}s"
+        exit 1
+    fi
+
+    echo "Backend is not ready yet; retrying in ${BACKEND_WAIT_INTERVAL}s..."
+    sleep "${BACKEND_WAIT_INTERVAL}"
+    BACKEND_WAIT_ELAPSED=$((BACKEND_WAIT_ELAPSED + BACKEND_WAIT_INTERVAL))
+done
+
+echo "Backend is healthy."
 echo "Configuration validated successfully. Starting nginx..."
 echo "Backend will be proxied to: ${SPARKY_FITNESS_SERVER_HOST}:${SPARKY_FITNESS_SERVER_PORT}"
 
