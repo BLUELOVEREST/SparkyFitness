@@ -330,7 +330,10 @@ async function deleteMealPlanTemplate(planId: any, userId: any) {
 async function deactivateAllMealPlanTemplates(userId: any) {
   const client = await getClient(userId); // User-specific operation
   try {
-    await client.query('UPDATE meal_plan_templates SET is_active = FALSE', []);
+    await client.query(
+      'UPDATE meal_plan_templates SET is_active = FALSE WHERE user_id = $1',
+      [userId]
+    );
     return true;
   } finally {
     client.release();

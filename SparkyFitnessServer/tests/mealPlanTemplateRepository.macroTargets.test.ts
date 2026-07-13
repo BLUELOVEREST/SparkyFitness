@@ -59,4 +59,16 @@ describe('mealPlanTemplateRepository macro targets', () => {
     expect(insertCall[1][6]).toEqual(JSON.stringify(macroTargets));
     expect(mockClient.release).toHaveBeenCalledTimes(1);
   });
+
+  it('deactivates only the current user meal plan templates', async () => {
+    mockClient.query.mockResolvedValue({ rowCount: 2 });
+
+    await mealPlanTemplateRepository.deactivateAllMealPlanTemplates('user-1');
+
+    expect(mockClient.query).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE user_id = $1'),
+      ['user-1']
+    );
+    expect(mockClient.release).toHaveBeenCalledTimes(1);
+  });
 });
