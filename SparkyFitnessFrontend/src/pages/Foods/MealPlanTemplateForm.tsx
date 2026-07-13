@@ -22,6 +22,7 @@ import type {
   Meal,
   MealPlanTemplateAssignment,
 } from '@/types/meal';
+import type { CarbCycleMealTarget } from '@/types/goals';
 import type { Food, FoodVariant } from '@/types/food';
 import FoodUnitSelector from '@/components/FoodUnitSelector';
 import MealUnitSelector from './MealUnitSelector';
@@ -45,12 +46,14 @@ interface ExtendedAssignment extends MealPlanTemplateAssignment {
 
 interface MealPlanTemplateFormProps {
   template?: MealPlanTemplate;
+  mealMacroTargetsByDay?: Record<number, CarbCycleMealTarget[]>;
   onSave: (template: Partial<MealPlanTemplate>) => void;
   onClose: () => void;
 }
 
 const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
   template,
+  mealMacroTargetsByDay = {},
   onSave,
   onClose,
 }) => {
@@ -454,6 +457,16 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
           t('common.dinner', 'dinner'),
           t('common.snacks', 'snacks'),
         ];
+  const targetMealTypes = Array.from(
+    new Set(
+      Object.values(mealMacroTargetsByDay)
+        .flat()
+        .map((target) => target.label)
+    )
+  );
+  const visibleMealTypes = Array.from(
+    new Set([...mealTypes, ...targetMealTypes])
+  );
 
   return (
     <>
@@ -538,10 +551,17 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                   <div key={dayIndex}>
                     <h3 className="text-lg font-semibold">{day}</h3>
                     <div className="grid grid-cols-2 gap-4">
-                      {mealTypes.map((mealType) => {
+                      {visibleMealTypes.map((mealType) => {
                         const mealTypeTotals = calculateMealTypeNutrition(
                           dayIndex,
                           mealType
+                        );
+                        const mealTarget = mealMacroTargetsByDay[
+                          dayIndex
+                        ]?.find(
+                          (target) =>
+                            target.label.toLowerCase() ===
+                            mealType.toLowerCase()
                         );
                         const assignmentsForMealType =
                           extendedAssignments.filter(
@@ -637,6 +657,31 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                 {mealTypeTotals.totalFat.toFixed(1)}g
                               </div>
                             )}
+                            {mealTarget ? (
+                              <div className="text-xs text-muted-foreground mt-2 p-2 border border-dashed rounded">
+                                <div className="font-medium text-foreground">
+                                  Target: {mealTarget.calories} kcal | P:{' '}
+                                  {mealTarget.protein}g | C: {mealTarget.carbs}g
+                                  | F: {mealTarget.fat}g
+                                </div>
+                                <div>
+                                  Remaining: P:{' '}
+                                  {(
+                                    mealTarget.protein -
+                                    mealTypeTotals.totalProtein
+                                  ).toFixed(1)}
+                                  g | C:{' '}
+                                  {(
+                                    mealTarget.carbs - mealTypeTotals.totalCarbs
+                                  ).toFixed(1)}
+                                  g | F:{' '}
+                                  {(
+                                    mealTarget.fat - mealTypeTotals.totalFat
+                                  ).toFixed(1)}
+                                  g
+                                </div>
+                              </div>
+                            ) : null}
                             <div className="flex space-x-2 mt-2">
                               <Button
                                 variant="outline"

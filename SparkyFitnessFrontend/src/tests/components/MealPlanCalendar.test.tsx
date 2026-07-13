@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import MealPlanCalendar from '../../pages/Foods/MealPlanCalendar';
 import { renderWithClient } from '../test-utils';
@@ -52,13 +52,56 @@ jest.mock('@/api/Foods/mealPlanTemplate', () => ({
 }));
 
 // Mock MealPlanTemplateForm sub-component
+const mockMealPlanTemplateForm = jest.fn();
 jest.mock('@/pages/Foods/MealPlanTemplateForm', () => {
-  return function MockMealPlanTemplateForm() {
+  return function MockMealPlanTemplateForm(props: unknown) {
+    mockMealPlanTemplateForm(props);
     return (
       <div data-testid="meal-plan-template-form">MealPlanTemplateForm</div>
     );
   };
 });
+
+jest.mock('@/pages/Goals/CarbCyclePlannerCard', () => ({
+  CarbCyclePlannerCard: ({
+    onPlanMeals,
+  }: {
+    onPlanMeals?: (preview: unknown) => void;
+  }) => (
+    <button
+      type="button"
+      onClick={() =>
+        onPlanMeals?.({
+          weekStartDate: '2026-07-06',
+          weekTotals: { calories: 1000, carbs: 100, protein: 100, fat: 50 },
+          days: [
+            {
+              date: '2026-07-06',
+              dayType: 'low',
+              calories: 1000,
+              carbs: 100,
+              protein: 100,
+              fat: 50,
+              trainingSlot: 'morning',
+              meals: [
+                {
+                  slotKey: 'morning',
+                  label: 'Pre-Workout',
+                  calories: 300,
+                  carbs: 30,
+                  protein: 25,
+                  fat: 0,
+                },
+              ],
+            },
+          ],
+        })
+      }
+    >
+      Mock Plan Meals
+    </button>
+  ),
+}));
 
 describe('MealPlanCalendar', () => {
   beforeEach(() => {
@@ -82,5 +125,34 @@ describe('MealPlanCalendar', () => {
     await waitFor(() => {
       expect(screen.getByText('No results.')).toBeInTheDocument();
     });
+  });
+
+  it('opens a carb cycle meal plan draft from preview targets', async () => {
+    mockGetMealPlanTemplates.mockResolvedValue([]);
+
+    renderWithClient(<MealPlanCalendar />);
+
+    fireEvent.click(screen.getByRole('button', { name: /mock plan meals/i }));
+
+    expect(screen.getByTestId('meal-plan-template-form')).toBeInTheDocument();
+    expect(mockMealPlanTemplateForm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template: expect.objectContaining({
+          plan_name: 'Carb Cycle 2026-07-06',
+          start_date: '2026-07-06',
+          end_date: '2026-07-12',
+        }),
+        mealMacroTargetsByDay: {
+          1: [
+            expect.objectContaining({
+              label: 'Pre-Workout',
+              carbs: 30,
+              protein: 25,
+              fat: 0,
+            }),
+          ],
+        },
+      })
+    );
   });
 });

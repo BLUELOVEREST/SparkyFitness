@@ -31,6 +31,7 @@ import type {
 type CarbCyclePlannerCardProps = {
   onPreview?: (input: CarbCycleInput) => Promise<CarbCycleWeekResult>;
   onApply?: (input: CarbCycleInput) => Promise<unknown>;
+  onPlanMeals?: (preview: CarbCycleWeekResult) => void;
 };
 
 const DAY_TYPE_LABELS = {
@@ -66,6 +67,7 @@ function toDateInputValue(date: Date) {
 export function CarbCyclePlannerCard({
   onPreview,
   onApply,
+  onPlanMeals,
 }: CarbCyclePlannerCardProps) {
   const previewMutation = usePreviewCarbCycleMutation();
   const applyMutation = useApplyCarbCycleMutation();
@@ -249,6 +251,16 @@ export function CarbCyclePlannerCard({
           >
             Apply to Goals
           </Button>
+          {onPlanMeals ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => preview && onPlanMeals(preview)}
+              disabled={!preview || isBusy}
+            >
+              Plan Meals
+            </Button>
+          ) : null}
           {preview ? (
             <span className="text-sm text-muted-foreground">
               {preview.weekTotals.calories} kcal weekly

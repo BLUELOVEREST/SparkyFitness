@@ -51,9 +51,14 @@ describe('CarbCyclePlannerCard', () => {
       ],
     });
     const onApply = jest.fn().mockResolvedValue(undefined);
+    const onPlanMeals = jest.fn();
 
     renderWithClient(
-      <CarbCyclePlannerCard onPreview={onPreview} onApply={onApply} />
+      <CarbCyclePlannerCard
+        onPreview={onPreview}
+        onApply={onApply}
+        onPlanMeals={onPlanMeals}
+      />
     );
 
     fireEvent.change(screen.getByLabelText(/week start date/i), {
@@ -70,6 +75,10 @@ describe('CarbCyclePlannerCard', () => {
     expect(screen.getByText(/Breakfast/i)).toBeInTheDocument();
     expect(screen.getByText(/27.6C \/ 35P \/ 30.6F/i)).toBeInTheDocument();
     expect(screen.getByText(/14210 kcal weekly/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /plan meals/i }));
+    expect(onPlanMeals).toHaveBeenCalledWith(
+      expect.objectContaining({ weekStartDate: '2026-07-06' })
+    );
 
     fireEvent.change(screen.getByLabelText(/body weight/i), {
       target: { value: '80' },
