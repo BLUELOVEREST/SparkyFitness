@@ -201,7 +201,14 @@ const WorkoutPlansManager = () => {
           const plan = row.original;
           return (
             <div className="flex flex-col">
-              <span className="font-semibold">{plan.plan_name}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">{plan.plan_name}</span>
+                <Badge variant="outline" className="w-fit text-[10px]">
+                  {plan.plan_mode === 'training_focus'
+                    ? 'Training Focus'
+                    : 'Detailed'}
+                </Badge>
+              </div>
               {plan.description && (
                 <span className="text-xs text-muted-foreground truncate max-w-[200px]">
                   {plan.description}

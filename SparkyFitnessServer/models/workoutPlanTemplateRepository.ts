@@ -2,14 +2,66 @@ import { getClient } from '../db/poolManager.js';
 import { log } from '../config/logging.js';
 // @ts-expect-error TS(7016): Could not find a declaration file for module 'pg-f... Remove this comment to see the full error message
 import format from 'pg-format';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function insertFocusSessions(
+  client: any,
+  templateId: any,
+  sessions: any[]
+) {
+  if (!sessions || sessions.length === 0) return;
+
+  const values = sessions.map((session) => [
+    templateId,
+    session.day_of_week,
+    session.time_slot,
+    session.training_focus,
+    session.is_primary,
+  ]);
+  const query = format(
+    `INSERT INTO workout_plan_focus_sessions
+      (template_id, day_of_week, time_slot, training_focus, is_primary)
+      VALUES %L`,
+    values
+  );
+  await client.query(query);
+}
+
+const FOCUS_SESSIONS_SELECT = `
+  COALESCE(
+    (
+      SELECT json_agg(focus_session_data)
+      FROM (
+        SELECT
+          fs.id,
+          fs.day_of_week,
+          fs.time_slot,
+          fs.training_focus,
+          fs.is_primary
+        FROM workout_plan_focus_sessions fs
+        WHERE fs.template_id = t.id
+        ORDER BY fs.day_of_week ASC,
+          CASE fs.time_slot
+            WHEN 'morning' THEN 1
+            WHEN 'noon' THEN 2
+            WHEN 'afternoon' THEN 3
+            WHEN 'evening' THEN 4
+            ELSE 5
+          END ASC
+      ) AS focus_session_data
+    ),
+    '[]'::json
+  ) as focus_sessions
+`;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function createWorkoutPlanTemplate(planData: any) {
   const client = await getClient(planData.user_id); // User-specific operation
   try {
     await client.query('BEGIN');
     const insertTemplateQuery = `
-            INSERT INTO workout_plan_templates (user_id, plan_name, description, start_date, end_date, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`;
+            INSERT INTO workout_plan_templates (user_id, plan_name, description, start_date, end_date, is_active, plan_mode)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`;
     const templateValues = [
       planData.user_id,
       planData.plan_name ?? '',
@@ -17,6 +69,7 @@ async function createWorkoutPlanTemplate(planData: any) {
       planData.start_date ?? new Date(),
       planData.end_date,
       planData.is_active ?? false,
+      planData.plan_mode ?? 'detailed',
     ];
     const templateResult = await client.query(
       insertTemplateQuery,
@@ -57,6 +110,7 @@ async function createWorkoutPlanTemplate(planData: any) {
         }
       }
     }
+    await insertFocusSessions(client, newTemplate.id, planData.focus_sessions);
     await client.query('COMMIT');
     const finalQuery = `
             SELECT
@@ -85,6 +139,8 @@ async function createWorkoutPlanTemplate(planData: any) {
                     ),
                     '[]'::json
                 ) as assignments
+                ,
+                ${FOCUS_SESSIONS_SELECT}
             FROM workout_plan_templates t
             WHERE t.id = $1
         `;
@@ -134,6 +190,8 @@ async function getWorkoutPlanTemplatesByUserId(userId: any) {
                     ),
                     '[]'::json
                 ) as assignments
+                ,
+                ${FOCUS_SESSIONS_SELECT}
             FROM workout_plan_templates t
             WHERE t.user_id = $1
             ORDER BY t.created_at DESC
@@ -175,6 +233,8 @@ async function getWorkoutPlanTemplateById(templateId: any, userId: any) {
                     ),
                     '[]'::json
                 ) as assignments
+                ,
+                ${FOCUS_SESSIONS_SELECT}
             FROM workout_plan_templates t
             WHERE t.id = $1
         `;
@@ -198,14 +258,15 @@ async function updateWorkoutPlanTemplate(
     await client.query('BEGIN');
     await client.query(
       `UPDATE workout_plan_templates SET
-                plan_name = $1, description = $2, start_date = $3, end_date = $4, is_active = $5, updated_at = now()
-             WHERE id = $6 AND user_id = $7 RETURNING *`,
+                plan_name = $1, description = $2, start_date = $3, end_date = $4, is_active = $5, plan_mode = $6, updated_at = now()
+             WHERE id = $7 AND user_id = $8 RETURNING *`,
       [
         updateData.plan_name ?? '',
         updateData.description ?? '',
         updateData.start_date ?? new Date(),
         updateData.end_date,
         updateData.is_active ?? false,
+        updateData.plan_mode ?? 'detailed',
         templateId,
         userId,
       ]
@@ -326,6 +387,13 @@ async function updateWorkoutPlanTemplate(
         }
       }
     }
+    if (updateData.focus_sessions) {
+      await client.query(
+        'DELETE FROM workout_plan_focus_sessions WHERE template_id = $1',
+        [templateId]
+      );
+      await insertFocusSessions(client, templateId, updateData.focus_sessions);
+    }
     await client.query('COMMIT');
     const finalQuery = `
             SELECT
@@ -354,6 +422,8 @@ async function updateWorkoutPlanTemplate(
                     ),
                     '[]'::json
                 ) as assignments
+                ,
+                ${FOCUS_SESSIONS_SELECT}
             FROM workout_plan_templates t
             WHERE t.id = $1
         `;
@@ -437,6 +507,8 @@ async function getActiveWorkoutPlanForDate(userId: any, date: any) {
                     ),
                     '[]'::json
                 ) as assignments
+                ,
+                ${FOCUS_SESSIONS_SELECT}
             FROM workout_plan_templates t
             WHERE t.user_id = $1
             AND t.is_active = TRUE
@@ -449,6 +521,29 @@ async function getActiveWorkoutPlanForDate(userId: any, date: any) {
     client.release();
   }
 }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getActiveTrainingFocusPlanForDate(userId: any, date: any) {
+  const client = await getClient(userId); // User-specific operation
+  try {
+    const query = `
+            SELECT
+                t.*,
+                '[]'::json as assignments,
+                ${FOCUS_SESSIONS_SELECT}
+            FROM workout_plan_templates t
+            WHERE t.user_id = $1
+            AND t.is_active = TRUE
+            AND t.plan_mode = 'training_focus'
+            AND $2 BETWEEN t.start_date AND COALESCE(t.end_date, '9999-12-31')
+            ORDER BY t.created_at DESC
+            LIMIT 1
+        `;
+    const result = await client.query(query, [userId, date]);
+    return result.rows[0] ?? null;
+  } finally {
+    client.release();
+  }
+}
 export { createWorkoutPlanTemplate };
 export { getWorkoutPlanTemplatesByUserId };
 export { getWorkoutPlanTemplateById };
@@ -456,6 +551,7 @@ export { updateWorkoutPlanTemplate };
 export { deleteWorkoutPlanTemplate };
 export { getWorkoutPlanTemplateOwnerId };
 export { getActiveWorkoutPlanForDate };
+export { getActiveTrainingFocusPlanForDate };
 export default {
   createWorkoutPlanTemplate,
   getWorkoutPlanTemplatesByUserId,
@@ -464,4 +560,5 @@ export default {
   deleteWorkoutPlanTemplate,
   getWorkoutPlanTemplateOwnerId,
   getActiveWorkoutPlanForDate,
+  getActiveTrainingFocusPlanForDate,
 };

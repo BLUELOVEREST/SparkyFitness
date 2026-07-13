@@ -9,7 +9,8 @@ function isCarbCycleInputError(error: unknown): error is Error {
   return (
     error.message.includes('must be greater than 0') ||
     error.message.includes('weekStartDate must be a valid date') ||
-    error.message.includes('template is not supported by this endpoint')
+    error.message.includes('template is not supported by this endpoint') ||
+    error.message.includes('primary training session')
   );
 }
 

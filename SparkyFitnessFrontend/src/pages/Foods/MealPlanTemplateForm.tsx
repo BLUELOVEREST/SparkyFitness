@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatDateToYYYYMMDD } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -34,11 +34,10 @@ import FoodSearchDialog from '@/components/FoodSearch/FoodSearchDialog';
 import { useMealTypes } from '@/hooks/Diary/useMealTypes';
 import { useMostRecentMeasurement } from '@/hooks/CheckIn/useCheckIn';
 import { usePreviewCarbCycleMutation } from '@/hooks/Goals/useGoals';
+import { useWorkoutPlanTemplates } from '@/hooks/Exercises/useWorkoutPlans';
 import { buildCarbCycleMealPlanDraft } from '@/utils/carbCycleMealPlan';
-import type {
-  CarbCycleTrainingSlot,
-  CarbCycleTrainingSlots,
-} from '@/types/goals';
+import type { CarbCycleTrainingSlots } from '@/types/goals';
+import type { WorkoutPlanFocusSession } from '@/types/workout';
 
 // Extended assignment type with nutrition data for display
 interface ExtendedAssignment extends MealPlanTemplateAssignment {
@@ -70,16 +69,6 @@ const DEFAULT_TRAINING_SLOTS: CarbCycleTrainingSlots = [
   'rest',
 ];
 
-const TRAINING_SLOT_LABELS: Record<CarbCycleTrainingSlot, string> = {
-  rest: 'Rest',
-  morning: 'Morning',
-  noon: 'Noon',
-  afternoon: 'Afternoon',
-  evening: 'Evening',
-};
-
-const CARB_CYCLE_DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
 const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
   template,
   mealMacroTargetsByDay = {},
@@ -102,9 +91,6 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     proteinPerKg: '2',
     fatPerKg: '1',
   });
-  const [trainingSlots, setTrainingSlots] = useState<CarbCycleTrainingSlots>(
-    DEFAULT_TRAINING_SLOTS
-  );
   const [planName, setPlanName] = useState(template?.plan_name || '');
   const [description, setDescription] = useState(template?.description || '');
   const [startDate, setStartDate] = useState(
@@ -138,9 +124,39 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
 
   const queryClient = useQueryClient();
   const { data: availableMealTypes = [] } = useMealTypes();
+  const { data: workoutPlans = [] } = useWorkoutPlanTemplates('current-user');
   const { data: weightData, isLoading: isWeightLoading } =
     useMostRecentMeasurement('weight');
   const previewCarbCycleMutation = usePreviewCarbCycleMutation();
+  const activeTrainingFocusPlan = useMemo(() => {
+    if (!startDate) return null;
+    return (
+      workoutPlans.find((plan) => {
+        if (plan.plan_mode !== 'training_focus' || !plan.is_active) {
+          return false;
+        }
+        const planStart = plan.start_date
+          ? (String(plan.start_date).split('T')[0] ?? '')
+          : '';
+        const planEnd = plan.end_date
+          ? String(plan.end_date).split('T')[0]
+          : '';
+        return planStart <= startDate && (!planEnd || startDate <= planEnd);
+      }) ?? null
+    );
+  }, [startDate, workoutPlans]);
+  const trainingSessionsByDay = useMemo(() => {
+    if (!activeTrainingFocusPlan?.focus_sessions || !startDate) return null;
+    const start = new Date(`${startDate}T00:00:00`);
+    return Array.from({ length: 7 }, (_, dayIndex) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + dayIndex);
+      const dayOfWeek = date.getDay();
+      return activeTrainingFocusPlan.focus_sessions!.filter(
+        (session: WorkoutPlanFocusSession) => session.day_of_week === dayOfWeek
+      );
+    });
+  }, [activeTrainingFocusPlan, startDate]);
   const resolvedMealMacroTargetsByDay =
     planMode === 'carbCycle' ? generatedMealMacroTargetsByDay : {};
   // Helper function to fetch nutrition data for an assignment
@@ -491,13 +507,6 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     onSave(dataToSave);
   };
 
-  const updateTrainingSlot = (index: number, value: CarbCycleTrainingSlot) => {
-    const nextSlots = [...trainingSlots] as CarbCycleTrainingSlots;
-    nextSlots[index] = value;
-    setTrainingSlots(nextSlots);
-    setGeneratedMealMacroTargetsByDay({});
-  };
-
   const handleGenerateCarbCycleTargets = async () => {
     const bodyWeightKg = weightData?.weight;
     if (!startDate) {
@@ -524,7 +533,8 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
       carbsPerKg: Number(carbCycleForm.carbsPerKg),
       proteinPerKg: Number(carbCycleForm.proteinPerKg),
       fatPerKg: Number(carbCycleForm.fatPerKg),
-      trainingSlots,
+      trainingSlots: DEFAULT_TRAINING_SLOTS,
+      trainingSessionsByDay: trainingSessionsByDay ?? undefined,
     });
     const draft = buildCarbCycleMealPlanDraft(preview);
     setGeneratedMealMacroTargetsByDay(draft.mealTargetsByDay);
@@ -721,40 +731,53 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Primary Training Slot</Label>
-                    <div className="grid gap-2 md:grid-cols-7">
-                      {trainingSlots.map((slot, index) => {
-                        const dayLabel =
-                          CARB_CYCLE_DAY_LABELS[index] ?? `Day ${index + 1}`;
-                        return (
-                          <div key={dayLabel} className="space-y-1">
-                            <div className="text-xs text-muted-foreground">
-                              {dayLabel}
-                            </div>
-                            <select
-                              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                              aria-label={`${dayLabel} training`}
-                              value={slot}
-                              onChange={(event) =>
-                                updateTrainingSlot(
-                                  index,
-                                  event.target.value as CarbCycleTrainingSlot
-                                )
-                              }
-                            >
-                              {Object.entries(TRAINING_SLOT_LABELS).map(
-                                ([value, label]) => (
-                                  <option key={value} value={value}>
-                                    {label}
-                                  </option>
-                                )
-                              )}
-                            </select>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <div className="space-y-2 rounded-md border p-3">
+                    <Label>Training Focus Plan</Label>
+                    {activeTrainingFocusPlan ? (
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium">
+                          {activeTrainingFocusPlan.plan_name}
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-7">
+                          {(trainingSessionsByDay ?? []).map(
+                            (daySessions, index) => {
+                              const primary = daySessions.find(
+                                (session) => session.is_primary
+                              );
+                              const activeCount = daySessions.filter(
+                                (session) => session.training_focus !== 'rest'
+                              ).length;
+                              return (
+                                <div
+                                  key={index}
+                                  className="rounded-md bg-muted p-2 text-xs"
+                                >
+                                  <div className="font-medium">
+                                    Day {index + 1}
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {activeCount === 0
+                                      ? 'Rest'
+                                      : `${activeCount} session${activeCount > 1 ? 's' : ''}`}
+                                  </div>
+                                  {primary ? (
+                                    <div className="mt-1 font-medium text-primary">
+                                      Main: {primary.time_slot}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            }
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No active Training Focus Plan covers this start date.
+                        Carb Cycle targets will be generated as rest days until
+                        you create and activate one under Workout Plans.
+                      </p>
+                    )}
                   </div>
 
                   <Button

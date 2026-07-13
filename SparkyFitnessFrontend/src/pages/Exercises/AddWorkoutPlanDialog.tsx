@@ -7,7 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type {
   SortableExerciseItemData,
+  TrainingFocusTimeSlot,
   WorkoutPlanTemplate,
+  WorkoutPlanFocusSession,
+  WorkoutPlanMode,
 } from '@/types/workout';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
@@ -41,6 +44,48 @@ import { formatDateToYYYYMMDD } from '@/lib/utils';
 import { DAYS_OF_WEEK } from '@/constants/exercises';
 import { useWorkoutPlanAssignments } from '@/hooks/Exercises/useWorkoutPlanAssignments';
 import { SortableExerciseItem } from './SortableExerciseItem';
+
+const TRAINING_FOCUS_TIME_SLOTS: {
+  value: TrainingFocusTimeSlot;
+  label: string;
+}[] = [
+  { value: 'morning', label: 'Morning' },
+  { value: 'noon', label: 'Noon' },
+  { value: 'afternoon', label: 'Afternoon' },
+  { value: 'evening', label: 'Evening' },
+];
+
+const TRAINING_FOCUS_OPTIONS = [
+  { value: 'rest', label: 'Rest' },
+  { value: 'chest', label: 'Chest' },
+  { value: 'back', label: 'Back' },
+  { value: 'legs', label: 'Legs' },
+  { value: 'shoulders', label: 'Shoulders' },
+  { value: 'arms', label: 'Arms' },
+  { value: 'cardio', label: 'Cardio' },
+  { value: 'full_body', label: 'Full Body' },
+  { value: 'custom', label: 'Custom' },
+];
+
+function buildDefaultFocusSessions(
+  initialSessions?: WorkoutPlanFocusSession[]
+): WorkoutPlanFocusSession[] {
+  return DAYS_OF_WEEK.flatMap((day) =>
+    TRAINING_FOCUS_TIME_SLOTS.map(({ value }) => {
+      const existing = initialSessions?.find(
+        (session) =>
+          session.day_of_week === day.id && session.time_slot === value
+      );
+      return {
+        day_of_week: day.id,
+        time_slot: value,
+        training_focus: existing?.training_focus ?? 'rest',
+        is_primary:
+          existing?.training_focus !== 'rest' && Boolean(existing?.is_primary),
+      };
+    })
+  );
+}
 
 interface AddWorkoutPlanDialogProps {
   isOpen: boolean;
@@ -109,6 +154,12 @@ const AddWorkoutPlanDialog = ({
   const [isActive, setIsActive] = useState(
     () => initialData?.is_active ?? true
   );
+  const [planMode, setPlanMode] = useState<WorkoutPlanMode>(
+    () => initialData?.plan_mode ?? 'detailed'
+  );
+  const [focusSessions, setFocusSessions] = useState<WorkoutPlanFocusSession[]>(
+    () => buildDefaultFocusSessions(initialData?.focus_sessions)
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -133,13 +184,40 @@ const AddWorkoutPlanDialog = ({
       return;
     }
 
+    if (planMode === 'training_focus') {
+      for (const day of DAYS_OF_WEEK) {
+        const daySessions = focusSessions.filter(
+          (session) => session.day_of_week === day.id
+        );
+        const activeSessions = daySessions.filter(
+          (session) => session.training_focus !== 'rest'
+        );
+        const primarySessions = daySessions.filter(
+          (session) => session.is_primary
+        );
+        if (activeSessions.length > 0 && primarySessions.length !== 1) {
+          toast({
+            title: t(
+              'addWorkoutPlanDialog.validationErrorTitle',
+              'Validation Error'
+            ),
+            description: `${day.name} must have exactly one main training session.`,
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
+    }
+
     const planData = {
       plan_name: planName,
       description,
+      plan_mode: planMode,
       start_date: startDate,
       end_date: endDate || null,
       is_active: isActive,
-      assignments: buildAssignmentsForSave(),
+      assignments: planMode === 'detailed' ? buildAssignmentsForSave() : [],
+      focus_sessions: planMode === 'training_focus' ? focusSessions : [],
     };
 
     if (initialData && onUpdate) {
@@ -148,6 +226,49 @@ const AddWorkoutPlanDialog = ({
       onSave(planData);
     }
     onClose();
+  };
+
+  const updateFocusSession = (
+    dayOfWeek: number,
+    timeSlot: TrainingFocusTimeSlot,
+    updates: Partial<WorkoutPlanFocusSession>
+  ) => {
+    setFocusSessions((current) =>
+      current.map((session) => {
+        if (
+          session.day_of_week !== dayOfWeek ||
+          session.time_slot !== timeSlot
+        ) {
+          return session;
+        }
+
+        const trainingFocus = updates.training_focus ?? session.training_focus;
+        return {
+          ...session,
+          ...updates,
+          training_focus: trainingFocus,
+          is_primary:
+            trainingFocus === 'rest'
+              ? false
+              : (updates.is_primary ?? session.is_primary),
+        };
+      })
+    );
+  };
+
+  const setPrimaryFocusSession = (
+    dayOfWeek: number,
+    timeSlot: TrainingFocusTimeSlot
+  ) => {
+    setFocusSessions((current) =>
+      current.map((session) => ({
+        ...session,
+        is_primary:
+          session.day_of_week === dayOfWeek &&
+          session.time_slot === timeSlot &&
+          session.training_focus !== 'rest',
+      }))
+    );
   };
 
   return (
@@ -239,6 +360,32 @@ const AddWorkoutPlanDialog = ({
                 {t('addWorkoutPlanDialog.setActiveLabel', 'Set as active plan')}
               </Label>
             </div>
+            <div className="space-y-2">
+              <Label>{t('addWorkoutPlanDialog.planType', 'Plan Type')}</Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant={planMode === 'detailed' ? 'default' : 'outline'}
+                  onClick={() => setPlanMode('detailed')}
+                >
+                  Detailed Workout Plan
+                </Button>
+                <Button
+                  type="button"
+                  variant={
+                    planMode === 'training_focus' ? 'default' : 'outline'
+                  }
+                  onClick={() => setPlanMode('training_focus')}
+                >
+                  Training Focus Plan
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {planMode === 'training_focus'
+                  ? 'Plan training body parts by time slot without choosing specific exercises.'
+                  : 'Plan exact workouts by assigning exercises or presets to each day.'}
+              </p>
+            </div>
             <p
               className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mt-2"
               role="alert"
@@ -252,90 +399,165 @@ const AddWorkoutPlanDialog = ({
               )}
             </p>
 
-            <div className="space-y-4">
-              <h4 className="mb-2 text-lg font-medium">
-                {t('addWorkoutPlanDialog.assignmentsTitle', 'Assignments')}
-              </h4>
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
+            {planMode === 'training_focus' ? (
+              <div className="space-y-4">
+                <h4 className="mb-2 text-lg font-medium">
+                  Training Focus Sessions
+                </h4>
                 {DAYS_OF_WEEK.map((day) => {
-                  const dayAssignments = assignments.filter(
-                    (assignment) => assignment.day_of_week === day.id
+                  const daySessions = focusSessions.filter(
+                    (session) => session.day_of_week === day.id
                   );
                   return (
                     <Card key={day.name} className="p-4 bg-muted/30">
-                      <SortableContext
-                        items={dayAssignments.map((a) => a.id as string)}
-                      >
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h3 className="font-semibold text-primary">
-                              {day.name}
-                            </h3>
-                            <div className="flex items-center space-x-2">
-                              {copiedAssignment && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handlePasteAssignment(day.id)}
-                                >
-                                  <Clipboard className="h-4 w-4 mr-2" />{' '}
-                                  {t(
-                                    'addWorkoutPlanDialog.pasteButton',
-                                    'Paste'
-                                  )}
-                                </Button>
-                              )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedDayForAssignment(day.id);
-                                  setIsAddExerciseDialogOpen(true);
-                                }}
-                              >
-                                <Plus className="h-4 w-4 mr-2" />{' '}
-                                {t(
-                                  'addWorkoutPlanDialog.addExerciseButtonInDay',
-                                  'Add Exercise'
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                          {dayAssignments.map((assignment) => {
-                            const originalIndex = assignments.findIndex(
-                              (a) => a.id === assignment.id
-                            );
+                      <div className="space-y-3">
+                        <h3 className="font-semibold text-primary">
+                          {day.name}
+                        </h3>
+                        <div className="grid gap-3 md:grid-cols-4">
+                          {TRAINING_FOCUS_TIME_SLOTS.map(({ value, label }) => {
+                            const session = daySessions.find(
+                              (item) => item.time_slot === value
+                            )!;
                             return (
-                              <SortableExerciseItem
-                                key={assignment.id}
-                                ex={assignment}
-                                exerciseIndex={originalIndex}
-                                weightUnit={weightUnit}
-                                workoutPresets={workoutPresets}
-                                onRemoveExercise={handleRemoveAssignment}
-                                onSetChange={handleSetChangeInPlan}
-                                onDuplicateSet={handleDuplicateSetInPlan}
-                                onRemoveSet={handleRemoveSetInPlan}
-                                onAddSet={handleAddSetInPlan}
-                                onCopyExercise={
-                                  handleCopyAssignment as (
-                                    ex: SortableExerciseItemData
-                                  ) => void
-                                }
-                              />
+                              <div
+                                key={value}
+                                className="rounded-md border bg-background p-3 space-y-2"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <Label className="text-xs font-semibold uppercase text-muted-foreground">
+                                    {label}
+                                  </Label>
+                                  <label className="flex items-center gap-1 text-xs">
+                                    <input
+                                      type="radio"
+                                      name={`primary-focus-${day.id}`}
+                                      checked={session.is_primary}
+                                      disabled={
+                                        session.training_focus === 'rest'
+                                      }
+                                      onChange={() =>
+                                        setPrimaryFocusSession(day.id, value)
+                                      }
+                                    />
+                                    Main
+                                  </label>
+                                </div>
+                                <select
+                                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                                  value={session.training_focus}
+                                  onChange={(event) =>
+                                    updateFocusSession(day.id, value, {
+                                      training_focus: event.target.value,
+                                    })
+                                  }
+                                >
+                                  {TRAINING_FOCUS_OPTIONS.map((option) => (
+                                    <option
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                             );
                           })}
                         </div>
-                      </SortableContext>
+                      </div>
                     </Card>
                   );
                 })}
-              </DndContext>
-            </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <h4 className="mb-2 text-lg font-medium">
+                  {t('addWorkoutPlanDialog.assignmentsTitle', 'Assignments')}
+                </h4>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  {DAYS_OF_WEEK.map((day) => {
+                    const dayAssignments = assignments.filter(
+                      (assignment) => assignment.day_of_week === day.id
+                    );
+                    return (
+                      <Card key={day.name} className="p-4 bg-muted/30">
+                        <SortableContext
+                          items={dayAssignments.map((a) => a.id as string)}
+                        >
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h3 className="font-semibold text-primary">
+                                {day.name}
+                              </h3>
+                              <div className="flex items-center space-x-2">
+                                {copiedAssignment && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handlePasteAssignment(day.id)
+                                    }
+                                  >
+                                    <Clipboard className="h-4 w-4 mr-2" />{' '}
+                                    {t(
+                                      'addWorkoutPlanDialog.pasteButton',
+                                      'Paste'
+                                    )}
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedDayForAssignment(day.id);
+                                    setIsAddExerciseDialogOpen(true);
+                                  }}
+                                >
+                                  <Plus className="h-4 w-4 mr-2" />{' '}
+                                  {t(
+                                    'addWorkoutPlanDialog.addExerciseButtonInDay',
+                                    'Add Exercise'
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                            {dayAssignments.map((assignment) => {
+                              const originalIndex = assignments.findIndex(
+                                (a) => a.id === assignment.id
+                              );
+                              return (
+                                <SortableExerciseItem
+                                  key={assignment.id}
+                                  ex={assignment}
+                                  exerciseIndex={originalIndex}
+                                  weightUnit={weightUnit}
+                                  workoutPresets={workoutPresets}
+                                  onRemoveExercise={handleRemoveAssignment}
+                                  onSetChange={handleSetChangeInPlan}
+                                  onDuplicateSet={handleDuplicateSetInPlan}
+                                  onRemoveSet={handleRemoveSetInPlan}
+                                  onAddSet={handleAddSetInPlan}
+                                  onCopyExercise={
+                                    handleCopyAssignment as (
+                                      ex: SortableExerciseItemData
+                                    ) => void
+                                  }
+                                />
+                              );
+                            })}
+                          </div>
+                        </SortableContext>
+                      </Card>
+                    );
+                  })}
+                </DndContext>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <DialogClose asChild>

@@ -59,17 +59,35 @@ export interface WorkoutPlanAssignment {
   category?: string;
 }
 
+export type WorkoutPlanMode = 'detailed' | 'training_focus';
+
+export type TrainingFocusTimeSlot =
+  | 'morning'
+  | 'noon'
+  | 'afternoon'
+  | 'evening';
+
+export interface WorkoutPlanFocusSession {
+  id?: string | number;
+  day_of_week: number;
+  time_slot: TrainingFocusTimeSlot;
+  training_focus: string;
+  is_primary: boolean;
+}
+
 export interface WorkoutPlanTemplate {
   id: string;
   user_id: string;
   plan_name: string;
   description?: string;
+  plan_mode?: WorkoutPlanMode;
   start_date?: string;
   end_date?: string | null;
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;
   assignments?: WorkoutPlanAssignment[];
+  focus_sessions?: WorkoutPlanFocusSession[];
 }
 
 // New interface for exercises coming from presets, where sets, reps, and weight are guaranteed

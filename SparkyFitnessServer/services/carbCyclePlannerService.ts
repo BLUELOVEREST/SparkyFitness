@@ -28,6 +28,13 @@ export type CarbCycleTrainingTemplate = readonly [
   CarbCycleTrainingSlot,
 ];
 
+export interface CarbCycleTrainingSession {
+  day_of_week?: number;
+  time_slot: CarbCycleSlotKey;
+  training_focus: string;
+  is_primary: boolean;
+}
+
 export interface CalculateCarbCycleWeekInput {
   weekStartDate: string;
   bodyWeightKg: number;
@@ -36,6 +43,7 @@ export interface CalculateCarbCycleWeekInput {
   fatPerKg: number;
   template?: CarbCycleTemplate;
   trainingSlots?: CarbCycleTrainingTemplate;
+  trainingSessionsByDay?: CarbCycleTrainingSession[][];
 }
 
 export interface CarbCycleMealTarget {
@@ -55,6 +63,7 @@ export interface CarbCycleDayPlan {
   fat: number;
   calories: number;
   trainingSlot: CarbCycleTrainingSlot;
+  trainingSessions?: CarbCycleTrainingSession[];
   meals: CarbCycleMealTarget[];
 }
 
@@ -250,6 +259,29 @@ function buildMealTargets(
   });
 }
 
+function resolvePrimaryTrainingSlot(
+  trainingSessions: CarbCycleTrainingSession[] | undefined,
+  fallbackSlot: CarbCycleTrainingSlot
+): CarbCycleTrainingSlot {
+  if (!trainingSessions) return fallbackSlot;
+
+  const activeSessions = trainingSessions.filter(
+    (session) => session.training_focus !== 'rest'
+  );
+  if (activeSessions.length === 0) return 'rest';
+
+  const primarySessions = activeSessions.filter(
+    (session) => session.is_primary
+  );
+  if (primarySessions.length !== 1) {
+    throw new Error(
+      'Training days must have exactly one primary training session.'
+    );
+  }
+
+  return primarySessions[0].time_slot;
+}
+
 export function calculateCarbCycleWeek({
   weekStartDate,
   bodyWeightKg,
@@ -258,6 +290,7 @@ export function calculateCarbCycleWeek({
   fatPerKg,
   template = DEFAULT_CARB_CYCLE_TEMPLATE,
   trainingSlots,
+  trainingSessionsByDay,
 }: CalculateCarbCycleWeekInput): CarbCycleWeekPlan {
   assertPositive(bodyWeightKg, 'bodyWeightKg');
   assertPositive(carbsPerKg, 'carbsPerKg');
@@ -283,7 +316,11 @@ export function calculateCarbCycleWeek({
       (weekTotals.fat * FAT_DISTRIBUTION[dayType]) / dayCounts[dayType]
     );
     const calories = Math.round(carbs * 4 + dailyProtein * 4 + fat * 9);
-    const trainingSlot = trainingSlots?.[dayIndex] ?? 'rest';
+    const trainingSessions = trainingSessionsByDay?.[dayIndex];
+    const trainingSlot = resolvePrimaryTrainingSlot(
+      trainingSessions,
+      trainingSlots?.[dayIndex] ?? 'rest'
+    );
 
     return {
       date: formatDate(addDays(startDate, dayIndex)),
@@ -293,6 +330,7 @@ export function calculateCarbCycleWeek({
       fat,
       calories,
       trainingSlot,
+      trainingSessions,
       meals: buildMealTargets(
         { carbs, protein: dailyProtein, fat },
         trainingSlot

@@ -120,6 +120,14 @@ export interface CarbCycleInput {
   proteinPerKg: number;
   fatPerKg: number;
   trainingSlots?: CarbCycleTrainingSlots;
+  trainingSessionsByDay?: CarbCycleTrainingSession[][];
+}
+
+export interface CarbCycleTrainingSession {
+  day_of_week?: number;
+  time_slot: 'morning' | 'noon' | 'afternoon' | 'evening';
+  training_focus: string;
+  is_primary: boolean;
 }
 
 export interface CarbCycleMealTarget {
@@ -139,6 +147,7 @@ export interface CarbCycleDayTarget {
   protein: number;
   fat: number;
   trainingSlot: CarbCycleTrainingSlot;
+  trainingSessions?: CarbCycleTrainingSession[];
   meals: CarbCycleMealTarget[];
 }
 

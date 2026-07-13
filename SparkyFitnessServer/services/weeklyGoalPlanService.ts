@@ -47,6 +47,7 @@ function normalizeCarbCycleInput(input: CalculateCarbCycleWeekInput) {
     proteinPerKg: input.proteinPerKg,
     fatPerKg: input.fatPerKg,
     trainingSlots: input.trainingSlots,
+    trainingSessionsByDay: input.trainingSessionsByDay,
   };
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

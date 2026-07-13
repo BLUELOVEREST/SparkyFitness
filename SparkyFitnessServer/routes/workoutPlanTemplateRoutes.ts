@@ -287,4 +287,20 @@ router.get('/active/:date', authenticate, async (req, res, next) => {
     next(error);
   }
 });
+router.get(
+  '/active-training-focus/:date',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      const activePlan =
+        await workoutPlanTemplateService.getActiveTrainingFocusPlanForDate(
+          req.userId,
+          req.params.date
+        );
+      res.status(200).json(activePlan);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 export default router;
