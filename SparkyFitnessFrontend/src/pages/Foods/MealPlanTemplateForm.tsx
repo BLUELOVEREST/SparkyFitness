@@ -32,6 +32,13 @@ import { mealViewOptions } from '@/hooks/Foods/useMeals';
 import { foodViewOptions } from '@/hooks/Foods/useFoods';
 import FoodSearchDialog from '@/components/FoodSearch/FoodSearchDialog';
 import { useMealTypes } from '@/hooks/Diary/useMealTypes';
+import { useMostRecentMeasurement } from '@/hooks/CheckIn/useCheckIn';
+import { usePreviewCarbCycleMutation } from '@/hooks/Goals/useGoals';
+import { buildCarbCycleMealPlanDraft } from '@/utils/carbCycleMealPlan';
+import type {
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlots,
+} from '@/types/goals';
 
 // Extended assignment type with nutrition data for display
 interface ExtendedAssignment extends MealPlanTemplateAssignment {
@@ -51,6 +58,28 @@ interface MealPlanTemplateFormProps {
   onClose: () => void;
 }
 
+type MealPlanMode = 'average' | 'carbCycle';
+
+const DEFAULT_TRAINING_SLOTS: CarbCycleTrainingSlots = [
+  'rest',
+  'rest',
+  'rest',
+  'rest',
+  'rest',
+  'rest',
+  'rest',
+];
+
+const TRAINING_SLOT_LABELS: Record<CarbCycleTrainingSlot, string> = {
+  rest: 'Rest',
+  morning: 'Morning',
+  noon: 'Noon',
+  afternoon: 'Afternoon',
+  evening: 'Evening',
+};
+
+const CARB_CYCLE_DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
 const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
   template,
   mealMacroTargetsByDay = {},
@@ -59,6 +88,23 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
 }) => {
   const { t } = useTranslation();
   const { loggingLevel } = usePreferences(); // Get loggingLevel from preferences
+  const initialMacroTargets =
+    Object.keys(mealMacroTargetsByDay).length > 0
+      ? mealMacroTargetsByDay
+      : (template?.macro_targets ?? {});
+  const [planMode, setPlanMode] = useState<MealPlanMode>(
+    Object.keys(initialMacroTargets).length > 0 ? 'carbCycle' : 'average'
+  );
+  const [generatedMealMacroTargetsByDay, setGeneratedMealMacroTargetsByDay] =
+    useState<Record<number, CarbCycleMealTarget[]>>(initialMacroTargets);
+  const [carbCycleForm, setCarbCycleForm] = useState({
+    carbsPerKg: '3',
+    proteinPerKg: '2',
+    fatPerKg: '1',
+  });
+  const [trainingSlots, setTrainingSlots] = useState<CarbCycleTrainingSlots>(
+    DEFAULT_TRAINING_SLOTS
+  );
   const [planName, setPlanName] = useState(template?.plan_name || '');
   const [description, setDescription] = useState(template?.description || '');
   const [startDate, setStartDate] = useState(
@@ -92,10 +138,11 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
 
   const queryClient = useQueryClient();
   const { data: availableMealTypes = [] } = useMealTypes();
+  const { data: weightData, isLoading: isWeightLoading } =
+    useMostRecentMeasurement('weight');
+  const previewCarbCycleMutation = usePreviewCarbCycleMutation();
   const resolvedMealMacroTargetsByDay =
-    Object.keys(mealMacroTargetsByDay).length > 0
-      ? mealMacroTargetsByDay
-      : (template?.macro_targets ?? {});
+    planMode === 'carbCycle' ? generatedMealMacroTargetsByDay : {};
   // Helper function to fetch nutrition data for an assignment
   const fetchNutritionForAssignment = useCallback(
     async (
@@ -444,6 +491,45 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     onSave(dataToSave);
   };
 
+  const updateTrainingSlot = (index: number, value: CarbCycleTrainingSlot) => {
+    const nextSlots = [...trainingSlots] as CarbCycleTrainingSlots;
+    nextSlots[index] = value;
+    setTrainingSlots(nextSlots);
+    setGeneratedMealMacroTargetsByDay({});
+  };
+
+  const handleGenerateCarbCycleTargets = async () => {
+    const bodyWeightKg = weightData?.weight;
+    if (!startDate) {
+      toast({
+        title: t('common.error'),
+        description: 'Choose a week start date before generating targets.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!bodyWeightKg || bodyWeightKg <= 0) {
+      toast({
+        title: t('common.error'),
+        description:
+          'Log a body weight check-in before generating carb cycle targets.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const preview = await previewCarbCycleMutation.mutateAsync({
+      weekStartDate: startDate,
+      bodyWeightKg,
+      carbsPerKg: Number(carbCycleForm.carbsPerKg),
+      proteinPerKg: Number(carbCycleForm.proteinPerKg),
+      fatPerKg: Number(carbCycleForm.fatPerKg),
+      trainingSlots,
+    });
+    const draft = buildCarbCycleMealPlanDraft(preview);
+    setGeneratedMealMacroTargetsByDay(draft.mealTargetsByDay);
+  };
+
   const daysOfWeek = [
     t('common.sunday', 'Sunday'),
     t('common.monday', 'Monday'),
@@ -469,9 +555,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
         .map((target) => target.label)
     )
   );
-  const visibleMealTypes = Array.from(
-    new Set([...mealTypes, ...targetMealTypes])
-  );
+  const visibleMealTypes =
+    planMode === 'carbCycle' && targetMealTypes.length > 0
+      ? targetMealTypes
+      : mealTypes;
 
   return (
     <>
@@ -544,6 +631,147 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
               <Label htmlFor="isActive">
                 {t('mealPlanTemplateForm.setActiveLabel')}
               </Label>
+            </div>
+            <div className="space-y-3 rounded-lg border p-4">
+              <div className="space-y-1">
+                <Label>Plan Mode</Label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant={planMode === 'average' ? 'default' : 'outline'}
+                    onClick={() => setPlanMode('average')}
+                  >
+                    Average
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={planMode === 'carbCycle' ? 'default' : 'outline'}
+                    onClick={() => setPlanMode('carbCycle')}
+                  >
+                    Carb Cycle
+                  </Button>
+                </div>
+              </div>
+
+              {planMode === 'carbCycle' ? (
+                <div className="space-y-4">
+                  <div className="rounded-md bg-muted p-3 text-sm">
+                    <div className="font-medium">Current body weight</div>
+                    <div className="text-muted-foreground">
+                      {isWeightLoading
+                        ? 'Loading latest weight...'
+                        : weightData?.weight
+                          ? `${weightData.weight.toFixed(1)} kg`
+                          : 'No weight check-in found. Log weight before generating targets.'}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="meal-plan-carb-cycle-carbs">
+                        Carbs / kg
+                      </Label>
+                      <Input
+                        id="meal-plan-carb-cycle-carbs"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.1"
+                        value={carbCycleForm.carbsPerKg}
+                        onChange={(event) =>
+                          setCarbCycleForm({
+                            ...carbCycleForm,
+                            carbsPerKg: event.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="meal-plan-carb-cycle-protein">
+                        Protein / kg
+                      </Label>
+                      <Input
+                        id="meal-plan-carb-cycle-protein"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.1"
+                        value={carbCycleForm.proteinPerKg}
+                        onChange={(event) =>
+                          setCarbCycleForm({
+                            ...carbCycleForm,
+                            proteinPerKg: event.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="meal-plan-carb-cycle-fat">Fat / kg</Label>
+                      <Input
+                        id="meal-plan-carb-cycle-fat"
+                        type="number"
+                        inputMode="decimal"
+                        step="0.1"
+                        value={carbCycleForm.fatPerKg}
+                        onChange={(event) =>
+                          setCarbCycleForm({
+                            ...carbCycleForm,
+                            fatPerKg: event.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Primary Training Slot</Label>
+                    <div className="grid gap-2 md:grid-cols-7">
+                      {trainingSlots.map((slot, index) => {
+                        const dayLabel =
+                          CARB_CYCLE_DAY_LABELS[index] ?? `Day ${index + 1}`;
+                        return (
+                          <div key={dayLabel} className="space-y-1">
+                            <div className="text-xs text-muted-foreground">
+                              {dayLabel}
+                            </div>
+                            <select
+                              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                              aria-label={`${dayLabel} training`}
+                              value={slot}
+                              onChange={(event) =>
+                                updateTrainingSlot(
+                                  index,
+                                  event.target.value as CarbCycleTrainingSlot
+                                )
+                              }
+                            >
+                              {Object.entries(TRAINING_SLOT_LABELS).map(
+                                ([value, label]) => (
+                                  <option key={value} value={value}>
+                                    {label}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleGenerateCarbCycleTargets}
+                    disabled={previewCarbCycleMutation.isPending}
+                  >
+                    Generate Carb Cycle Targets
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Average mode keeps SparkyFitness default meal planning. Meal
+                  calorie targets come from your normal meal percentages.
+                </p>
+              )}
             </div>
             <div className="space-y-4">
               {daysOfWeek.map((day, dayIndex) => {

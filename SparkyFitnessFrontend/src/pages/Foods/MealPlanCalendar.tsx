@@ -8,10 +8,7 @@ import { usePreferences } from '@/contexts/PreferencesContext';
 import { debug } from '@/utils/logging';
 import { toast } from '@/hooks/use-toast';
 import type { MealPlanTemplate } from '@/types/meal';
-import type { CarbCycleMealTarget, CarbCycleWeekResult } from '@/types/goals';
 import MealPlanTemplateForm from './MealPlanTemplateForm';
-import { CarbCyclePlannerCard } from '@/pages/Goals/CarbCyclePlannerCard';
-import { buildCarbCycleMealPlanDraft } from '@/utils/carbCycleMealPlan';
 import {
   Edit,
   Plus,
@@ -54,9 +51,6 @@ const MealPlanCalendar: React.FC = () => {
   const [selectedTemplate, setSelectedTemplate] = useState<
     MealPlanTemplate | undefined
   >(undefined);
-  const [mealMacroTargetsByDay, setMealMacroTargetsByDay] = useState<
-    Record<number, CarbCycleMealTarget[]>
-  >({});
   const isMobile = useIsMobile();
   const invalidate = useFoodEntryInvalidation();
   const { data: templates, isLoading } = useMealPlanTemplates(activeUserId);
@@ -88,13 +82,11 @@ const MealPlanCalendar: React.FC = () => {
 
   const handleCreate = () => {
     setSelectedTemplate(undefined);
-    setMealMacroTargetsByDay({});
     setIsFormOpen(true);
   };
 
   const handleEdit = useCallback((template: MealPlanTemplate) => {
     setSelectedTemplate(template);
-    setMealMacroTargetsByDay({});
     setIsFormOpen(true);
   }, []);
 
@@ -128,22 +120,11 @@ const MealPlanCalendar: React.FC = () => {
         );
       }
       setIsFormOpen(false);
-      setMealMacroTargetsByDay({});
       invalidate();
     } catch (error) {
       // Handled by mutation cache
     }
   };
-
-  const handlePlanMealsFromCarbCycle = useCallback(
-    (preview: CarbCycleWeekResult) => {
-      const draft = buildCarbCycleMealPlanDraft(preview);
-      setSelectedTemplate(draft.template as MealPlanTemplate);
-      setMealMacroTargetsByDay(draft.mealTargetsByDay);
-      setIsFormOpen(true);
-    },
-    []
-  );
 
   const handleDelete = useCallback(
     async (templateId: string) => {
@@ -375,8 +356,6 @@ const MealPlanCalendar: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <CarbCyclePlannerCard onPlanMeals={handlePlanMealsFromCarbCycle} />
-
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">
@@ -473,11 +452,9 @@ const MealPlanCalendar: React.FC = () => {
       {isFormOpen && (
         <MealPlanTemplateForm
           template={selectedTemplate}
-          mealMacroTargetsByDay={mealMacroTargetsByDay}
           onSave={handleSave}
           onClose={() => {
             setIsFormOpen(false);
-            setMealMacroTargetsByDay({});
           }}
         />
       )}

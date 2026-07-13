@@ -62,47 +62,6 @@ jest.mock('@/pages/Foods/MealPlanTemplateForm', () => {
   };
 });
 
-jest.mock('@/pages/Goals/CarbCyclePlannerCard', () => ({
-  CarbCyclePlannerCard: ({
-    onPlanMeals,
-  }: {
-    onPlanMeals?: (preview: unknown) => void;
-  }) => (
-    <button
-      type="button"
-      onClick={() =>
-        onPlanMeals?.({
-          weekStartDate: '2026-07-06',
-          weekTotals: { calories: 1000, carbs: 100, protein: 100, fat: 50 },
-          days: [
-            {
-              date: '2026-07-06',
-              dayType: 'low',
-              calories: 1000,
-              carbs: 100,
-              protein: 100,
-              fat: 50,
-              trainingSlot: 'morning',
-              meals: [
-                {
-                  slotKey: 'morning',
-                  label: 'Pre-Workout',
-                  calories: 300,
-                  carbs: 30,
-                  protein: 25,
-                  fat: 0,
-                },
-              ],
-            },
-          ],
-        })
-      }
-    >
-      Mock Plan Meals
-    </button>
-  ),
-}));
-
 describe('MealPlanCalendar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -127,31 +86,19 @@ describe('MealPlanCalendar', () => {
     });
   });
 
-  it('opens a carb cycle meal plan draft from preview targets', async () => {
+  it('opens the native meal plan form from the create button', async () => {
     mockGetMealPlanTemplates.mockResolvedValue([]);
 
     renderWithClient(<MealPlanCalendar />);
 
-    fireEvent.click(screen.getByRole('button', { name: /mock plan meals/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /mealPlanCalendar.createNewPlan/i })
+    );
 
     expect(screen.getByTestId('meal-plan-template-form')).toBeInTheDocument();
     expect(mockMealPlanTemplateForm).toHaveBeenCalledWith(
       expect.objectContaining({
-        template: expect.objectContaining({
-          plan_name: 'Carb Cycle 2026-07-06',
-          start_date: '2026-07-06',
-          end_date: '2026-07-12',
-        }),
-        mealMacroTargetsByDay: {
-          1: [
-            expect.objectContaining({
-              label: 'Pre-Workout',
-              carbs: 30,
-              protein: 25,
-              fat: 0,
-            }),
-          ],
-        },
+        template: undefined,
       })
     );
   });
