@@ -92,6 +92,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
 
   const queryClient = useQueryClient();
   const { data: availableMealTypes = [] } = useMealTypes();
+  const resolvedMealMacroTargetsByDay =
+    Object.keys(mealMacroTargetsByDay).length > 0
+      ? mealMacroTargetsByDay
+      : (template?.macro_targets ?? {});
   // Helper function to fetch nutrition data for an assignment
   const fetchNutritionForAssignment = useCallback(
     async (
@@ -429,6 +433,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
       start_date: startDate,
       end_date: endDate,
       is_active: isActive,
+      macro_targets: resolvedMealMacroTargetsByDay,
       assignments,
     };
     debug(
@@ -459,7 +464,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
         ];
   const targetMealTypes = Array.from(
     new Set(
-      Object.values(mealMacroTargetsByDay)
+      Object.values(resolvedMealMacroTargetsByDay)
         .flat()
         .map((target) => target.label)
     )
@@ -556,7 +561,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                           dayIndex,
                           mealType
                         );
-                        const mealTarget = mealMacroTargetsByDay[
+                        const mealTarget = resolvedMealMacroTargetsByDay[
                           dayIndex
                         ]?.find(
                           (target) =>

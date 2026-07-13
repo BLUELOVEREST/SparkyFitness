@@ -9,8 +9,8 @@ async function createMealPlanTemplate(planData: any) {
     log('info', 'createMealPlanTemplate - planData:', planData);
     await client.query('BEGIN');
     const insertTemplateQuery = `
-            INSERT INTO meal_plan_templates (user_id, plan_name, description, start_date, end_date, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`;
+            INSERT INTO meal_plan_templates (user_id, plan_name, description, start_date, end_date, is_active, macro_targets)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`;
     const templateValues = [
       planData.user_id,
       planData.plan_name ?? '',
@@ -18,6 +18,7 @@ async function createMealPlanTemplate(planData: any) {
       planData.start_date ?? new Date(),
       planData.end_date,
       planData.is_active ?? false,
+      JSON.stringify(planData.macro_targets ?? {}),
     ];
     log(
       'info',
@@ -187,14 +188,15 @@ async function updateMealPlanTemplate(planId: any, planData: any) {
     await client.query('BEGIN');
     await client.query(
       `UPDATE meal_plan_templates SET
-                plan_name = $1, description = $2, start_date = $3, end_date = $4, is_active = $5, updated_at = now()
-             WHERE id = $6 RETURNING *`,
+                plan_name = $1, description = $2, start_date = $3, end_date = $4, is_active = $5, macro_targets = $6, updated_at = now()
+             WHERE id = $7 RETURNING *`,
       [
         planData.plan_name ?? '',
         planData.description ?? '',
         planData.start_date ?? new Date(),
         planData.end_date,
         planData.is_active ?? false,
+        JSON.stringify(planData.macro_targets ?? {}),
         planId,
       ]
     );

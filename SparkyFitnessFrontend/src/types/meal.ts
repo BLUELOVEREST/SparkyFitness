@@ -1,4 +1,5 @@
 import type { Food } from './food';
+import type { CarbCycleMealTarget } from './goals';
 
 export interface Meal {
   id?: string;
@@ -118,6 +119,7 @@ export interface MealPlanTemplate {
   start_date: string;
   end_date?: string;
   is_active: boolean;
+  macro_targets?: Record<number, CarbCycleMealTarget[]>;
   assignments: MealPlanTemplateAssignment[];
 }
 

@@ -34,6 +34,7 @@ export function buildCarbCycleMealPlanDraft(
       start_date: preview.weekStartDate,
       end_date: addDays(preview.weekStartDate, 6),
       is_active: false,
+      macro_targets: mealTargetsByDay,
       assignments: [],
     },
     mealTargetsByDay,

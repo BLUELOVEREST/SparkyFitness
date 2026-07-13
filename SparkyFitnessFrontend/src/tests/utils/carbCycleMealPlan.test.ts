@@ -46,6 +46,9 @@ describe('buildCarbCycleMealPlanDraft', () => {
       start_date: '2026-07-06',
       end_date: '2026-07-12',
       is_active: false,
+      macro_targets: {
+        1: preview.days[0]!.meals,
+      },
       assignments: [],
     });
     expect(result.mealTargetsByDay).toEqual({
