@@ -9,6 +9,7 @@ import { debug } from '@/utils/logging';
 import { toast } from '@/hooks/use-toast';
 import type { MealPlanTemplate } from '@/types/meal';
 import MealPlanTemplateForm from './MealPlanTemplateForm';
+import { CarbCyclePlannerCard } from '@/pages/Goals/CarbCyclePlannerCard';
 import {
   Edit,
   Plus,
@@ -356,6 +357,8 @@ const MealPlanCalendar: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <CarbCyclePlannerCard />
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">

@@ -11,10 +11,22 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   useApplyCarbCycleMutation,
   usePreviewCarbCycleMutation,
 } from '@/hooks/Goals/useGoals';
-import type { CarbCycleInput, CarbCycleWeekResult } from '@/types/goals';
+import type {
+  CarbCycleInput,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlots,
+  CarbCycleWeekResult,
+} from '@/types/goals';
 
 type CarbCyclePlannerCardProps = {
   onPreview?: (input: CarbCycleInput) => Promise<CarbCycleWeekResult>;
@@ -26,6 +38,26 @@ const DAY_TYPE_LABELS = {
   medium: 'Medium',
   low: 'Low',
 };
+
+const TRAINING_SLOT_LABELS: Record<CarbCycleTrainingSlot, string> = {
+  rest: 'Rest',
+  morning: 'Morning',
+  noon: 'Noon',
+  afternoon: 'Afternoon',
+  evening: 'Evening',
+};
+
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+const DEFAULT_TRAINING_SLOTS: CarbCycleTrainingSlots = [
+  'rest',
+  'rest',
+  'rest',
+  'rest',
+  'rest',
+  'rest',
+  'rest',
+];
 
 function toDateInputValue(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -44,6 +76,9 @@ export function CarbCyclePlannerCard({
     proteinPerKg: '2',
     fatPerKg: '1',
   });
+  const [trainingSlots, setTrainingSlots] = useState<CarbCycleTrainingSlots>(
+    DEFAULT_TRAINING_SLOTS
+  );
   const [preview, setPreview] = useState<CarbCycleWeekResult | null>(null);
   const [previewInput, setPreviewInput] = useState<CarbCycleInput | null>(null);
 
@@ -59,7 +94,16 @@ export function CarbCyclePlannerCard({
     carbsPerKg: Number(form.carbsPerKg),
     proteinPerKg: Number(form.proteinPerKg),
     fatPerKg: Number(form.fatPerKg),
+    trainingSlots,
   });
+
+  const updateTrainingSlot = (index: number, value: CarbCycleTrainingSlot) => {
+    const nextSlots = [...trainingSlots] as CarbCycleTrainingSlots;
+    nextSlots[index] = value;
+    setTrainingSlots(nextSlots);
+    setPreview(null);
+    setPreviewInput(null);
+  };
 
   const handlePreview = async () => {
     const input = buildInput();
@@ -158,6 +202,41 @@ export function CarbCyclePlannerCard({
           </div>
         </div>
 
+        <div className="space-y-2">
+          <Label>Primary Training Slot</Label>
+          <div className="grid gap-2 md:grid-cols-7">
+            {trainingSlots.map((slot, index) => {
+              const dayLabel = DAY_LABELS[index] ?? `Day ${index + 1}`;
+              return (
+                <div key={dayLabel} className="space-y-1">
+                  <div className="text-xs text-muted-foreground">
+                    {dayLabel}
+                  </div>
+                  <Select
+                    value={slot}
+                    onValueChange={(value) =>
+                      updateTrainingSlot(index, value as CarbCycleTrainingSlot)
+                    }
+                  >
+                    <SelectTrigger aria-label={`${dayLabel} training`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(TRAINING_SLOT_LABELS).map(
+                        ([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        )
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" onClick={handlePreview} disabled={isBusy}>
             Preview
@@ -191,6 +270,18 @@ export function CarbCyclePlannerCard({
                 <div>{day.protein}g P</div>
                 <div>{day.fat}g F</div>
                 <div className="text-muted-foreground">{day.calories} kcal</div>
+                {day.meals?.length ? (
+                  <div className="mt-3 space-y-1 border-t pt-2 text-xs text-muted-foreground">
+                    {day.meals.map((meal) => (
+                      <div key={`${day.date}-${meal.slotKey}`}>
+                        <span className="font-medium text-foreground">
+                          {meal.label}
+                        </span>{' '}
+                        {meal.carbs}C / {meal.protein}P / {meal.fat}F
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

@@ -1,5 +1,6 @@
 import weeklyGoalPlanRepository from '../models/weeklyGoalPlanRepository.js';
 import goalRepository from '../models/goalRepository.js';
+import mealMacroTargetRepository from '../models/mealMacroTargetRepository.js';
 import { log } from '../config/logging.js';
 import {
   calculateCarbCycleWeek,
@@ -45,6 +46,7 @@ function normalizeCarbCycleInput(input: CalculateCarbCycleWeekInput) {
     carbsPerKg: input.carbsPerKg,
     proteinPerKg: input.proteinPerKg,
     fatPerKg: input.fatPerKg,
+    trainingSlots: input.trainingSlots,
   };
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -159,6 +161,23 @@ async function applyCarbCycleWeek(
       fat: day.fat,
     });
   }
+
+  await mealMacroTargetRepository.replaceMealMacroTargetsForWeek(
+    userId,
+    plan.days[0].date,
+    plan.days[plan.days.length - 1].date,
+    plan.days.flatMap((day) =>
+      day.meals.map((meal) => ({
+        goal_date: day.date,
+        slot_key: meal.slotKey,
+        label: meal.label,
+        calories: meal.calories,
+        protein: meal.protein,
+        carbs: meal.carbs,
+        fat: meal.fat,
+      }))
+    )
+  );
 
   return plan;
 }

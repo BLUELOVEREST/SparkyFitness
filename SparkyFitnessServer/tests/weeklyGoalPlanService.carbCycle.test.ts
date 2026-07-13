@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import goalRepository from '../models/goalRepository.js';
+import mealMacroTargetRepository from '../models/mealMacroTargetRepository.js';
 import { applyCarbCycleWeek } from '../services/weeklyGoalPlanService.js';
 
 vi.mock('../models/goalRepository.js', () => ({
@@ -7,6 +8,12 @@ vi.mock('../models/goalRepository.js', () => ({
     getGoalByDate: vi.fn(),
     getMostRecentGoalBeforeDate: vi.fn(),
     upsertGoal: vi.fn(),
+  },
+}));
+
+vi.mock('../models/mealMacroTargetRepository.js', () => ({
+  default: {
+    replaceMealMacroTargetsForWeek: vi.fn(),
   },
 }));
 
@@ -18,6 +25,9 @@ describe('weeklyGoalPlanService carb cycle', () => {
       undefined
     );
     vi.mocked(goalRepository.upsertGoal).mockResolvedValue({});
+    vi.mocked(
+      mealMacroTargetRepository.replaceMealMacroTargetsForWeek
+    ).mockResolvedValue([]);
   });
 
   it('applies carb cycle targets to seven daily goal rows', async () => {
@@ -45,6 +55,51 @@ describe('weeklyGoalPlanService carb cycle', () => {
         dinner_percentage: 25,
         snacks_percentage: 25,
       })
+    );
+    expect(
+      mealMacroTargetRepository.replaceMealMacroTargetsForWeek
+    ).toHaveBeenCalledWith(
+      'test-user-id',
+      '2026-07-06',
+      '2026-07-12',
+      expect.any(Array)
+    );
+    const savedTargets = vi.mocked(
+      mealMacroTargetRepository.replaceMealMacroTargetsForWeek
+    ).mock.calls[0][3];
+    expect(savedTargets).toHaveLength(28);
+    expect(savedTargets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          goal_date: '2026-07-06',
+          slot_key: 'morning',
+          label: 'Breakfast',
+          carbs: 27.6,
+          protein: 35,
+          fat: 30.6,
+          calories: 526,
+        }),
+        expect.objectContaining({
+          goal_date: '2026-07-06',
+          slot_key: 'noon',
+          label: 'Lunch',
+        }),
+        expect.objectContaining({
+          goal_date: '2026-07-06',
+          slot_key: 'afternoon',
+          label: 'Afternoon Meal',
+        }),
+        expect.objectContaining({
+          goal_date: '2026-07-06',
+          slot_key: 'evening',
+          label: 'Dinner',
+        }),
+        expect.objectContaining({
+          goal_date: '2026-07-07',
+          slot_key: 'morning',
+          label: 'Breakfast',
+        }),
+      ])
     );
   });
 

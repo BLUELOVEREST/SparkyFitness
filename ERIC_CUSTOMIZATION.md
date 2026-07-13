@@ -13,7 +13,7 @@ This branch contains Eric's customized SparkyFitness build.
 
 - Branch: sparky-custom-eric-flow
 - Current release tag format: `v<upstream-version>-eric.<global-release-number>`
-- First direct-source release tag: `v0.17.3-eric.4`
+- First direct-source release tag: `v0.17.3-eric.1`
 
 The `eric.<number>` suffix is a global Eric release counter and does not reset
 when the upstream SparkyFitness version changes.

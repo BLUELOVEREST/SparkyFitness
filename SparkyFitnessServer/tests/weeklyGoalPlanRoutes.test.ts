@@ -60,6 +60,17 @@ describe('Weekly Goal Plan carb cycle routes', () => {
           carbs: 110.25,
           protein: 140,
           fat: 122.5,
+          trainingSlot: 'rest' as const,
+          meals: [
+            {
+              slotKey: 'morning' as const,
+              label: 'Breakfast',
+              calories: 526,
+              carbs: 27.6,
+              protein: 35,
+              fat: 30.6,
+            },
+          ],
         },
       ],
     };

@@ -1,4 +1,12 @@
 export type CarbCycleDayType = 'low' | 'medium' | 'high';
+export type CarbCycleTrainingSlot =
+  | 'rest'
+  | 'morning'
+  | 'noon'
+  | 'afternoon'
+  | 'evening';
+
+export type CarbCycleSlotKey = Exclude<CarbCycleTrainingSlot, 'rest'>;
 
 export type CarbCycleTemplate = readonly [
   CarbCycleDayType,
@@ -10,6 +18,16 @@ export type CarbCycleTemplate = readonly [
   CarbCycleDayType,
 ];
 
+export type CarbCycleTrainingTemplate = readonly [
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+];
+
 export interface CalculateCarbCycleWeekInput {
   weekStartDate: string;
   bodyWeightKg: number;
@@ -17,6 +35,16 @@ export interface CalculateCarbCycleWeekInput {
   proteinPerKg: number;
   fatPerKg: number;
   template?: CarbCycleTemplate;
+  trainingSlots?: CarbCycleTrainingTemplate;
+}
+
+export interface CarbCycleMealTarget {
+  slotKey: CarbCycleSlotKey;
+  label: string;
+  carbs: number;
+  protein: number;
+  fat: number;
+  calories: number;
 }
 
 export interface CarbCycleDayPlan {
@@ -26,6 +54,8 @@ export interface CarbCycleDayPlan {
   protein: number;
   fat: number;
   calories: number;
+  trainingSlot: CarbCycleTrainingSlot;
+  meals: CarbCycleMealTarget[];
 }
 
 export interface CarbCycleWeekTotals {
@@ -62,6 +92,30 @@ const FAT_DISTRIBUTION: Record<CarbCycleDayType, number> = {
   high: 0.15,
   medium: 0.35,
   low: 0.5,
+};
+
+const SLOT_KEYS: readonly CarbCycleSlotKey[] = [
+  'morning',
+  'noon',
+  'afternoon',
+  'evening',
+];
+
+const DEFAULT_MEAL_LABELS: Record<CarbCycleSlotKey, string> = {
+  morning: 'Breakfast',
+  noon: 'Lunch',
+  afternoon: 'Afternoon Meal',
+  evening: 'Dinner',
+};
+
+const PRIMARY_SLOT_MEAL_LABELS: Record<
+  CarbCycleSlotKey,
+  readonly [string, string, string, string]
+> = {
+  morning: ['Pre-Workout', 'Post-Workout', 'Lunch', 'Dinner'],
+  noon: ['Breakfast', 'Pre-Workout', 'Post-Workout', 'Dinner'],
+  afternoon: ['Breakfast', 'Lunch', 'Pre-Workout', 'Post-Workout'],
+  evening: ['Breakfast', 'Lunch', 'Pre-Workout', 'Post-Workout'],
 };
 
 function assertPositive(value: number, fieldName: string): void {
@@ -102,6 +156,10 @@ function roundMacro(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function roundMealMacro(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
 function countTemplateDays(
   template: CarbCycleTemplate
 ): Record<CarbCycleDayType, number> {
@@ -114,6 +172,84 @@ function countTemplateDays(
   );
 }
 
+function resolveMealLabels(
+  trainingSlot: CarbCycleTrainingSlot
+): Record<CarbCycleSlotKey, string> {
+  if (trainingSlot === 'rest') {
+    return { ...DEFAULT_MEAL_LABELS };
+  }
+
+  const labels = PRIMARY_SLOT_MEAL_LABELS[trainingSlot];
+  return {
+    morning: labels[0],
+    noon: labels[1],
+    afternoon: labels[2],
+    evening: labels[3],
+  };
+}
+
+function distributeByPercent(total: number, percentages: readonly number[]) {
+  const rounded = percentages.map((percentage) =>
+    roundMealMacro(total * percentage)
+  );
+  const diff = roundMealMacro(
+    total - rounded.reduce((sum, value) => sum + value, 0)
+  );
+  if (rounded.length > 0) {
+    rounded[rounded.length - 1] = roundMealMacro(
+      rounded[rounded.length - 1] + diff
+    );
+  }
+  return rounded;
+}
+
+function buildMealTargets(
+  totals: Pick<CarbCycleDayPlan, 'carbs' | 'protein' | 'fat'>,
+  trainingSlot: CarbCycleTrainingSlot
+): CarbCycleMealTarget[] {
+  const labelMap = resolveMealLabels(trainingSlot);
+  let carbPercentages = [0.25, 0.25, 0.25, 0.25];
+  let proteinPercentages = [0.25, 0.25, 0.25, 0.25];
+  let fatPercentages = [0.25, 0.25, 0.25, 0.25];
+
+  if (trainingSlot !== 'rest') {
+    carbPercentages = [0.15, 0.15, 0.15, 0.15];
+    proteinPercentages = [0.225, 0.225, 0.225, 0.225];
+    fatPercentages = [0.45, 0.45, 0.45, 0.45];
+
+    SLOT_KEYS.forEach((slotKey, index) => {
+      const label = labelMap[slotKey];
+      if (label === 'Pre-Workout') {
+        carbPercentages[index] = 0.3;
+        proteinPercentages[index] = 0.25;
+        fatPercentages[index] = 0;
+      } else if (label === 'Post-Workout') {
+        carbPercentages[index] = 0.4;
+        proteinPercentages[index] = 0.3;
+        fatPercentages[index] = 0.1;
+      }
+    });
+  }
+
+  const carbs = distributeByPercent(totals.carbs, carbPercentages);
+  const protein = distributeByPercent(totals.protein, proteinPercentages);
+  const fat = distributeByPercent(totals.fat, fatPercentages);
+
+  return SLOT_KEYS.map((slotKey, index) => {
+    const calories = Math.round(
+      carbs[index] * 4 + protein[index] * 4 + fat[index] * 9
+    );
+    return {
+      slotKey,
+      label: labelMap[slotKey],
+      carbs: carbs[index],
+      protein: protein[index],
+      fat: fat[index],
+      calories,
+    };
+  });
+}
+
 export function calculateCarbCycleWeek({
   weekStartDate,
   bodyWeightKg,
@@ -121,6 +257,7 @@ export function calculateCarbCycleWeek({
   proteinPerKg,
   fatPerKg,
   template = DEFAULT_CARB_CYCLE_TEMPLATE,
+  trainingSlots,
 }: CalculateCarbCycleWeekInput): CarbCycleWeekPlan {
   assertPositive(bodyWeightKg, 'bodyWeightKg');
   assertPositive(carbsPerKg, 'carbsPerKg');
@@ -146,6 +283,7 @@ export function calculateCarbCycleWeek({
       (weekTotals.fat * FAT_DISTRIBUTION[dayType]) / dayCounts[dayType]
     );
     const calories = Math.round(carbs * 4 + dailyProtein * 4 + fat * 9);
+    const trainingSlot = trainingSlots?.[dayIndex] ?? 'rest';
 
     return {
       date: formatDate(addDays(startDate, dayIndex)),
@@ -154,6 +292,11 @@ export function calculateCarbCycleWeek({
       protein: dailyProtein,
       fat,
       calories,
+      trainingSlot,
+      meals: buildMealTargets(
+        { carbs, protein: dailyProtein, fat },
+        trainingSlot
+      ),
     };
   });
 

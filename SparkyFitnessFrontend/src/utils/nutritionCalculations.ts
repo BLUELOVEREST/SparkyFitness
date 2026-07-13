@@ -5,7 +5,7 @@ import type { FoodEntry, FoodVariant } from '@/types/food';
 import { FoodEntryMeal, MealTotals } from '@/types/meal';
 import { CALORIE_CALCULATION_CONSTANTS } from '@workspace/shared';
 import { getMealPercentage } from './goals';
-import { ExpandedGoals } from '@/types/goals';
+import { CarbCycleMealTarget, ExpandedGoals } from '@/types/goals';
 
 // Utility functions for nutrition calculations
 
@@ -522,6 +522,7 @@ export const getMealData = (
   type: string;
   entries: (FoodEntry | FoodEntryMeal)[];
   targetCalories: number;
+  macroTarget?: CarbCycleMealTarget;
 } => {
   if (!foodEntries || !foodEntryMeals) {
     return { name: '', type: '', targetCalories: 0, entries: [] };
@@ -539,6 +540,13 @@ export const getMealData = (
   const combinedEntries: (FoodEntry | FoodEntryMeal)[] = [...entries, ...meals];
 
   const percentage = getMealPercentage(mealType, goals);
+  const macroTarget = goals?.meal_macro_targets?.find((target) => {
+    const mealKey = mealType.toLowerCase();
+    return (
+      target.label.toLowerCase() === mealKey ||
+      target.slotKey.toLowerCase() === mealKey
+    );
+  });
 
   const i18nKey = `common.${mealType.toLowerCase()}`;
   const displayName = i18n.exists(i18nKey) ? i18n.t(i18nKey) : mealType;
@@ -547,7 +555,12 @@ export const getMealData = (
     name: displayName,
     type: mealType,
     entries: combinedEntries,
-    targetCalories: goals ? (goals.calories * percentage) / 100 : 0,
+    targetCalories: macroTarget
+      ? macroTarget.calories
+      : goals
+        ? (goals.calories * percentage) / 100
+        : 0,
+    macroTarget,
   };
 };
 

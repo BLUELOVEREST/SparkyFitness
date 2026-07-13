@@ -54,6 +54,127 @@ describe('carbCyclePlannerService', () => {
     });
   });
 
+  it('builds per-meal macro targets from the primary training slot', () => {
+    const result = calculateCarbCycleWeek({
+      weekStartDate: '2026-07-06',
+      bodyWeightKg: 70,
+      carbsPerKg: 3,
+      proteinPerKg: 2,
+      fatPerKg: 1,
+      template: DEFAULT_CARB_CYCLE_TEMPLATE,
+      trainingSlots: [
+        'rest',
+        'morning',
+        'noon',
+        'afternoon',
+        'evening',
+        'rest',
+        'rest',
+      ],
+    });
+
+    expect(result.days[0].meals.map((meal) => meal.label)).toEqual([
+      'Breakfast',
+      'Lunch',
+      'Afternoon Meal',
+      'Dinner',
+    ]);
+    expect(result.days[0].meals).toEqual([
+      {
+        slotKey: 'morning',
+        label: 'Breakfast',
+        carbs: 27.6,
+        protein: 35,
+        fat: 30.6,
+        calories: 526,
+      },
+      {
+        slotKey: 'noon',
+        label: 'Lunch',
+        carbs: 27.6,
+        protein: 35,
+        fat: 30.6,
+        calories: 526,
+      },
+      {
+        slotKey: 'afternoon',
+        label: 'Afternoon Meal',
+        carbs: 27.6,
+        protein: 35,
+        fat: 30.6,
+        calories: 526,
+      },
+      {
+        slotKey: 'evening',
+        label: 'Dinner',
+        carbs: 27.4,
+        protein: 35,
+        fat: 30.7,
+        calories: 526,
+      },
+    ]);
+
+    expect(result.days[1].meals.map((meal) => meal.label)).toEqual([
+      'Pre-Workout',
+      'Post-Workout',
+      'Lunch',
+      'Dinner',
+    ]);
+    expect(result.days[1].meals).toEqual([
+      {
+        slotKey: 'morning',
+        label: 'Pre-Workout',
+        carbs: 51.5,
+        protein: 35,
+        fat: 0,
+        calories: 346,
+      },
+      {
+        slotKey: 'noon',
+        label: 'Post-Workout',
+        carbs: 68.6,
+        protein: 42,
+        fat: 5.7,
+        calories: 494,
+      },
+      {
+        slotKey: 'afternoon',
+        label: 'Lunch',
+        carbs: 25.7,
+        protein: 31.5,
+        fat: 25.7,
+        calories: 460,
+      },
+      {
+        slotKey: 'evening',
+        label: 'Dinner',
+        carbs: 25.7,
+        protein: 31.5,
+        fat: 25.8,
+        calories: 461,
+      },
+    ]);
+
+    expect(result.days[2].meals.map((meal) => meal.label)).toEqual([
+      'Breakfast',
+      'Pre-Workout',
+      'Post-Workout',
+      'Dinner',
+    ]);
+    expect(result.days[3].meals.map((meal) => meal.label)).toEqual([
+      'Breakfast',
+      'Lunch',
+      'Pre-Workout',
+      'Post-Workout',
+    ]);
+    expect(result.days[4].meals.map((meal) => meal.label)).toEqual([
+      'Breakfast',
+      'Lunch',
+      'Pre-Workout',
+      'Post-Workout',
+    ]);
+  });
+
   it('rejects non-positive body weight and macro inputs', () => {
     const validInput = {
       weekStartDate: '2026-07-06',

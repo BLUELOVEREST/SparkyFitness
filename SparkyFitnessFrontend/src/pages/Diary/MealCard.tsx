@@ -60,6 +60,7 @@ import { DEFAULT_NUTRIENTS } from '@/constants/nutrients';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import AllergenBadges from '@/components/AllergenBadges';
+import type { CarbCycleMealTarget } from '@/types/goals';
 
 const MOBILE_ENTRY_NUTRIENT_LIMIT = 4;
 
@@ -77,6 +78,7 @@ interface MealCardProps {
     type: string;
     entries: (FoodEntry | FoodEntryMeal)[];
     targetCalories?: number;
+    macroTarget?: CarbCycleMealTarget;
     selectedDate: string;
   };
   totals: MealTotals;
@@ -236,6 +238,12 @@ const MealCard = ({
                   )}`}
                 {getEnergyUnitString(energyUnit)}
               </span>
+              {meal.macroTarget ? (
+                <span className="text-xs text-muted-foreground">
+                  Target {meal.macroTarget.carbs}g C /{' '}
+                  {meal.macroTarget.protein}g P / {meal.macroTarget.fat}g F
+                </span>
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-2 sm:gap-4 justify-end">
               <Dialog

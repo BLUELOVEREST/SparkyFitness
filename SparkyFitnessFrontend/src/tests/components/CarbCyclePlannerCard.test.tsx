@@ -16,6 +16,17 @@ describe('CarbCyclePlannerCard', () => {
           carbs: 110.25,
           protein: 140,
           fat: 122.5,
+          trainingSlot: 'rest',
+          meals: [
+            {
+              slotKey: 'morning',
+              label: 'Breakfast',
+              calories: 526,
+              carbs: 27.6,
+              protein: 35,
+              fat: 30.6,
+            },
+          ],
         },
         {
           date: '2026-07-07',
@@ -24,6 +35,8 @@ describe('CarbCyclePlannerCard', () => {
           carbs: 171.5,
           protein: 140,
           fat: 57.17,
+          trainingSlot: 'rest',
+          meals: [],
         },
         {
           date: '2026-07-09',
@@ -32,6 +45,8 @@ describe('CarbCyclePlannerCard', () => {
           carbs: 367.5,
           protein: 140,
           fat: 36.75,
+          trainingSlot: 'rest',
+          meals: [],
         },
       ],
     });
@@ -52,6 +67,8 @@ describe('CarbCyclePlannerCard', () => {
     await waitFor(() => expect(onPreview).toHaveBeenCalled());
     expect(await screen.findByText(/high/i)).toBeInTheDocument();
     expect(screen.getByText(/367.5g C/i)).toBeInTheDocument();
+    expect(screen.getByText(/Breakfast/i)).toBeInTheDocument();
+    expect(screen.getByText(/27.6C \/ 35P \/ 30.6F/i)).toBeInTheDocument();
     expect(screen.getByText(/14210 kcal weekly/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/body weight/i), {
@@ -70,6 +87,7 @@ describe('CarbCyclePlannerCard', () => {
       carbsPerKg: 3,
       proteinPerKg: 2,
       fatPerKg: 1,
+      trainingSlots: ['rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest'],
     });
   });
 });

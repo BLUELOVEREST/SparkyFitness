@@ -1,4 +1,5 @@
 import goalRepository from '../models/goalRepository.js';
+import mealMacroTargetRepository from '../models/mealMacroTargetRepository.js';
 import weeklyGoalPlanRepository from '../models/weeklyGoalPlanRepository.js';
 import goalPresetRepository from '../models/goalPresetRepository.js';
 import userRepository from '../models/userRepository.js';
@@ -52,6 +53,31 @@ async function getUserGoalsForRange(
     userId,
     startDate,
     endDate
+  );
+  const mealMacroTargets =
+    await mealMacroTargetRepository.getMealMacroTargetsForRange(
+      userId,
+      startDate,
+      endDate
+    );
+  const mealMacroTargetsByDate = mealMacroTargets.reduce(
+    (acc: Record<string, unknown[]>, target: Record<string, unknown>) => {
+      const key =
+        typeof target.goal_date === 'string'
+          ? target.goal_date.slice(0, 10)
+          : format(target.goal_date as Date, 'yyyy-MM-dd');
+      acc[key] = acc[key] ?? [];
+      acc[key].push({
+        slotKey: target.slot_key,
+        label: target.label,
+        calories: Number(target.calories),
+        protein: Number(target.protein),
+        carbs: Number(target.carbs),
+        fat: Number(target.fat),
+      });
+      return acc;
+    },
+    {}
   );
   const explicitByDate = Object.fromEntries(
     explicitGoals.map((g: Goals) => [
@@ -354,7 +380,10 @@ async function getUserGoalsForRange(
       }
     }
 
-    result[dateStr] = processedGoals;
+    result[dateStr] = {
+      ...processedGoals,
+      meal_macro_targets: mealMacroTargetsByDate[dateStr] ?? [],
+    };
     cursor = addDays(cursor, 1);
   }
 

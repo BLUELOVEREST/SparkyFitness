@@ -1,6 +1,7 @@
 import { vi, beforeEach, describe, expect, it } from 'vitest';
 import goalService from '../services/goalService.js';
 import goalRepository from '../models/goalRepository.js';
+import mealMacroTargetRepository from '../models/mealMacroTargetRepository.js';
 import weeklyGoalPlanRepository from '../models/weeklyGoalPlanRepository.js';
 import preferenceRepository from '../models/preferenceRepository.js';
 import userRepository from '../models/userRepository.js';
@@ -8,6 +9,7 @@ import measurementRepository from '../models/measurementRepository.js';
 import exerciseEntryRepository from '../models/exerciseEntry.js';
 
 vi.mock('../models/goalRepository');
+vi.mock('../models/mealMacroTargetRepository');
 vi.mock('../models/weeklyGoalPlanRepository');
 vi.mock('../models/goalPresetRepository');
 vi.mock('../models/userRepository');
@@ -29,6 +31,9 @@ describe('Water goal adjustment by exercise water loss', () => {
       weeklyGoalPlanRepository.getActiveWeeklyGoalPlan
     ).mockResolvedValue(null);
     vi.mocked(goalRepository.getGoalsInRange).mockResolvedValue([]);
+    vi.mocked(
+      mealMacroTargetRepository.getMealMacroTargetsForRange
+    ).mockResolvedValue([]);
     vi.mocked(goalRepository.getMostRecentGoalBeforeDate).mockResolvedValue({
       water_goal_ml: 2000,
       calories: 2000,

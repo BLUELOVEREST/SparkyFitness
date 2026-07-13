@@ -28,7 +28,14 @@ export interface ExpandedGoals {
   snacks_percentage: number;
   custom_meal_percentages?: Record<string, number>;
   custom_nutrients?: Record<string, number>;
-  [key: string]: number | string | Record<string, number> | null | undefined;
+  meal_macro_targets?: CarbCycleMealTarget[];
+  [key: string]:
+    | number
+    | string
+    | Record<string, number>
+    | CarbCycleMealTarget[]
+    | null
+    | undefined;
 }
 export interface GoalPreset {
   id?: string;
@@ -63,7 +70,13 @@ export interface GoalPreset {
   snacks_percentage: number;
   custom_meal_percentages?: Record<string, number>;
   custom_nutrients?: Record<string, number>;
-  [key: string]: number | string | Record<string, number> | null | undefined;
+  [key: string]:
+    | number
+    | string
+    | Record<string, number>
+    | CarbCycleMealTarget[]
+    | null
+    | undefined;
 }
 
 export interface WeeklyGoalPlan {
@@ -83,6 +96,22 @@ export interface WeeklyGoalPlan {
 }
 
 export type CarbCycleDayType = 'high' | 'medium' | 'low';
+export type CarbCycleTrainingSlot =
+  | 'rest'
+  | 'morning'
+  | 'noon'
+  | 'afternoon'
+  | 'evening';
+
+export type CarbCycleTrainingSlots = [
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+];
 
 export interface CarbCycleInput {
   weekStartDate: string;
@@ -90,6 +119,16 @@ export interface CarbCycleInput {
   carbsPerKg: number;
   proteinPerKg: number;
   fatPerKg: number;
+  trainingSlots?: CarbCycleTrainingSlots;
+}
+
+export interface CarbCycleMealTarget {
+  slotKey: 'morning' | 'noon' | 'afternoon' | 'evening';
+  label: string;
+  calories: number;
+  carbs: number;
+  protein: number;
+  fat: number;
 }
 
 export interface CarbCycleDayTarget {
@@ -99,6 +138,8 @@ export interface CarbCycleDayTarget {
   carbs: number;
   protein: number;
   fat: number;
+  trainingSlot: CarbCycleTrainingSlot;
+  meals: CarbCycleMealTarget[];
 }
 
 export interface CarbCycleWeekResult {
