@@ -18,6 +18,7 @@ interface FoodSearchDialogProps {
   description?: string;
   hideDatabaseTab?: boolean;
   hideMealTab?: boolean;
+  localDatabaseOnly?: boolean;
   mealType?: string;
   macroRoleFilter?: Food['macro_role'];
 }
@@ -30,6 +31,7 @@ const FoodSearchDialog = ({
   description = 'Search for foods to add to your database.',
   hideDatabaseTab = false,
   hideMealTab = false,
+  localDatabaseOnly = false,
   mealType = undefined,
   macroRoleFilter = undefined,
 }: FoodSearchDialogProps) => {
@@ -47,6 +49,7 @@ const FoodSearchDialog = ({
           onFoodSelect={onFoodSelect}
           hideDatabaseTab={hideDatabaseTab}
           hideMealTab={hideMealTab}
+          localDatabaseOnly={localDatabaseOnly}
           mealType={mealType}
           macroRoleFilter={macroRoleFilter}
         />

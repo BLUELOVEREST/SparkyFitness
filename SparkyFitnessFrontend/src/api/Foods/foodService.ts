@@ -173,13 +173,18 @@ export interface V2SearchResponse {
   };
 }
 
+interface SearchFoodsV2Options {
+  suppressErrorToast?: boolean;
+}
+
 export const searchFoodsV2 = async (
   providerType: string,
   query: string,
   providerId?: string,
   page?: number,
   pageSize?: number,
-  autoScale?: boolean
+  autoScale?: boolean,
+  options?: SearchFoodsV2Options
 ): Promise<V2SearchResponse> => {
   const params: Record<string, string> = { query };
   if (providerId) params['providerId'] = providerId;
@@ -190,6 +195,7 @@ export const searchFoodsV2 = async (
   return apiCall(`/v2/foods/search/${providerType}`, {
     method: 'GET',
     params,
+    suppressErrorToast: options?.suppressErrorToast,
   });
 };
 

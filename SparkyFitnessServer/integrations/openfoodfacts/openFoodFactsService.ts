@@ -15,6 +15,8 @@ const USER_AGENT = `${name}/${version} (https://github.com/CodeWithCJ/SparkyFitn
 const OFF_HEADERS = {
   'User-Agent': USER_AGENT,
 };
+const OPEN_FOOD_FACTS_TEMPORARY_ERROR =
+  'Open Food Facts is temporarily unavailable or rate limited.';
 const OFF_FIELDS = [
   'product_name',
   'product_name_en',
@@ -71,6 +73,36 @@ async function resolveOffRequestContext(
     log('debug', 'OpenFoodFacts: provider resolution failed:', error);
     return { sessionCookie: null, baseUrl: DEFAULT_OFF_BASE_URL };
   }
+}
+
+async function throwOpenFoodFactsHttpError(
+  response: Response,
+  context: string
+): Promise<never> {
+  const contentType = response.headers.get('content-type') || 'unknown';
+  let bodyPreview = '';
+
+  try {
+    bodyPreview = (await response.text()).slice(0, 500);
+  } catch (error) {
+    log('debug', `${context}: failed to read OpenFoodFacts error body:`, error);
+  }
+
+  log('warn', `${context}: OpenFoodFacts returned HTTP ${response.status}`, {
+    status: response.status,
+    contentType,
+    bodyPreview,
+  });
+
+  if (
+    response.status === 429 ||
+    response.status === 503 ||
+    response.status >= 500
+  ) {
+    throw new Error(OPEN_FOOD_FACTS_TEMPORARY_ERROR);
+  }
+
+  throw new Error(`Open Food Facts API returned HTTP ${response.status}.`);
 }
 
 // Wraps fetch with optional session-cookie authentication for OFF endpoints.
@@ -144,9 +176,7 @@ async function searchOpenFoodFacts(
       sessionCookie,
     });
     if (!response.ok) {
-      const errorText = await response.text();
-      log('error', 'OpenFoodFacts Search API error:', errorText);
-      throw new Error(`OpenFoodFacts API error: ${errorText}`);
+      await throwOpenFoodFactsHttpError(response, 'OpenFoodFacts Search API');
     }
     const data = (await response.json()) as OffSearchResponse;
     return {
@@ -205,9 +235,10 @@ async function searchOpenFoodFactsByBarcodeFields(
         );
         return { status: 0, status_verbose: 'product not found' };
       }
-      const errorText = await response.text();
-      log('error', 'OpenFoodFacts Barcode Fields Search API error:', errorText);
-      throw new Error(`OpenFoodFacts API error: ${errorText}`);
+      await throwOpenFoodFactsHttpError(
+        response,
+        'OpenFoodFacts Barcode Fields Search API'
+      );
     }
     const data = (await response.json()) as {
       status: number;

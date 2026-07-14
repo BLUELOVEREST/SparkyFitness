@@ -1262,6 +1262,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
         title={t('mealPlanTemplateForm.addFoodToMealPlanTitle')}
         description={t('mealPlanTemplateForm.addFoodToMealPlanDescription')}
         hideMealTab={planMode === 'carbCycle'}
+        localDatabaseOnly={planMode === 'carbCycle'}
         macroRoleFilter={currentMacroRole}
       />
 

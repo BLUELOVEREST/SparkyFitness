@@ -89,6 +89,22 @@ const CustomFoodForm = ({
   });
 
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [expandedVariantIndex, setExpandedVariantIndex] = useState(0);
+  const safeExpandedVariantIndex =
+    variants.length === 0
+      ? 0
+      : Math.min(expandedVariantIndex, variants.length - 1);
+
+  const handleAddVariant = () => {
+    const nextIndex = variants.length;
+    addVariant();
+    setExpandedVariantIndex(nextIndex);
+    window.setTimeout(() => {
+      document
+        .getElementById(`food-variant-card-${nextIndex}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  };
 
   // The food's default variant is the AI estimation source. Lookup by flag
   // rather than by position — submit-time validation guarantees exactly one.
@@ -258,7 +274,7 @@ const CustomFoodForm = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Unit Variants</h3>
-                <Button type="button" onClick={addVariant} size="sm">
+                <Button type="button" onClick={handleAddVariant} size="sm">
                   <Plus className="w-4 h-4 mr-1" />
                   Add Unit
                 </Button>
@@ -334,6 +350,8 @@ const CustomFoodForm = ({
                       aiEstimatedUnit={aiEstimatedUnits[index] ?? null}
                       compatibleUnits={compatibleUnitsByIndex[index] ?? []}
                       onApplyAiEstimate={applyAiEstimate}
+                      isExpanded={safeExpandedVariantIndex === index}
+                      onToggleExpanded={setExpandedVariantIndex}
                       onUpdate={updateVariant}
                       onDuplicate={duplicateVariant}
                       onRemove={removeVariant}

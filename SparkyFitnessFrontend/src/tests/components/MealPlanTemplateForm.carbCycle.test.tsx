@@ -47,6 +47,7 @@ jest.mock('@/hooks/CheckIn/useCheckIn', () => ({
 }));
 
 const mockPreview = jest.fn();
+const mockFoodSearchDialog = jest.fn();
 jest.mock('@/hooks/Goals/useGoals', () => ({
   usePreviewCarbCycleMutation: () => ({
     mutateAsync: mockPreview,
@@ -83,7 +84,12 @@ jest.mock('@/hooks/Exercises/useWorkoutPlans', () => ({
   }),
 }));
 
-jest.mock('@/components/FoodSearch/FoodSearchDialog', () => () => null);
+jest.mock('@/components/FoodSearch/FoodSearchDialog', () => {
+  return function MockFoodSearchDialog(props: unknown) {
+    mockFoodSearchDialog(props);
+    return null;
+  };
+});
 jest.mock('@/components/FoodUnitSelector', () => () => null);
 jest.mock('@/pages/Foods/MealUnitSelector', () => () => null);
 jest.mock('@/hooks/Foods/useMeals', () => ({
@@ -360,5 +366,42 @@ describe('MealPlanTemplateForm carb cycle mode', () => {
     expect(screen.getAllByText('150.0g').length).toBeGreaterThan(0);
     expect(screen.getAllByText('100.0g').length).toBeGreaterThan(0);
     expect(screen.getAllByText('30.0g').length).toBeGreaterThan(0);
+  });
+
+  it('opens carb-cycle food selection in local-database mode with matching macro role', async () => {
+    renderWithClient(
+      <MealPlanTemplateForm
+        template={{
+          plan_name: 'Next week',
+          start_date: '2026-07-06',
+          end_date: '2026-07-12',
+          is_active: false,
+          assignments: [],
+        }}
+        onSave={jest.fn()}
+        onClose={jest.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /carb cycle/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /generate carb cycle targets/i })
+    );
+
+    await waitFor(() => expect(mockPreview).toHaveBeenCalled());
+    const selectButtons = await screen.findAllByRole('button', {
+      name: /select/i,
+    });
+    expect(selectButtons[0]).toBeDefined();
+    fireEvent.click(selectButtons[0]!);
+
+    expect(mockFoodSearchDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        open: true,
+        hideMealTab: true,
+        localDatabaseOnly: true,
+        macroRoleFilter: 'carb',
+      })
+    );
   });
 });

@@ -119,7 +119,8 @@ async function fetchProviderResults(
   if (provider.provider_type === 'nutritionix') {
     const data: NutritionixItem[] = await searchNutritionixFoods(
       query,
-      provider.id
+      provider.id,
+      { suppressErrorToast: true }
     );
     // Guard against a non-array response so a provider error can't crash the map.
     const items = (Array.isArray(data) ? data : []).map(
@@ -142,7 +143,8 @@ async function fetchProviderResults(
     provider.id,
     undefined,
     pageSize,
-    provider.provider_type === 'openfoodfacts' ? options.autoScale : undefined
+    provider.provider_type === 'openfoodfacts' ? options.autoScale : undefined,
+    { suppressErrorToast: true }
   );
   // Fall back to an empty list if a provider returns a malformed payload
   // (foods missing, null, or a non-array), so .map() can't crash the query.

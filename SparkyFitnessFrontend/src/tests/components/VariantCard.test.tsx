@@ -120,6 +120,7 @@ const renderVariantCard = ({
   aiEstimatedUnit = null,
   aiEstimateAnchorUnit = null,
   aiEstimatesAvailable = false,
+  isExpanded = true,
 }: {
   showCompatibleUnitIndicators?: boolean;
   variantOverrides?: Partial<FoodVariant>;
@@ -131,6 +132,7 @@ const renderVariantCard = ({
   aiEstimatedUnit?: string | null;
   aiEstimateAnchorUnit?: string | null;
   aiEstimatesAvailable?: boolean;
+  isExpanded?: boolean;
 } = {}) =>
   render(
     <VariantCard
@@ -152,12 +154,35 @@ const renderVariantCard = ({
       onUpdate={jest.fn()}
       onDuplicate={jest.fn()}
       onRemove={jest.fn()}
+      isExpanded={isExpanded}
+      onToggleExpanded={jest.fn()}
     />
   );
 
 const getUnitRow = (unit: string) => screen.getByTestId(`select-unit-${unit}`);
 
 describe('VariantCard', () => {
+  it('renders compact nutrition summary while collapsed', () => {
+    renderVariantCard({
+      isExpanded: false,
+      variantOverrides: {
+        serving_size: 100,
+        serving_unit: 'g',
+        calories: 133,
+        carbs: 2.5,
+        protein: 24.6,
+        fat: 1.9,
+      },
+    });
+
+    expect(screen.getByText(/100 g/i)).toBeInTheDocument();
+    expect(screen.getByText(/133 kcal/i)).toBeInTheDocument();
+    expect(screen.getByText(/C 2.5g/i)).toBeInTheDocument();
+    expect(screen.getByText(/P 24.6g/i)).toBeInTheDocument();
+    expect(screen.getByText(/F 1.9g/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('nutrient-grid')).not.toBeInTheDocument();
+  });
+
   it('shows a trusted manual-path checkmark for cross-category units', () => {
     renderVariantCard({
       variantOverrides: { serving_unit: 'g', source: 'manual' },

@@ -13,7 +13,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Copy, Trash2, Check, Plus, X, Sparkles } from 'lucide-react';
+import {
+  Copy,
+  Trash2,
+  Check,
+  Plus,
+  X,
+  Sparkles,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import type { EquivalentUnit, GlycemicIndex } from '@/types/food';
 import type { FormFoodVariant } from '@/utils/foodForm';
 import {
@@ -110,6 +119,8 @@ interface VariantCardProps {
   /** Apply an accepted AI estimate to this row. Caller scales the default
    *  variant's nutrition and stamps provenance on the row. */
   onApplyAiEstimate: (index: number, estimate: AiEstimateData) => void;
+  isExpanded?: boolean;
+  onToggleExpanded?: (index: number) => void;
   onUpdate: (
     index: number,
     field: string,
@@ -143,6 +154,8 @@ export function VariantCard({
   aiEstimatedUnit,
   compatibleUnits,
   onApplyAiEstimate,
+  isExpanded = true,
+  onToggleExpanded,
   onUpdate,
   onDuplicate,
   onRemove,
@@ -152,6 +165,11 @@ export function VariantCard({
     [variant.equivalents]
   );
   const [allergenInput, setAllergenInput] = useState('');
+  const formatMacro = (value: number | undefined) =>
+    Number(value || 0)
+      .toFixed(1)
+      .replace(/\.0$/, '');
+  const summaryCalories = Math.round(Number(variant.calories || 0));
 
   const customUnitsForDropdown = useMemo(() => {
     const standardUnits = new Set(UNIT_GROUPS.flatMap((group) => group.units));
@@ -246,155 +264,39 @@ export function VariantCard({
   };
 
   return (
-    <Card key={index} className="p-4">
-      <div className="flex flex-col gap-4 mb-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 flex-wrap">
-          <div className="flex items-end gap-2">
-            <div className="flex flex-col">
-              <Label htmlFor={`serving-size-${index}`}>Serving Size</Label>
-              <NumericInput
-                id={`serving-size-${index}`}
-                step="any"
-                value={
-                  variant.serving_size !== undefined
-                    ? variant.serving_size
-                    : undefined
-                }
-                decimals={2}
-                onValueChange={(value) =>
-                  onUpdate(index, 'serving_size', value)
-                }
-                className="w-24"
-              />
-            </div>
-
-            <div className="flex flex-col">
-              <Label htmlFor={`serving-unit-${index}`}>Unit Type</Label>
-              <Select
-                value={variant.serving_unit}
-                onValueChange={(value) =>
-                  onUpdate(index, 'serving_unit', value)
-                }
-              >
-                <SelectTrigger id={`serving-unit-${index}`} className="w-32">
-                  {/* Render only the unit text in the trigger — never the
-                      AI indicator. AI provenance lives in the dropdown items
-                      and the "Nutrition per X Y" header badge. */}
-                  <SelectValue>{variant.serving_unit}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {UNIT_GROUPS.map((group) => (
-                    <SelectGroup key={group.label}>
-                      <SelectLabel>{group.label}</SelectLabel>
-                      {group.units.map((unit) => {
-                        const compatible =
-                          showCompatibleUnitIndicators &&
-                          compatibleUnits.includes(unit);
-                        const matchedAi = savedAiUnits?.find(
-                          (entry) => entry.unit === unit
-                        );
-                        const showCompatibilityCheck = compatible && !matchedAi;
-                        return (
-                          <SelectItem key={unit} value={unit}>
-                            <span className="flex items-center gap-1.5">
-                              {unit}
-                              {showCompatibilityCheck && (
-                                <Check
-                                  data-testid={`compatible-unit-option-${index}-${unit}`}
-                                  className="h-3 w-3 text-green-500"
-                                />
-                              )}
-                              {matchedAi && (
-                                <Sparkles
-                                  data-testid={`ai-unit-option-indicator-${index}-${unit}`}
-                                  className={`h-3 w-3 ${AI_SPARKLE_TONE_CLASSES[CONFIDENCE_TONES[matchedAi.confidence]]}`}
-                                  aria-label={`AI estimate (${OVERALL_CONFIDENCE_LABELS[matchedAi.confidence]} confidence)`}
-                                  fill="currentColor"
-                                  strokeWidth={0.75}
-                                />
-                              )}
-                            </span>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectGroup>
-                  ))}
-                  {customUnitsForDropdown.length > 0 && (
-                    <SelectGroup key="custom-units">
-                      <SelectLabel>Custom</SelectLabel>
-                      {customUnitsForDropdown.map((unit) => {
-                        const compatible =
-                          showCompatibleUnitIndicators &&
-                          compatibleUnits.includes(unit);
-                        const matchedAi = savedAiUnits?.find(
-                          (entry) => entry.unit === unit
-                        );
-                        const showCompatibilityCheck = compatible && !matchedAi;
-                        return (
-                          <SelectItem key={unit} value={unit}>
-                            <span className="flex items-center gap-1.5">
-                              {unit}
-                              {showCompatibilityCheck && (
-                                <Check
-                                  data-testid={`compatible-unit-option-${index}-${unit}`}
-                                  className="h-3 w-3 text-green-500"
-                                />
-                              )}
-                              {matchedAi && (
-                                <Sparkles
-                                  data-testid={`ai-unit-option-indicator-${index}-${unit}`}
-                                  className={`h-3 w-3 ${AI_SPARKLE_TONE_CLASSES[CONFIDENCE_TONES[matchedAi.confidence]]}`}
-                                  aria-label={`AI estimate (${OVERALL_CONFIDENCE_LABELS[matchedAi.confidence]} confidence)`}
-                                  fill="currentColor"
-                                  strokeWidth={0.75}
-                                />
-                              )}
-                            </span>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectGroup>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {variantError && (
-            <p className="text-red-500 text-sm mt-1">{variantError}</p>
+    <Card key={index} id={`food-variant-card-${index}`} className="p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          onClick={() => onToggleExpanded?.(index)}
+          aria-expanded={isExpanded}
+        >
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
+          <span className="min-w-0">
+            <span className="block font-medium">
+              {variant.serving_size} {variant.serving_unit}
+              {variant.is_default ? (
+                <Badge variant="outline" className="ml-2 align-middle">
+                  Default
+                </Badge>
+              ) : null}
+            </span>
+            <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span>{summaryCalories} kcal</span>
+              <span>C {formatMacro(variant.carbs)}g</span>
+              <span>P {formatMacro(variant.protein)}g</span>
+              <span>F {formatMacro(variant.fat)}g</span>
+            </span>
+          </span>
+        </button>
 
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center space-x-2">
-              <Input
-                type="checkbox"
-                id={`is-default-${index}`}
-                checked={variant.is_default ?? false}
-                onChange={(e) =>
-                  onUpdate(index, 'is_default', e.target.checked)
-                }
-                className="form-checkbox h-4 w-4 text-blue-600"
-              />
-              <Label htmlFor={`is-default-${index}`} className="text-sm">
-                Default
-              </Label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Input
-                type="checkbox"
-                id={`is-locked-${index}`}
-                checked={variant.is_locked ?? false}
-                onChange={(e) => onUpdate(index, 'is_locked', e.target.checked)}
-                className="form-checkbox h-4 w-4 text-blue-600"
-              />
-              <Label htmlFor={`is-locked-${index}`} className="text-sm">
-                Auto-Scale
-              </Label>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 ml-auto m:ml-0">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          {isExpanded && (
             <Button
               type="button"
               variant="ghost"
@@ -404,200 +306,370 @@ export function VariantCard({
             >
               <Plus className="w-4 h-4" />
             </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onDuplicate(index)}
+            title="Duplicate Unit"
+          >
+            <Copy className="w-4 h-4" />
+          </Button>
+          {index > 0 && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => onDuplicate(index)}
-              title="Duplicate Unit"
-            >
-              <Copy className="w-4 h-4" />
-            </Button>
-            {index > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => onRemove(index)}
-                title="Remove Unit"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {equivalents.map((eq, eqIndex) => (
-          <div key={eqIndex} className="flex items-end gap-2 ">
-            <div className="flex flex-col">
-              <Label htmlFor={`eq-size-${index}-${eqIndex}`}>
-                Equivalent Size
-              </Label>
-              <Input
-                id={`eq-size-${index}-${eqIndex}`}
-                type="number"
-                step="any"
-                value={eq.serving_size}
-                onChange={(e) =>
-                  updateEquivalent(
-                    eqIndex,
-                    'serving_size',
-                    Number(e.target.value)
-                  )
-                }
-                className="w-24"
-              />
-            </div>
-            <div className="flex flex-col">
-              <Label htmlFor={`eq-unit-${index}-${eqIndex}`}>Unit Type</Label>
-              <Select
-                value={eq.serving_unit}
-                onValueChange={(value) =>
-                  updateEquivalent(eqIndex, 'serving_unit', value)
-                }
-              >
-                <SelectTrigger
-                  id={`eq-unit-${index}-${eqIndex}`}
-                  className="w-32"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {UNIT_GROUPS.map((group) => (
-                    <SelectGroup key={group.label}>
-                      <SelectLabel>{group.label}</SelectLabel>
-                      {group.units.map((unit) => (
-                        <SelectItem key={unit} value={unit}>
-                          {unit}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                  {customUnitsForDropdown.length > 0 && (
-                    <SelectGroup key="custom-units">
-                      <SelectLabel>Custom</SelectLabel>
-                      {customUnitsForDropdown.map((unit) => (
-                        <SelectItem key={unit} value={unit}>
-                          {unit}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => removeEquivalent(eqIndex)}
-              title="Remove Equivalent"
+              onClick={() => onRemove(index)}
+              title="Remove Unit"
             >
               <Trash2 className="w-4 h-4" />
             </Button>
-          </div>
-        ))}
+          )}
+        </div>
       </div>
 
-      {showAiEstimateButton && aiEstimateAnchorUnit && (
-        <div className="mb-4">
-          <AiEstimateSection
-            food={{ id: food.id, name: food.name, brand: food.brand }}
-            fromUnit={variant.serving_unit}
-            fromAmount={aiFromAmount}
-            toUnit={aiEstimateAnchorUnit}
-            knownVariants={[{ amount: 1, unit: aiEstimateAnchorUnit }]}
-            mode="auto-apply"
-            onAccept={(estimate) => onApplyAiEstimate(index, estimate)}
+      {!isExpanded ? null : (
+        <>
+          <div className="flex flex-col gap-4 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 flex-wrap">
+              <div className="flex items-end gap-2">
+                <div className="flex flex-col">
+                  <Label htmlFor={`serving-size-${index}`}>Serving Size</Label>
+                  <NumericInput
+                    id={`serving-size-${index}`}
+                    step="any"
+                    value={
+                      variant.serving_size !== undefined
+                        ? variant.serving_size
+                        : undefined
+                    }
+                    decimals={2}
+                    onValueChange={(value) =>
+                      onUpdate(index, 'serving_size', value)
+                    }
+                    className="w-24"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <Label htmlFor={`serving-unit-${index}`}>Unit Type</Label>
+                  <Select
+                    value={variant.serving_unit}
+                    onValueChange={(value) =>
+                      onUpdate(index, 'serving_unit', value)
+                    }
+                  >
+                    <SelectTrigger
+                      id={`serving-unit-${index}`}
+                      className="w-32"
+                    >
+                      {/* Render only the unit text in the trigger — never the
+                      AI indicator. AI provenance lives in the dropdown items
+                      and the "Nutrition per X Y" header badge. */}
+                      <SelectValue>{variant.serving_unit}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {UNIT_GROUPS.map((group) => (
+                        <SelectGroup key={group.label}>
+                          <SelectLabel>{group.label}</SelectLabel>
+                          {group.units.map((unit) => {
+                            const compatible =
+                              showCompatibleUnitIndicators &&
+                              compatibleUnits.includes(unit);
+                            const matchedAi = savedAiUnits?.find(
+                              (entry) => entry.unit === unit
+                            );
+                            const showCompatibilityCheck =
+                              compatible && !matchedAi;
+                            return (
+                              <SelectItem key={unit} value={unit}>
+                                <span className="flex items-center gap-1.5">
+                                  {unit}
+                                  {showCompatibilityCheck && (
+                                    <Check
+                                      data-testid={`compatible-unit-option-${index}-${unit}`}
+                                      className="h-3 w-3 text-green-500"
+                                    />
+                                  )}
+                                  {matchedAi && (
+                                    <Sparkles
+                                      data-testid={`ai-unit-option-indicator-${index}-${unit}`}
+                                      className={`h-3 w-3 ${AI_SPARKLE_TONE_CLASSES[CONFIDENCE_TONES[matchedAi.confidence]]}`}
+                                      aria-label={`AI estimate (${OVERALL_CONFIDENCE_LABELS[matchedAi.confidence]} confidence)`}
+                                      fill="currentColor"
+                                      strokeWidth={0.75}
+                                    />
+                                  )}
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectGroup>
+                      ))}
+                      {customUnitsForDropdown.length > 0 && (
+                        <SelectGroup key="custom-units">
+                          <SelectLabel>Custom</SelectLabel>
+                          {customUnitsForDropdown.map((unit) => {
+                            const compatible =
+                              showCompatibleUnitIndicators &&
+                              compatibleUnits.includes(unit);
+                            const matchedAi = savedAiUnits?.find(
+                              (entry) => entry.unit === unit
+                            );
+                            const showCompatibilityCheck =
+                              compatible && !matchedAi;
+                            return (
+                              <SelectItem key={unit} value={unit}>
+                                <span className="flex items-center gap-1.5">
+                                  {unit}
+                                  {showCompatibilityCheck && (
+                                    <Check
+                                      data-testid={`compatible-unit-option-${index}-${unit}`}
+                                      className="h-3 w-3 text-green-500"
+                                    />
+                                  )}
+                                  {matchedAi && (
+                                    <Sparkles
+                                      data-testid={`ai-unit-option-indicator-${index}-${unit}`}
+                                      className={`h-3 w-3 ${AI_SPARKLE_TONE_CLASSES[CONFIDENCE_TONES[matchedAi.confidence]]}`}
+                                      aria-label={`AI estimate (${OVERALL_CONFIDENCE_LABELS[matchedAi.confidence]} confidence)`}
+                                      fill="currentColor"
+                                      strokeWidth={0.75}
+                                    />
+                                  )}
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectGroup>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {variantError && (
+                <p className="text-red-500 text-sm mt-1">{variantError}</p>
+              )}
+
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center space-x-2">
+                  <Input
+                    type="checkbox"
+                    id={`is-default-${index}`}
+                    checked={variant.is_default ?? false}
+                    onChange={(e) =>
+                      onUpdate(index, 'is_default', e.target.checked)
+                    }
+                    className="form-checkbox h-4 w-4 text-blue-600"
+                  />
+                  <Label htmlFor={`is-default-${index}`} className="text-sm">
+                    Default
+                  </Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Input
+                    type="checkbox"
+                    id={`is-locked-${index}`}
+                    checked={variant.is_locked ?? false}
+                    onChange={(e) =>
+                      onUpdate(index, 'is_locked', e.target.checked)
+                    }
+                    className="form-checkbox h-4 w-4 text-blue-600"
+                  />
+                  <Label htmlFor={`is-locked-${index}`} className="text-sm">
+                    Auto-Scale
+                  </Label>
+                </div>
+              </div>
+            </div>
+
+            {equivalents.map((eq, eqIndex) => (
+              <div key={eqIndex} className="flex items-end gap-2 ">
+                <div className="flex flex-col">
+                  <Label htmlFor={`eq-size-${index}-${eqIndex}`}>
+                    Equivalent Size
+                  </Label>
+                  <Input
+                    id={`eq-size-${index}-${eqIndex}`}
+                    type="number"
+                    step="any"
+                    value={eq.serving_size}
+                    onChange={(e) =>
+                      updateEquivalent(
+                        eqIndex,
+                        'serving_size',
+                        Number(e.target.value)
+                      )
+                    }
+                    className="w-24"
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <Label htmlFor={`eq-unit-${index}-${eqIndex}`}>
+                    Unit Type
+                  </Label>
+                  <Select
+                    value={eq.serving_unit}
+                    onValueChange={(value) =>
+                      updateEquivalent(eqIndex, 'serving_unit', value)
+                    }
+                  >
+                    <SelectTrigger
+                      id={`eq-unit-${index}-${eqIndex}`}
+                      className="w-32"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {UNIT_GROUPS.map((group) => (
+                        <SelectGroup key={group.label}>
+                          <SelectLabel>{group.label}</SelectLabel>
+                          {group.units.map((unit) => (
+                            <SelectItem key={unit} value={unit}>
+                              {unit}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                      {customUnitsForDropdown.length > 0 && (
+                        <SelectGroup key="custom-units">
+                          <SelectLabel>Custom</SelectLabel>
+                          {customUnitsForDropdown.map((unit) => (
+                            <SelectItem key={unit} value={unit}>
+                              {unit}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeEquivalent(eqIndex)}
+                  title="Remove Equivalent"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          {showAiEstimateButton && aiEstimateAnchorUnit && (
+            <div className="mb-4">
+              <AiEstimateSection
+                food={{ id: food.id, name: food.name, brand: food.brand }}
+                fromUnit={variant.serving_unit}
+                fromAmount={aiFromAmount}
+                toUnit={aiEstimateAnchorUnit}
+                knownVariants={[{ amount: 1, unit: aiEstimateAnchorUnit }]}
+                mode="auto-apply"
+                onAccept={(estimate) => onApplyAiEstimate(index, estimate)}
+              />
+            </div>
+          )}
+
+          <h4 className="text-md font-medium mb-2 flex items-center gap-2">
+            <span>
+              Nutrition per {variant.serving_size} {variant.serving_unit}
+            </span>
+            {showAiEstimateBadge && (
+              <span
+                className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${AI_BADGE_TONE_CLASSES[CONFIDENCE_TONES[variant.ai_confidence as AiConfidence]]}`}
+                aria-label={`AI estimate (${OVERALL_CONFIDENCE_LABELS[variant.ai_confidence as AiConfidence]} confidence)`}
+              >
+                {
+                  OVERALL_CONFIDENCE_LABELS[
+                    variant.ai_confidence as AiConfidence
+                  ]
+                }{' '}
+                estimate
+              </span>
+            )}
+          </h4>
+
+          {/* Pass the array straight through */}
+          <NutrientGrid
+            variantIndex={index}
+            variant={variant}
+            visibleNutrients={visibleNutrients}
+            energyUnit={energyUnit}
+            convertEnergy={convertEnergy}
+            customNutrients={customNutrients}
+            onUpdate={onUpdate}
           />
-        </div>
-      )}
 
-      <h4 className="text-md font-medium mb-2 flex items-center gap-2">
-        <span>Nutrition per {formatServingLabel(variant)}</span>
-        {showAiEstimateBadge && (
-          <span
-            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${AI_BADGE_TONE_CLASSES[CONFIDENCE_TONES[variant.ai_confidence as AiConfidence]]}`}
-            aria-label={`AI estimate (${OVERALL_CONFIDENCE_LABELS[variant.ai_confidence as AiConfidence]} confidence)`}
-          >
-            {OVERALL_CONFIDENCE_LABELS[variant.ai_confidence as AiConfidence]}{' '}
-            estimate
-          </span>
-        )}
-      </h4>
-
-      {/* Pass the array straight through */}
-      <NutrientGrid
-        variantIndex={index}
-        variant={variant}
-        visibleNutrients={visibleNutrients}
-        energyUnit={energyUnit}
-        convertEnergy={convertEnergy}
-        customNutrients={customNutrients}
-        onUpdate={onUpdate}
-      />
-
-      <div className="mt-4 space-y-2">
-        <Label>Allergens</Label>
-        <div className="flex flex-wrap gap-1 mb-2">
-          {COMMON_ALLERGENS.map((a) => (
-            <Badge
-              key={a}
-              variant={currentAllergens.includes(a) ? 'default' : 'outline'}
-              className={`cursor-pointer capitalize select-none text-xs ${currentAllergens.includes(a) ? 'opacity-60' : 'hover:bg-accent'}`}
-              onClick={() =>
-                currentAllergens.includes(a)
-                  ? removeAllergen(a)
-                  : addAllergen(a)
-              }
-            >
-              {currentAllergens.includes(a) && <X className="h-3 w-3 mr-1" />}
-              {a}
-            </Badge>
-          ))}
-        </div>
-        {currentAllergens.filter((a) => !COMMON_ALLERGENS.includes(a)).length >
-          0 && (
-          <div className="flex flex-wrap gap-1 mb-2">
-            {currentAllergens
-              .filter((a) => !COMMON_ALLERGENS.includes(a))
-              .map((a) => (
+          <div className="mt-4 space-y-2">
+            <Label>Allergens</Label>
+            <div className="flex flex-wrap gap-1 mb-2">
+              {COMMON_ALLERGENS.map((a) => (
                 <Badge
                   key={a}
-                  variant="secondary"
-                  className="capitalize text-xs cursor-pointer"
-                  onClick={() => removeAllergen(a)}
+                  variant={currentAllergens.includes(a) ? 'default' : 'outline'}
+                  className={`cursor-pointer capitalize select-none text-xs ${currentAllergens.includes(a) ? 'opacity-60' : 'hover:bg-accent'}`}
+                  onClick={() =>
+                    currentAllergens.includes(a)
+                      ? removeAllergen(a)
+                      : addAllergen(a)
+                  }
                 >
-                  <X className="h-3 w-3 mr-1" />
+                  {currentAllergens.includes(a) && (
+                    <X className="h-3 w-3 mr-1" />
+                  )}
                   {a}
                 </Badge>
               ))}
+            </div>
+            {currentAllergens.filter((a) => !COMMON_ALLERGENS.includes(a))
+              .length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-2">
+                {currentAllergens
+                  .filter((a) => !COMMON_ALLERGENS.includes(a))
+                  .map((a) => (
+                    <Badge
+                      key={a}
+                      variant="secondary"
+                      className="capitalize text-xs cursor-pointer"
+                      onClick={() => removeAllergen(a)}
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      {a}
+                    </Badge>
+                  ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Input
+                value={allergenInput}
+                onChange={(e) => setAllergenInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addAllergen(allergenInput);
+                  }
+                }}
+                placeholder="Custom allergen…"
+                className="max-w-xs h-8 text-sm"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => addAllergen(allergenInput)}
+                disabled={!allergenInput.trim()}
+              >
+                Add
+              </Button>
+            </div>
           </div>
-        )}
-        <div className="flex gap-2">
-          <Input
-            value={allergenInput}
-            onChange={(e) => setAllergenInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addAllergen(allergenInput);
-              }
-            }}
-            placeholder="Custom allergen…"
-            className="max-w-xs h-8 text-sm"
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => addAllergen(allergenInput)}
-            disabled={!allergenInput.trim()}
-          >
-            Add
-          </Button>
-        </div>
-      </div>
+        </>
+      )}
     </Card>
   );
 }

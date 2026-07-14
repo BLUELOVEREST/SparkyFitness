@@ -102,6 +102,7 @@ interface EnhancedFoodSearchProps {
   // When set, only online provider results are shown (used by the Foods page to
   // import a food from an external provider). No local foods, meals, or recents.
   hideDatabaseTab?: boolean;
+  localDatabaseOnly?: boolean;
   // When set, the saved-meals section is hidden (e.g. building a meal, where a
   // meal cannot contain another meal).
   hideMealTab?: boolean;
@@ -159,6 +160,7 @@ const filterItems = <T,>(
 const EnhancedFoodSearch = ({
   onFoodSelect,
   hideDatabaseTab = false,
+  localDatabaseOnly = false,
   hideMealTab = false,
   mealType = undefined,
   macroRoleFilter = undefined,
@@ -186,6 +188,7 @@ const EnhancedFoodSearch = ({
   const onlineOnly = hideDatabaseTab;
   const showLocalFoods = !onlineOnly;
   const showMeals = !hideMealTab && !onlineOnly;
+  const showExternalFoodTools = !localDatabaseOnly;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -446,15 +449,16 @@ const EnhancedFoodSearch = ({
     [foodDataProviders]
   );
 
-  const selectedFoodDataProvider =
-    manualProviderId ??
-    (onlineOnly && foodProviderOptions.length > 1
-      ? ALL_PROVIDERS_VALUE
-      : resolveFoodProviderId(
-          manualProviderId,
-          defaultFoodDataProviderId,
-          foodProviderOptions
-        ));
+  const selectedFoodDataProvider = localDatabaseOnly
+    ? null
+    : (manualProviderId ??
+      (onlineOnly && foodProviderOptions.length > 1
+        ? ALL_PROVIDERS_VALUE
+        : resolveFoodProviderId(
+            manualProviderId,
+            defaultFoodDataProviderId,
+            foodProviderOptions
+          )));
   const selectedProviderName =
     foodDataProviders.find((p) => p.id === selectedFoodDataProvider)
       ?.provider_name ?? '';
@@ -480,6 +484,7 @@ const EnhancedFoodSearch = ({
   // to one while the sentinel is still selected (its dropdown option is hidden
   // in that case).
   const isAllProviders =
+    !localDatabaseOnly &&
     selectedFoodDataProvider === ALL_PROVIDERS_VALUE &&
     foodProviderOptions.length > 1;
 
@@ -524,6 +529,7 @@ const EnhancedFoodSearch = ({
   } = useAllProvidersFoodSearch(searchTerm, foodProviderOptions, {
     enabled:
       isAllProviders &&
+      !localDatabaseOnly &&
       (ownershipFilter === 'all' || ownershipFilter === 'public'),
     autoScale: autoScaleOpenFoodFactsImports,
     foodDisplayLimit,
@@ -815,6 +821,16 @@ const EnhancedFoodSearch = ({
   // Online results use the submitted term only. Typing in the input does not
   // call providers until the user presses Enter or clicks Search.
   useEffect(() => {
+    if (localDatabaseOnly) {
+      searchToken.current += 1;
+      setExternalPage(1);
+      setExternalHasMore(false);
+      setIsLoadingMore(false);
+      setExternalResults([]);
+      setHasOnlineSearchBeenPerformed(false);
+      setIsOnlineLoading(false);
+      return;
+    }
     // In All Providers mode the aggregated hook owns the online results, so this
     // single-provider effect must fully no-op.
     if (selectedFoodDataProvider === ALL_PROVIDERS_VALUE) {
@@ -895,6 +911,7 @@ const EnhancedFoodSearch = ({
     selectedFoodDataProvider,
     foodDataProviders,
     searchHandlers,
+    localDatabaseOnly,
     t,
     ownershipFilter,
   ]);
@@ -1225,21 +1242,33 @@ const EnhancedFoodSearch = ({
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row flex-wrap gap-2">
-        <Button
-          onClick={() => setShowAddFoodDialog(true)}
-          className="whitespace-nowrap"
-        >
-          <Plus className="w-4 h-4 mr-2" />{' '}
-          {t('enhancedFoodSearch.customFood', 'Custom Food')}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => setShowBarcodeScanner(true)}
-          className="whitespace-nowrap"
-        >
-          <Camera className="w-4 h-4 mr-2" />{' '}
-          {t('enhancedFoodSearch.scanBarcode', 'Scan Barcode')}
-        </Button>
+        {showExternalFoodTools && (
+          <>
+            <Button
+              onClick={() => setShowAddFoodDialog(true)}
+              className="whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4 mr-2" />{' '}
+              {t('enhancedFoodSearch.customFood', 'Custom Food')}
+            </Button>
+            <Button
+              onClick={() => setShowImportFromCsvDialog(true)}
+              className="whitespace-nowrap"
+              variant="outline"
+            >
+              <Plus className="w-4 h-4 mr-2" />{' '}
+              {t('enhancedFoodSearch.importFromCSV', 'Import from CSV')}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowBarcodeScanner(true)}
+              className="whitespace-nowrap"
+            >
+              <Camera className="w-4 h-4 mr-2" />{' '}
+              {t('enhancedFoodSearch.scanBarcode', 'Scan Barcode')}
+            </Button>
+          </>
+        )}
       </div>
 
       <div className="flex space-x-2 items-center">
@@ -1286,7 +1315,7 @@ const EnhancedFoodSearch = ({
             </SelectContent>
           </Select>
         </div>
-        {foodProviderOptions.length > 0 && (
+        {showExternalFoodTools && foodProviderOptions.length > 0 && (
           <Select
             value={selectedFoodDataProvider || ''}
             // Temporary view-only switch: peek at another provider's results

@@ -24,12 +24,25 @@ interface NutritionixResponse {
   foods?: NutritionixFood[];
 }
 
+interface NutritionixSearchOptions {
+  suppressErrorToast?: boolean;
+}
+
 // Function to fetch food data provider details from your backend
-const fetchFoodDataProvider = async (providerId: string) => {
+const fetchFoodDataProvider = async (
+  providerId: string,
+  options?: NutritionixSearchOptions
+) => {
   try {
-    const data = await apiCall(`/external-providers/${providerId}`);
+    const data = await apiCall(`/external-providers/${providerId}`, {
+      suppressErrorToast: options?.suppressErrorToast,
+    });
     return data;
   } catch (error: unknown) {
+    if (options?.suppressErrorToast) {
+      throw error;
+    }
+
     const message = getErrorMessage(error);
     console.error('Error fetching food data provider:', error);
     toast({
@@ -76,9 +89,14 @@ const NUTRITIONIX_API_BASE_URL = 'https://trackapi.nutritionix.com/v2';
 
 export const searchNutritionixFoods = async (
   query: string,
-  defaultFoodDataProviderId: string | null
+  defaultFoodDataProviderId: string | null,
+  options?: NutritionixSearchOptions
 ) => {
   if (!defaultFoodDataProviderId) {
+    if (options?.suppressErrorToast) {
+      throw new Error('No default Nutritionix provider configured.');
+    }
+
     toast({
       title: 'Error',
       description: 'No default Nutritionix provider configured.',
@@ -87,9 +105,16 @@ export const searchNutritionixFoods = async (
     return [];
   }
 
-  const providerData = await fetchFoodDataProvider(defaultFoodDataProviderId);
+  const providerData = await fetchFoodDataProvider(
+    defaultFoodDataProviderId,
+    options
+  );
 
   if (!providerData?.app_id || !providerData?.app_key) {
+    if (options?.suppressErrorToast) {
+      throw new Error('Nutritionix provider credentials are incomplete.');
+    }
+
     return [];
   }
 
@@ -106,6 +131,7 @@ export const searchNutritionixFoods = async (
         method: 'GET',
         headers,
         externalApi: true,
+        suppressErrorToast: options?.suppressErrorToast,
       }
     );
     const commonFoods = (data.common || []).slice(0, 10).map(
@@ -142,6 +168,10 @@ export const searchNutritionixFoods = async (
     const results = [...commonFoods, ...brandedFoods];
     return results;
   } catch (error) {
+    if (options?.suppressErrorToast) {
+      throw error;
+    }
+
     console.error('Network error during Nutritionix instant search:', error);
     toast({
       title: 'Error',

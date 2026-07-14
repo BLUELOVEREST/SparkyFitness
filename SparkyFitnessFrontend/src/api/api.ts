@@ -8,6 +8,7 @@ interface ApiCallOptions extends RequestInit {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   params?: Record<string, any>;
   suppress404Toast?: boolean; // New option to suppress toast for 404 errors
+  suppressErrorToast?: boolean; // Suppress global toasts when the caller renders local error state
   externalApi?: boolean;
   isFormData?: boolean; // New option to indicate if the body is FormData
   responseType?: 'json' | 'text' | 'blob'; // Add responseType option
@@ -193,6 +194,10 @@ export async function apiCall(
       }
 
       // Suppress toast for 404 errors if suppress404Toast is true
+      if (options?.suppressErrorToast) {
+        throw new HttpApiError(errorMessage);
+      }
+
       if (response.status === 404 && options?.suppress404Toast) {
         logging.debug(
           userLoggingLevel,
@@ -241,6 +246,10 @@ export async function apiCall(
 
     const errorMessage = err instanceof Error ? err.message : String(err);
     logging.error(userLoggingLevel, 'API call network error:', err); // Log the raw error object for better debugging
+    if (options?.suppressErrorToast) {
+      throw new Error(errorMessage, { cause: err });
+    }
+
     toast({
       title: 'Network Error',
       description: errorMessage || 'Could not connect to the server.',
