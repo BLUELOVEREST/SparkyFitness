@@ -32,6 +32,9 @@ import {
 import { mapFatSecretFood } from '../../integrations/fatsecret/fatsecretService.js';
 import { getYazioFoodDetails } from '../../integrations/yazio/yazioService.js';
 import { getSwissFoodDetails } from '../../integrations/swissfood/swissFoodService.js';
+import { getChinaFoodCompositionDetails } from '../../integrations/chinafood/chinaFoodCompositionService.js';
+import { getBooheeFoodDetails } from '../../integrations/boohee/booheeService.js';
+import { getGrocyFoodDetails } from '../../integrations/grocy/grocyFoodService.js';
 import {
   getFatSecretNutrients,
   getMealieFoodDetails,
@@ -414,6 +417,21 @@ const detailHandler: RequestHandler<{
           language,
           credentials.base_url || undefined
         );
+        break;
+      }
+
+      case 'china-food-composition': {
+        food = await getChinaFoodCompositionDetails(externalId);
+        break;
+      }
+
+      case 'boohee': {
+        food = await getBooheeFoodDetails(externalId, credentials.app_key);
+        break;
+      }
+
+      case 'grocy': {
+        food = await getGrocyFoodDetails();
         break;
       }
     }

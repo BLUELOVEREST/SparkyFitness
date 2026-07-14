@@ -49,6 +49,18 @@ export type ExternalResultWrapper =
   | {
       provider_type: 'swissfood';
       food: Food;
+    }
+  | {
+      provider_type: 'china-food-composition';
+      food: Food;
+    }
+  | {
+      provider_type: 'boohee';
+      food: Food;
+    }
+  | {
+      provider_type: 'grocy';
+      food: Food;
     };
 
 // Normalised per-provider payload returned by each fan-out query.
@@ -99,6 +111,7 @@ const allProvidersFoodSearchKey = (
 // Providers whose single-provider search caps results at the food display
 // limit (see FoodSearch.tsx search handlers); kept in parity here.
 const PAGE_SIZE_PROVIDERS = ['usda', 'yazio'];
+const LIMITED_FALLBACK_PROVIDERS = ['boohee'];
 
 async function fetchProviderResults(
   provider: DataProvider,
@@ -187,11 +200,18 @@ export function useAllProvidersFoodSearch(
   // output gets structural-sharing, so providerResults stays referentially
   // stable across renders. Results are index-aligned with `providers` because
   // the query list below is built from the same `providers.map` order.
+  const primaryProviders = providers.filter(
+    (provider) => !LIMITED_FALLBACK_PROVIDERS.includes(provider.provider_type)
+  );
+  const fallbackProviders = providers.filter((provider) =>
+    LIMITED_FALLBACK_PROVIDERS.includes(provider.provider_type)
+  );
+
   const combine = useCallback(
     (
       results: UseQueryResult<NormalisedProviderResult>[]
     ): ProviderFoodSearchResult[] =>
-      providers.map((provider, i) => {
+      primaryProviders.map((provider, i) => {
         const q = results[i];
         const items = q?.data?.items ?? [];
         return {
@@ -207,11 +227,11 @@ export function useAllProvidersFoodSearch(
           refetch: q?.refetch ?? noop,
         };
       }),
-    [providers]
+    [primaryProviders]
   );
 
-  const providerResults = useQueries({
-    queries: providers.map((provider) => ({
+  const primaryProviderResults = useQueries({
+    queries: primaryProviders.map((provider) => ({
       queryKey: allProvidersFoodSearchKey(
         provider.provider_type,
         debouncedSearch,
@@ -228,6 +248,57 @@ export function useAllProvidersFoodSearch(
     })),
     combine,
   });
+
+  const hasPrimaryResults = primaryProviderResults.some(
+    (result) => result.items.length > 0
+  );
+  const isPrimaryLoading = primaryProviderResults.some(
+    (result) => result.isLoading
+  );
+
+  const fallbackCombine = useCallback(
+    (
+      results: UseQueryResult<NormalisedProviderResult>[]
+    ): ProviderFoodSearchResult[] =>
+      fallbackProviders.map((provider, i) => {
+        const q = results[i];
+        const items = q?.data?.items ?? [];
+        return {
+          provider,
+          items,
+          totalCount: q?.data?.totalCount ?? 0,
+          isLoading: (q?.isFetching ?? false) && items.length === 0,
+          isError: q?.isError ?? false,
+          refetch: q?.refetch ?? noop,
+        };
+      }),
+    [fallbackProviders]
+  );
+
+  const fallbackProviderResults = useQueries({
+    queries: fallbackProviders.map((provider) => ({
+      queryKey: allProvidersFoodSearchKey(
+        provider.provider_type,
+        debouncedSearch,
+        provider.id,
+        autoScale
+      ),
+      queryFn: () =>
+        fetchProviderResults(provider, debouncedSearch, {
+          autoScale,
+          foodDisplayLimit,
+        }),
+      enabled:
+        isSearchActive && enabled && !isPrimaryLoading && !hasPrimaryResults,
+      staleTime: STALE_TIME,
+    })),
+    combine: fallbackCombine,
+  });
+
+  const providerResults = [
+    ...primaryProviderResults,
+    ...fallbackProviderResults,
+  ];
 
   // Treat the debounce window as loading so the input spinner keeps spinning
   // between the keystroke and the queries actually starting, instead of

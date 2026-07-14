@@ -17,6 +17,9 @@ import {
 } from '../integrations/fatsecret/fatsecretService.js';
 import { searchYazioFoods } from '../integrations/yazio/yazioService.js';
 import { searchSwissFoods } from '../integrations/swissfood/swissFoodService.js';
+import { searchChinaFoodCompositionFoods } from '../integrations/chinafood/chinaFoodCompositionService.js';
+import { searchBooheeFoods } from '../integrations/boohee/booheeService.js';
+import { searchGrocyFoods } from '../integrations/grocy/grocyFoodService.js';
 import {
   searchFatSecretFoods,
   getFatSecretNutrients,
@@ -34,6 +37,9 @@ export const VALID_PROVIDER_TYPES = [
   'yazio',
   'norish',
   'swissfood',
+  'china-food-composition',
+  'boohee',
+  'grocy',
 ] as const;
 
 export type ProviderType = (typeof VALID_PROVIDER_TYPES)[number];
@@ -93,6 +99,10 @@ export async function resolveProviderCredentials(
   }
 
   if (providerType === 'swissfood' && !providerId) {
+    return {};
+  }
+
+  if (providerType === 'china-food-composition' && !providerId) {
     return {};
   }
 
@@ -427,6 +437,42 @@ export async function searchProviderFoods(
         pageSize,
         language,
         credentials.base_url || undefined
+      );
+      foods = result.foods || [];
+      pagination = result.pagination;
+      break;
+    }
+
+    case 'china-food-composition': {
+      const result = await searchChinaFoodCompositionFoods(
+        query,
+        page,
+        pageSize
+      );
+      foods = result.foods || [];
+      pagination = result.pagination;
+      break;
+    }
+
+    case 'boohee': {
+      const result = await searchBooheeFoods(
+        query,
+        credentials.app_key,
+        page,
+        pageSize
+      );
+      foods = result.foods || [];
+      pagination = result.pagination;
+      break;
+    }
+
+    case 'grocy': {
+      const result = await searchGrocyFoods(
+        query,
+        credentials.base_url,
+        credentials.app_key,
+        page,
+        pageSize
       );
       foods = result.foods || [];
       pagination = result.pagination;

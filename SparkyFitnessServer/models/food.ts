@@ -125,7 +125,7 @@ async function searchFoods(
   try {
     let query = `
       SELECT
-        f.id, f.name, f.brand, f.barcode, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type, f.provider_verified,
+        f.id, f.name, f.brand, f.barcode, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type, f.provider_verified, f.macro_role,
         ${DEFAULT_VARIANT_JSON_SQL}
       FROM foods f
       ${PREFERRED_DEFAULT_VARIANT_JOIN_SQL}
@@ -177,8 +177,8 @@ async function createFood(foodData: any) {
     // 1. Create the food entry
     const foodResult = await client.query(
       `INSERT INTO foods (
-        name, is_custom, user_id, brand, barcode, provider_external_id, shared_with_public, provider_type, provider_verified, is_quick_food, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now()) RETURNING id, name, brand, is_custom, user_id, shared_with_public, is_quick_food, provider_external_id, provider_type, provider_verified`,
+        name, is_custom, user_id, brand, barcode, provider_external_id, shared_with_public, provider_type, provider_verified, macro_role, is_quick_food, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now()) RETURNING id, name, brand, is_custom, user_id, shared_with_public, is_quick_food, provider_external_id, provider_type, provider_verified, macro_role`,
       [
         foodData.name,
         sanitizeBoolean(foodData.is_custom) ?? true,
@@ -191,6 +191,7 @@ async function createFood(foodData: any) {
         sanitizeBoolean(foodData.shared_with_public) ?? false,
         foodData.provider_type,
         sanitizeBoolean(foodData.provider_verified) ?? false,
+        foodData.macro_role ?? null,
         sanitizeBoolean(foodData.is_quick_food) ?? false,
       ]
     );
@@ -282,7 +283,7 @@ async function findFoodByBarcode(barcode: any, userId: any) {
   try {
     const result = await client.query(
       `SELECT
-        f.id, f.name, f.brand, f.barcode, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type, f.provider_verified,
+        f.id, f.name, f.brand, f.barcode, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type, f.provider_verified, f.macro_role,
         ${DEFAULT_VARIANT_JSON_SQL}
       FROM foods f
       ${PREFERRED_DEFAULT_VARIANT_JOIN_SQL}
@@ -301,7 +302,7 @@ async function getFoodById(foodId: any, userId: any) {
   try {
     const result = await client.query(
       `SELECT
-        f.id, f.name, f.brand, f.barcode, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type, f.provider_verified,
+        f.id, f.name, f.brand, f.barcode, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type, f.provider_verified, f.macro_role,
         ${DEFAULT_VARIANT_JSON_SQL}
       FROM foods f
       ${PREFERRED_DEFAULT_VARIANT_JOIN_SQL}
@@ -343,6 +344,10 @@ async function updateFood(id: any, userId: any, foodData: any) {
         ? normalizeBarcode(foodData.barcode)
         : null
       : null;
+    const macroRoleKeyPresent = Object.prototype.hasOwnProperty.call(
+      foodData,
+      'macro_role'
+    );
     const result = await client.query(
       `UPDATE foods SET
         name = COALESCE($1, name),
@@ -353,9 +358,10 @@ async function updateFood(id: any, userId: any, foodData: any) {
         shared_with_public = COALESCE($7, shared_with_public),
         provider_type = COALESCE($8, provider_type),
         provider_verified = COALESCE($9, provider_verified),
-        is_quick_food = COALESCE($10, is_quick_food),
+        macro_role = CASE WHEN $10::boolean THEN $11 ELSE macro_role END,
+        is_quick_food = COALESCE($12, is_quick_food),
         updated_at = now()
-      WHERE id = $11
+      WHERE id = $13
       RETURNING *`,
       [
         foodData.name,
@@ -367,6 +373,8 @@ async function updateFood(id: any, userId: any, foodData: any) {
         foodData.shared_with_public,
         foodData.provider_type,
         foodData.provider_verified,
+        macroRoleKeyPresent,
+        foodData.macro_role ?? null,
         foodData.is_quick_food,
         id,
       ]
@@ -428,7 +436,7 @@ async function getFoodsWithPagination(
 
     let query = `
       SELECT
-        f.id, f.name, f.brand, f.barcode, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type, f.provider_verified,
+        f.id, f.name, f.brand, f.barcode, f.is_custom, f.user_id, f.shared_with_public, f.provider_external_id, f.provider_type, f.provider_verified, f.macro_role,
         ${DEFAULT_VARIANT_JSON_SQL}
       FROM foods f
       ${PREFERRED_DEFAULT_VARIANT_JOIN_SQL}

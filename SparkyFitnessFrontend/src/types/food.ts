@@ -66,7 +66,11 @@ export interface Food {
     | 'usda'
     | 'yazio'
     | 'norish'
-    | 'swissfood';
+    | 'swissfood'
+    | 'china-food-composition'
+    | 'boohee'
+    | 'grocy';
+  macro_role?: 'carb' | 'protein' | 'fat' | null;
   provider_verified?: boolean;
   default_variant?: FoodVariant;
   variants?: FoodVariant[];

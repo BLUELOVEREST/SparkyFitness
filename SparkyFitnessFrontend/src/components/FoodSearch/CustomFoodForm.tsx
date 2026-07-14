@@ -218,6 +218,23 @@ const CustomFoodForm = ({
                   Standard barcodes are 8 to 14 digits.
                 </p>
               </div>
+              <div>
+                <Label htmlFor="macro_role">Carb Cycle Macro Role</Label>
+                <select
+                  id="macro_role"
+                  className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={formData.macro_role}
+                  onChange={(e) => updateField('macro_role', e.target.value)}
+                >
+                  <option value="">Not set</option>
+                  <option value="carb">Carb</option>
+                  <option value="protein">Protein</option>
+                  <option value="fat">Fat</option>
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Used only by Eric carb-cycle meal planning.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center space-x-2 pt-2">

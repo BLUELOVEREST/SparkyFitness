@@ -102,6 +102,7 @@ interface EnhancedFoodSearchProps {
   // meal cannot contain another meal).
   hideMealTab?: boolean;
   mealType?: string;
+  macroRoleFilter?: Food['macro_role'];
 }
 
 const SectionHeader = ({ children }: { children: ReactNode }) => (
@@ -156,6 +157,7 @@ const EnhancedFoodSearch = ({
   hideDatabaseTab = false,
   hideMealTab = false,
   mealType = undefined,
+  macroRoleFilter = undefined,
 }: EnhancedFoodSearchProps) => {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -262,6 +264,11 @@ const EnhancedFoodSearch = ({
       showLocalFoods && !!debouncedSearchTerm.trim()
     );
 
+  const matchesMacroRole = useCallback(
+    (food: Food) => !macroRoleFilter || food.macro_role === macroRoleFilter,
+    [macroRoleFilter]
+  );
+
   // Starred foods and meals. Shared cache with the row star in FoodResultCard,
   // so this is one fetch, not two.
   const { data: favoritesData, isLoading: isLoadingFavorites } =
@@ -289,23 +296,25 @@ const EnhancedFoodSearch = ({
           ? new Date(meal.favorited_at).getTime()
           : 0,
       })),
-      ...(favoritesData?.favoriteFoods || []).map((food) => ({
-        entry: {
-          kind: 'food' as const,
-          key: landingKey('food', food.id),
-          food,
-        },
-        favoritedAt: food.favorited_at
-          ? new Date(food.favorited_at).getTime()
-          : 0,
-      })),
+      ...(favoritesData?.favoriteFoods || [])
+        .filter(matchesMacroRole)
+        .map((food) => ({
+          entry: {
+            kind: 'food' as const,
+            key: landingKey('food', food.id),
+            food,
+          },
+          favoritedAt: food.favorited_at
+            ? new Date(food.favorited_at).getTime()
+            : 0,
+        })),
     ];
     // No dedupe needed: a food and a meal never share a key (kind-prefixed),
     // and the DB's unique constraints stop the same row arriving twice.
     return tagged
       .sort((a, b) => b.favoritedAt - a.favoritedAt)
       .map((t) => t.entry);
-  }, [favoritesData, showMeals]);
+  }, [favoritesData, matchesMacroRole, showMeals]);
 
   // Recent is one merged timeline (meals + foods by last-used date); Frequent is
   // one merged most-used list (by usage count). Each section excludes what the
@@ -350,20 +359,20 @@ const EnhancedFoodSearch = ({
   const filteredRecentFoods = useMemo(
     () =>
       filterItems(
-        recentTopData?.recentFoods || [],
+        (recentTopData?.recentFoods || []).filter(matchesMacroRole),
         ownershipFilter,
         user?.id
       ) as Parameters<typeof mergeRecent>[1],
-    [recentTopData?.recentFoods, ownershipFilter, user?.id]
+    [matchesMacroRole, recentTopData?.recentFoods, ownershipFilter, user?.id]
   );
   const filteredTopFoods = useMemo(
     () =>
       filterItems(
-        recentTopData?.topFoods || [],
+        (recentTopData?.topFoods || []).filter(matchesMacroRole),
         ownershipFilter,
         user?.id
       ) as Parameters<typeof mergeFrequent>[1],
-    [recentTopData?.topFoods, ownershipFilter, user?.id]
+    [matchesMacroRole, recentTopData?.topFoods, ownershipFilter, user?.id]
   );
   const filteredRecentMeals = useMemo(
     () => filterItems(recentMeals, ownershipFilter, user?.id),
@@ -394,14 +403,16 @@ const EnhancedFoodSearch = ({
   // and filter preserves it, so favorites stay relevance-ordered among
   // themselves too.
   const searchFoodsFavFirst = useMemo(() => {
-    const results: Food[] = searchData?.searchResults || [];
+    const results: Food[] = (searchData?.searchResults || []).filter(
+      matchesMacroRole
+    );
     const isFavorite = (food: Food) =>
       favoriteKeys.has(landingKey('food', food.id));
     return [
       ...results.filter(isFavorite),
       ...results.filter((food) => !isFavorite(food)),
     ];
-  }, [searchData, favoriteKeys]);
+  }, [favoriteKeys, matchesMacroRole, searchData]);
   const searchMealsFavFirst = useMemo(() => {
     const isFavorite = (meal: Meal) =>
       favoriteKeys.has(landingKey('meal', meal.id));
@@ -523,6 +534,28 @@ const EnhancedFoodSearch = ({
   const topMatches = useMemo(
     () => interleaveTopMatches(providerResults),
     [providerResults]
+  );
+  const filteredExternalResults = useMemo(
+    () => externalResults.filter((result) => matchesMacroRole(result.food)),
+    [externalResults, matchesMacroRole]
+  );
+  const filteredTopMatches = useMemo(
+    () => topMatches.filter((match) => matchesMacroRole(match.result.food)),
+    [topMatches, matchesMacroRole]
+  );
+  const filteredProviderResults = useMemo(
+    () =>
+      providerResults.map((result) => {
+        const items = result.items.filter((item) =>
+          matchesMacroRole(item.food)
+        );
+        return {
+          ...result,
+          items,
+          totalCount: macroRoleFilter ? items.length : result.totalCount,
+        };
+      }),
+    [macroRoleFilter, matchesMacroRole, providerResults]
   );
 
   // --- Local meals: searched alongside foods, guarded against stale resolves ---
@@ -726,6 +759,49 @@ const EnhancedFoodSearch = ({
         return {
           items: data.foods.map((food: Food) => ({
             provider_type: 'swissfood' as const,
+            food,
+          })),
+          hasMore: data.pagination?.hasMore ?? false,
+        };
+      },
+      'china-food-composition': async (term, id, _provider, page) => {
+        const data = await queryClient.fetchQuery(
+          searchFoodsV2Options(
+            'china-food-composition',
+            term,
+            id,
+            undefined,
+            undefined,
+            page
+          )
+        );
+        return {
+          items: data.foods.map((food: Food) => ({
+            provider_type: 'china-food-composition' as const,
+            food,
+          })),
+          hasMore: data.pagination?.hasMore ?? false,
+        };
+      },
+      boohee: async (term, id, _provider, page) => {
+        const data = await queryClient.fetchQuery(
+          searchFoodsV2Options('boohee', term, id, undefined, undefined, page)
+        );
+        return {
+          items: data.foods.map((food: Food) => ({
+            provider_type: 'boohee' as const,
+            food,
+          })),
+          hasMore: data.pagination?.hasMore ?? false,
+        };
+      },
+      grocy: async (term, id, _provider, page) => {
+        const data = await queryClient.fetchQuery(
+          searchFoodsV2Options('grocy', term, id, undefined, undefined, page)
+        );
+        return {
+          items: data.foods.map((food: Food) => ({
+            provider_type: 'grocy' as const,
             food,
           })),
           hasMore: data.pagination?.hasMore ?? false,
@@ -1406,12 +1482,14 @@ const EnhancedFoodSearch = ({
             {showOnlineResults && !isAllProviders && selectedProviderName && (
               <>
                 <SectionHeader>{selectedProviderName}</SectionHeader>
-                {isOnlineLoading && externalResults.length === 0 && (
+                {isOnlineLoading && filteredExternalResults.length === 0 && (
                   <div className="text-center py-6 text-gray-500">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                   </div>
                 )}
-                {externalResults.map((result) => renderExternalCard(result))}
+                {filteredExternalResults.map((result) =>
+                  renderExternalCard(result)
+                )}
                 {externalHasMore && !isOnlineLoading && (
                   <div className="flex justify-center py-2">
                     <Button
@@ -1430,7 +1508,7 @@ const EnhancedFoodSearch = ({
                 )}
                 {!isOnlineLoading &&
                   hasOnlineSearchBeenPerformed &&
-                  externalResults.length === 0 && (
+                  filteredExternalResults.length === 0 && (
                     <div className="text-center py-6 text-gray-500">
                       {t(
                         'enhancedFoodSearch.noFoodsFoundOnline',
@@ -1454,8 +1532,8 @@ const EnhancedFoodSearch = ({
                       )}
                     </span>
                   </SectionHeader>
-                  {topMatches.length > 0
-                    ? topMatches.map((match) =>
+                  {filteredTopMatches.length > 0
+                    ? filteredTopMatches.map((match) =>
                         renderExternalCard(match.result, {
                           keyPrefix: `top-${match.providerId}`,
                           providerLabel: match.providerName,
@@ -1466,13 +1544,13 @@ const EnhancedFoodSearch = ({
                     : !anyProviderLoading && (
                         <div className="text-center py-4 text-gray-500 text-sm">
                           {t('enhancedFoodSearch.noResults', 'No results')}
-                        </div>
-                      )}
+                      </div>
+                    )}
 
                   <SectionHeader>
                     {t('enhancedFoodSearch.bySource', 'By Source')}
                   </SectionHeader>
-                  {providerResults.map((r) => {
+                  {filteredProviderResults.map((r) => {
                     const expanded = expandedProviders.has(r.provider.id);
                     const color = getProviderColor(r.provider.id);
                     const loading = r.isLoading;

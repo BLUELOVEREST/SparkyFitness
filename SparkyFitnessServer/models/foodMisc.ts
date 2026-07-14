@@ -91,6 +91,7 @@ async function getRecentFoods(userId: any, limit: any, mealType: any) {
         f.provider_type,
         f.provider_verified,
         rfe.last_used_date,
+        f.macro_role,
         ${DEFAULT_VARIANT_JSON_SQL}
       FROM foods f
       JOIN RecentFoodEntries rfe ON f.id = rfe.food_id
@@ -138,6 +139,7 @@ async function getTopFoods(userId: any, limit: any, mealType: any) {
         f.provider_external_id,
         f.provider_type,
         f.provider_verified,
+        f.macro_role,
         tfe.usage_count,
         ${DEFAULT_VARIANT_JSON_SQL}
       FROM foods f

@@ -109,6 +109,7 @@ export interface MealPlanTemplateAssignment {
   variant_id?: string;
   quantity?: number;
   unit?: string;
+  macro_role?: 'carb' | 'protein' | 'fat';
 }
 
 export interface MealPlanTemplate {

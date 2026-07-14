@@ -362,6 +362,7 @@ export function useCustomFoodForm({
     brand: '',
     is_quick_food: false,
     barcode: '',
+    macro_role: '',
   });
 
   // Provider nutrient values the user mapped onto this food (custom nutrient
@@ -439,7 +440,13 @@ export function useCustomFoodForm({
   );
 
   const resetForm = useCallback(() => {
-    setFormData({ name: '', brand: '', is_quick_food: false, barcode: '' });
+    setFormData({
+      name: '',
+      brand: '',
+      is_quick_food: false,
+      barcode: '',
+      macro_role: '',
+    });
     const defaultVariant = createDefaultFormVariant(customNutrients);
     const grouped = groupEquivalentVariants([defaultVariant]);
     initializeVariantState(grouped, {
@@ -527,6 +534,7 @@ export function useCustomFoodForm({
         brand: food.brand || '',
         is_quick_food: food.is_quick_food || false,
         barcode: food.barcode || '',
+        macro_role: food.macro_role || '',
       });
 
       if (food.variants && food.variants.length > 0) {
@@ -548,7 +556,13 @@ export function useCustomFoodForm({
         loadExistingVariants();
       }
     } else if (initialVariants && initialVariants.length > 0) {
-      setFormData({ name: '', brand: '', is_quick_food: false, barcode: '' });
+      setFormData({
+        name: '',
+        brand: '',
+        is_quick_food: false,
+        barcode: '',
+        macro_role: '',
+      });
       const mapped = initialVariants.map((variant) =>
         foodVariantToFormVariant({
           ...variant,
@@ -1135,6 +1149,12 @@ export function useCustomFoodForm({
         provider_external_id: food?.provider_external_id,
         provider_type: food?.provider_type,
         provider_verified: food?.provider_verified,
+        macro_role:
+          formData.macro_role === 'carb' ||
+          formData.macro_role === 'protein' ||
+          formData.macro_role === 'fat'
+            ? formData.macro_role
+            : null,
       };
 
       const expandedVariants: FormFoodVariant[] = [];

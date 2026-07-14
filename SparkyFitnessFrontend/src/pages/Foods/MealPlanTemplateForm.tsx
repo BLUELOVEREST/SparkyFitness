@@ -41,6 +41,7 @@ import { useMostRecentMeasurement } from '@/hooks/CheckIn/useCheckIn';
 import { usePreviewCarbCycleMutation } from '@/hooks/Goals/useGoals';
 import { useWorkoutPlanTemplates } from '@/hooks/Exercises/useWorkoutPlans';
 import { buildCarbCycleMealPlanDraft } from '@/utils/carbCycleMealPlan';
+import type { FoodMacroRole } from '@/utils/carbCycleFoodRoles';
 import { orderItemsByFirstDay } from '@/utils/trainingFocusPlan';
 import type { CarbCycleTrainingSlots } from '@/types/goals';
 import type { WorkoutPlanFocusSession } from '@/types/workout';
@@ -64,6 +65,20 @@ interface MealPlanTemplateFormProps {
 }
 
 type MealPlanMode = 'average' | 'carbCycle';
+const MACRO_ROLE_ORDER: FoodMacroRole[] = ['carb', 'protein', 'fat'];
+const MACRO_ROLE_LABELS: Record<FoodMacroRole, string> = {
+  carb: 'Carbs',
+  protein: 'Protein',
+  fat: 'Fat',
+};
+const MACRO_ROLE_TARGET_KEY: Record<
+  FoodMacroRole,
+  'carbs' | 'protein' | 'fat'
+> = {
+  carb: 'carbs',
+  protein: 'protein',
+  fat: 'fat',
+};
 
 function getDayOfWeekFromDate(date: string): number {
   return new Date(`${date}T00:00:00.000Z`).getUTCDay();
@@ -151,6 +166,11 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
   const [selectedMeal, setSelectedMeal] = useState<Meal | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [currentMealType, setCurrentMealType] = useState<string | null>(null);
+  const [currentMacroRole, setCurrentMacroRole] =
+    useState<FoodMacroRole | null>(null);
+  const [recommendedQuantity, setRecommendedQuantity] = useState<
+    number | undefined
+  >(undefined);
   const [editingAssignmentIndex, setEditingAssignmentIndex] = useState<
     number | null
   >(null);
@@ -280,10 +300,57 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     template?.assignments,
   ]); // Only run when template ID changes
 
-  const handleAddFood = (day: number, mealType: string) => {
+  const handleAddFood = (
+    day: number,
+    mealType: string,
+    macroRole?: FoodMacroRole
+  ) => {
     setCurrentDay(day);
     setCurrentMealType(mealType);
+    setCurrentMacroRole(macroRole ?? null);
+    setRecommendedQuantity(undefined);
     setIsFoodSelectionOpen(true);
+  };
+
+  const calculateRecommendedQuantity = (
+    food: Food,
+    macroRole: FoodMacroRole
+  ) => {
+    if (currentDay === null || currentMealType === null) return undefined;
+    const mealTarget =
+      resolvedMealMacroTargetsByDay[currentDay]?.find(
+        (target) => target.label.toLowerCase() === currentMealType.toLowerCase()
+      ) ?? null;
+    const variant = food.default_variant;
+    if (!mealTarget || !variant) return undefined;
+    const macroKey = MACRO_ROLE_TARGET_KEY[macroRole];
+    const macroPerServing = Number(variant[macroKey] || 0);
+    const servingSize = Number(variant.serving_size || 0);
+    if (macroPerServing <= 0 || servingSize <= 0) return undefined;
+    const currentTotals = calculateAssignmentsNutrition(
+      extendedAssignments.filter(
+        (assignment) =>
+          assignment.day_of_week === currentDay &&
+          assignment.meal_type.toLowerCase() ===
+            currentMealType.toLowerCase() &&
+          assignment.macro_role !== macroRole
+      )
+    );
+    const actualByRole = {
+      carb: currentTotals.totalCarbs,
+      protein: currentTotals.totalProtein,
+      fat: currentTotals.totalFat,
+    };
+    const targetByRole = {
+      carb: mealTarget.carbs,
+      protein: mealTarget.protein,
+      fat: mealTarget.fat,
+    };
+    const remaining = Math.max(
+      0,
+      targetByRole[macroRole] - actualByRole[macroRole]
+    );
+    return Math.round((remaining / macroPerServing) * servingSize);
   };
 
   const handleMealUnitSelected = async (
@@ -350,6 +417,23 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
       setIsMealUnitSelectorOpen(true);
     } else {
       const food = item as Food;
+      if (
+        planMode === 'carbCycle' &&
+        currentMacroRole &&
+        food.macro_role !== currentMacroRole
+      ) {
+        toast({
+          title: t('common.error', 'Error'),
+          description: `Choose a ${MACRO_ROLE_LABELS[currentMacroRole]} food for this slot.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (currentMacroRole) {
+        setRecommendedQuantity(
+          calculateRecommendedQuantity(food, currentMacroRole)
+        );
+      }
       setSelectedFood(food);
       setIsFoodUnitSelectorOpen(true);
     }
@@ -404,8 +488,24 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
         variant_id: selectedVariant.id,
         quantity: quantity,
         unit: unit,
+        macro_role: currentMacroRole ?? undefined,
       };
-      setAssignments((prev) => [...prev, newAssignment]);
+      setAssignments((prev) =>
+        currentMacroRole
+          ? [
+              ...prev.filter(
+                (assignment) =>
+                  !(
+                    assignment.day_of_week === currentDay &&
+                    assignment.meal_type.toLowerCase() ===
+                      currentMealType.toLowerCase() &&
+                    assignment.macro_role === currentMacroRole
+                  )
+              ),
+              newAssignment,
+            ]
+          : [...prev, newAssignment]
+      );
 
       // Add to extended assignments with nutrition data
       const extendedAssignment: ExtendedAssignment = {
@@ -417,11 +517,28 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
         serving_size: selectedVariant.serving_size,
         serving_unit: selectedVariant.serving_unit,
       };
-      setExtendedAssignments((prev) => [...prev, extendedAssignment]);
+      setExtendedAssignments((prev) =>
+        currentMacroRole
+          ? [
+              ...prev.filter(
+                (assignment) =>
+                  !(
+                    assignment.day_of_week === currentDay &&
+                    assignment.meal_type.toLowerCase() ===
+                      currentMealType.toLowerCase() &&
+                    assignment.macro_role === currentMacroRole
+                  )
+              ),
+              extendedAssignment,
+            ]
+          : [...prev, extendedAssignment]
+      );
     }
 
     setIsFoodUnitSelectorOpen(false);
     setSelectedFood(null);
+    setCurrentMacroRole(null);
+    setRecommendedQuantity(undefined);
   };
 
   const handleRemoveAssignment = (index: number) => {
@@ -458,14 +575,9 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     }
   };
 
-  // Calculate nutrition totals for a specific meal type on a specific day
-  const calculateMealTypeNutrition = (dayIndex: number, mealType: string) => {
-    const relevantAssignments = extendedAssignments.filter(
-      (a) =>
-        a.day_of_week === dayIndex &&
-        a.meal_type.toLowerCase() === mealType.toLowerCase()
-    );
-
+  const calculateAssignmentsNutrition = (
+    relevantAssignments: ExtendedAssignment[]
+  ) => {
     let totalCalories = 0;
     let totalProtein = 0;
     let totalCarbs = 0;
@@ -487,28 +599,23 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     return { totalCalories, totalProtein, totalCarbs, totalFat };
   };
 
+  // Calculate nutrition totals for a specific meal type on a specific day
+  const calculateMealTypeNutrition = (dayIndex: number, mealType: string) => {
+    const relevantAssignments = extendedAssignments.filter(
+      (a) =>
+        a.day_of_week === dayIndex &&
+        a.meal_type.toLowerCase() === mealType.toLowerCase()
+    );
+
+    return calculateAssignmentsNutrition(relevantAssignments);
+  };
+
   // Calculate total nutrition for an entire day
   const calculateDailyNutrition = (dayIndex: number) => {
     const relevantAssignments = extendedAssignments.filter(
       (a) => a.day_of_week === dayIndex
     );
-
-    let totalCalories = 0;
-    let totalProtein = 0;
-    let totalCarbs = 0;
-    let totalFat = 0;
-
-    relevantAssignments.forEach((assignment) => {
-      const denominator =
-        (assignment.serving_size || 1) * (assignment.total_servings || 1);
-      const scale = (assignment.quantity || 1) / denominator;
-      totalCalories += (assignment.calories || 0) * scale;
-      totalProtein += (assignment.protein || 0) * scale;
-      totalCarbs += (assignment.carbs || 0) * scale;
-      totalFat += (assignment.fat || 0) * scale;
-    });
-
-    return { totalCalories, totalProtein, totalCarbs, totalFat };
+    return calculateAssignmentsNutrition(relevantAssignments);
   };
 
   const handleSave = () => {
@@ -1047,17 +1154,68 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                 </div>
                               </div>
                             ) : null}
-                            <div className="flex space-x-2 mt-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  handleAddFood(dayIndex, mealType)
-                                }
-                              >
-                                {t('mealPlanTemplateForm.addFoodOrMealButton')}
-                              </Button>
-                            </div>
+                            {planMode === 'carbCycle' && mealTarget ? (
+                              <div className="mt-3 space-y-2 rounded-md border bg-muted/30 p-2">
+                                {MACRO_ROLE_ORDER.map((role) => {
+                                  const selectedRoleAssignment =
+                                    assignmentsForMealType.find(
+                                      (assignment) =>
+                                        assignment.macro_role === role
+                                    );
+                                  const targetValue =
+                                    mealTarget[MACRO_ROLE_TARGET_KEY[role]];
+                                  return (
+                                    <div
+                                      key={role}
+                                      className="flex items-center justify-between gap-2 text-sm"
+                                    >
+                                      <div>
+                                        <div className="font-medium">
+                                          {MACRO_ROLE_LABELS[role]}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                          Target {targetValue}g
+                                        </div>
+                                      </div>
+                                      <div className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">
+                                        {selectedRoleAssignment
+                                          ? selectedRoleAssignment.food_name
+                                          : 'None selected'}
+                                      </div>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          handleAddFood(
+                                            dayIndex,
+                                            mealType,
+                                            role
+                                          )
+                                        }
+                                      >
+                                        {selectedRoleAssignment
+                                          ? 'Change'
+                                          : 'Select'}
+                                      </Button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="flex space-x-2 mt-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleAddFood(dayIndex, mealType)
+                                  }
+                                >
+                                  {t(
+                                    'mealPlanTemplateForm.addFoodOrMealButton'
+                                  )}
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1103,6 +1261,8 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
         onFoodSelect={(item, type) => handleFoodSelected(item, type)}
         title={t('mealPlanTemplateForm.addFoodToMealPlanTitle')}
         description={t('mealPlanTemplateForm.addFoodToMealPlanDescription')}
+        hideMealTab={planMode === 'carbCycle'}
+        macroRoleFilter={currentMacroRole}
       />
 
       {selectedFood && (
@@ -1111,6 +1271,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
           open={isFoodUnitSelectorOpen}
           onOpenChange={setIsFoodUnitSelectorOpen}
           onSelect={handleFoodUnitSelected}
+          initialQuantity={recommendedQuantity}
         />
       )}
 

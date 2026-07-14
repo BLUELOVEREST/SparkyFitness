@@ -65,6 +65,7 @@ export const saveFood = async (
         provider_external_id: foodData.provider_external_id,
         provider_type: foodData.provider_type,
         provider_verified: foodData.provider_verified,
+        macro_role: foodData.macro_role ?? null,
       },
     });
 
@@ -171,6 +172,7 @@ export const saveFood = async (
       provider_external_id: foodData.provider_external_id,
       provider_type: foodData.provider_type,
       provider_verified: foodData.provider_verified,
+      macro_role: foodData.macro_role ?? null,
       // Pass primary variant details to createFood, which will create the default variant
       serving_size: primaryVariant.serving_size,
       serving_unit: primaryVariant.serving_unit,

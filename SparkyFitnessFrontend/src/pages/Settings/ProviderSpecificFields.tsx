@@ -24,7 +24,7 @@ export const ProviderSpecificFields = ({
   onCopy,
 }: ProviderSpecificFieldsProps) => {
   const { t } = useTranslation();
-  const needsBaseUrl = ['mealie', 'tandoor', 'norish'].includes(
+  const needsBaseUrl = ['mealie', 'tandoor', 'norish', 'grocy'].includes(
     provider.provider_type || ''
   );
   const needsAppId = [
@@ -41,9 +41,11 @@ export const ProviderSpecificFields = ({
     'mealie',
     'tandoor',
     'norish',
+    'grocy',
     'nutritionix',
     'fatsecret',
     'usda',
+    'boohee',
     'withings',
     'fitbit',
     'oura',

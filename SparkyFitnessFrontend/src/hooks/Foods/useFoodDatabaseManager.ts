@@ -185,8 +185,13 @@ export function useFoodDatabaseManager() {
   const handleFoodSelected = (item: Food | Meal, type: 'food' | 'meal') => {
     setShowFoodSearchDialog(false);
     if (type === 'food') {
-      setFoodToAddToMeal(item as Food);
-      setShowFoodUnitSelectorDialog(true);
+      toast({
+        title: t('common.success', 'Success'),
+        description: t(
+          'foodDatabaseManager.foodImported',
+          `${(item as Food).name} has been added to your Food Database.`
+        ),
+      });
     }
   };
 

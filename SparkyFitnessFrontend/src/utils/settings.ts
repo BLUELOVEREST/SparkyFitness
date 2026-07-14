@@ -5,6 +5,7 @@ export const providerRequirements: Record<string, string[]> = {
   mealie: ['base_url', 'app_key'],
   tandoor: ['base_url', 'app_key'],
   norish: ['base_url', 'app_key'],
+  grocy: ['base_url', 'app_key'],
   nutritionix: ['app_id', 'app_key'],
   fatsecret: ['app_id', 'app_key'],
   withings: ['app_id', 'app_key'],
@@ -14,6 +15,7 @@ export const providerRequirements: Record<string, string[]> = {
   polar: ['app_id', 'app_key'],
   strava: ['app_id', 'app_key'],
   usda: ['app_key'],
+  boohee: ['app_key'],
   hevy: ['app_key'],
   yazio: ['app_id', 'app_key', 'yazio_client_id', 'yazio_client_secret'],
 };
@@ -40,6 +42,9 @@ const PROVIDERS_WITHOUT_APP_ID = [
   'mealie',
   'tandoor',
   'norish',
+  'grocy',
+  'china-food-composition',
+  'boohee',
   'free-exercise-db',
   'wger',
 ];

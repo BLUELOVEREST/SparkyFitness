@@ -22,6 +22,7 @@ interface FoodPayload {
   provider_external_id?: string;
   provider_type?: string;
   provider_verified?: boolean;
+  macro_role?: 'carb' | 'protein' | 'fat' | null;
   saturated_fat?: number;
   polyunsaturated_fat?: number;
   monounsaturated_fat?: number;
