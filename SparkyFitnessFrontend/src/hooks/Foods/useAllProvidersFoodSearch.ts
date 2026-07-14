@@ -3,9 +3,10 @@ import { useQueries, type UseQueryResult } from '@tanstack/react-query';
 import { searchFoodsV2 } from '@/api/Foods/foodService';
 import { searchNutritionixFoods } from '@/api/Foods/nutrionix';
 import { convertNutritionixToFood } from '@/utils/foodSearch';
-import { useDebounce } from '@/hooks/useDebounce';
 import type { Food, NutritionixItem } from '@/types/food';
 import type { DataProvider } from '@/types/settings';
+import { isFoodProviderSearchActive } from '@/utils/foodSearchQuery';
+import { useDebounce } from '@/hooks/useDebounce';
 
 // A single online provider result, tagged with its source so the UI can render
 // the correct edit/detail flow. Mirrors the per-provider mapping used by the
@@ -78,11 +79,8 @@ export interface ProviderFoodSearchResult {
   refetch: () => void;
 }
 
-// Online search starts at 3 characters (matches the single-provider path) to
-// limit provider calls, debounced by 600ms.
-const MIN_QUERY_LENGTH = 3;
-const DEBOUNCE_MS = 600;
 const STALE_TIME = 1000 * 60 * 5; // 5 minutes
+const DEBOUNCE_MS = 600;
 
 // Stable fallback so a missing refetch does not allocate a new function each
 // render (which would break reference stability of the providerResults items).
@@ -178,20 +176,13 @@ export function useAllProvidersFoodSearch(
   providerResults: ProviderFoodSearchResult[];
   anyLoading: boolean;
   isSearchActive: boolean;
-  // The debounced term the current providerResults correspond to. Consumers can
-  // key UI resets (e.g. collapsing expanded sections) off this so they fire in
-  // step with the aggregated results rather than a faster local debounce.
   debouncedSearch: string;
 } {
   const { enabled = true, autoScale, foodDisplayLimit } = options ?? {};
   const debouncedSearch = useDebounce(searchTerm.trim(), DEBOUNCE_MS);
-  // Require both the live and the debounced term to clear the threshold. The
-  // debounced check gates the queries; the live check makes backspacing below
-  // the threshold deactivate immediately, instead of leaving stale aggregated
-  // results on screen for the debounce window.
   const isSearchActive =
-    searchTerm.trim().length >= MIN_QUERY_LENGTH &&
-    debouncedSearch.length >= MIN_QUERY_LENGTH;
+    isFoodProviderSearchActive(searchTerm.trim()) &&
+    isFoodProviderSearchActive(debouncedSearch);
 
   // Project the raw query results into ProviderFoodSearchResult inside
   // useQueries' `combine`, rather than a downstream useMemo over the raw queries
@@ -300,15 +291,7 @@ export function useAllProvidersFoodSearch(
     ...fallbackProviderResults,
   ];
 
-  // Treat the debounce window as loading so the input spinner keeps spinning
-  // between the keystroke and the queries actually starting, instead of
-  // briefly stopping (flicker) while the debounced term catches up.
-  const isDebouncePending =
-    enabled &&
-    searchTerm.trim().length >= MIN_QUERY_LENGTH &&
-    searchTerm.trim() !== debouncedSearch;
-  const anyLoading =
-    providerResults.some((r) => r.isLoading) || isDebouncePending;
+  const anyLoading = providerResults.some((r) => r.isLoading);
 
   return { providerResults, isSearchActive, anyLoading, debouncedSearch };
 }

@@ -77,6 +77,10 @@ import {
   getProviderCategory,
   resolveFoodProviderId,
 } from '@/utils/settings.ts';
+import {
+  getFoodProviderSearchMinLength,
+  isFoodProviderSearchActive,
+} from '@/utils/foodSearchQuery.ts';
 
 // Stable empty fallback so the providers reference does not change each render
 // (an inline [] default would re-run the online search effect during loading).
@@ -184,8 +188,6 @@ const EnhancedFoodSearch = ({
   const showMeals = !hideMealTab && !onlineOnly;
 
   const [searchTerm, setSearchTerm] = useState('');
-  // Debounced term for the local-food query so it does not refetch on every
-  // keystroke (meals and online have their own debounced effects).
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -195,7 +197,6 @@ const EnhancedFoodSearch = ({
     const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm), 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
-  // A new search supersedes any barcode-scanned product.
   useEffect(() => {
     if (searchTerm.trim()) setScannedFood(null);
   }, [searchTerm]);
@@ -209,6 +210,7 @@ const EnhancedFoodSearch = ({
     null
   );
   const [showAddFoodDialog, setShowAddFoodDialog] = useState(false);
+  const [showImportFromCsvDialog, setShowImportFromCsvDialog] = useState(false);
   const isSearchEmpty = !searchTerm.trim();
 
   const [manualProviderId, setManualProviderId] = useState<string | null>(null);
@@ -444,11 +446,15 @@ const EnhancedFoodSearch = ({
     [foodDataProviders]
   );
 
-  const selectedFoodDataProvider = resolveFoodProviderId(
-    manualProviderId,
-    defaultFoodDataProviderId,
-    foodProviderOptions
-  );
+  const selectedFoodDataProvider =
+    manualProviderId ??
+    (onlineOnly && foodProviderOptions.length > 1
+      ? ALL_PROVIDERS_VALUE
+      : resolveFoodProviderId(
+          manualProviderId,
+          defaultFoodDataProviderId,
+          foodProviderOptions
+        ));
   const selectedProviderName =
     foodDataProviders.find((p) => p.id === selectedFoodDataProvider)
       ?.provider_name ?? '';
@@ -524,8 +530,6 @@ const EnhancedFoodSearch = ({
   });
 
   // Collapse expanded By Source sections when the aggregated query changes.
-  // Keyed on the hook's debounced term (not the faster local debounce) so it
-  // fires in step with the results the sections are showing, not ~300ms early.
   useEffect(() => {
     setExpandedProviders(new Set());
   }, [allProvidersDebouncedSearch]);
@@ -596,11 +600,8 @@ const EnhancedFoodSearch = ({
     }
     setMeals([]);
     setIsMealLoading(true);
-    const handler = setTimeout(() => {
-      handleMealSearch(searchTerm);
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [searchTerm, showMeals, isSearchEmpty, handleMealSearch]);
+    handleMealSearch(debouncedSearchTerm);
+  }, [debouncedSearchTerm, showMeals, isSearchEmpty, handleMealSearch]);
 
   // --- Online provider search (per-provider handlers) ---
 
@@ -811,15 +812,11 @@ const EnhancedFoodSearch = ({
     [queryClient, autoScaleOpenFoodFactsImports, foodDisplayLimit]
   );
 
-  // Online results stream in alongside local results, using the default
-  // provider. Online searches start at 3 characters to limit provider calls.
+  // Online results use the submitted term only. Typing in the input does not
+  // call providers until the user presses Enter or clicks Search.
   useEffect(() => {
     // In All Providers mode the aggregated hook owns the online results, so this
-    // single-provider effect must fully no-op. Without this guard it runs on
-    // every keystroke (searchTerm is a dependency), finds no matching provider
-    // for the __all__ sentinel, and calls setExternalResults([]) each time; a
-    // fresh [] is never === the previous one, so it re-renders the whole
-    // component on every keystroke and lags typing.
+    // single-provider effect must fully no-op.
     if (selectedFoodDataProvider === ALL_PROVIDERS_VALUE) {
       return;
     }
@@ -840,7 +837,7 @@ const EnhancedFoodSearch = ({
     setExternalPage(1);
     setExternalHasMore(false);
     setIsLoadingMore(false);
-    if (term.length < 3) {
+    if (!isFoodProviderSearchActive(term)) {
       setExternalResults([]);
       setHasOnlineSearchBeenPerformed(false);
       setIsOnlineLoading(false);
@@ -858,13 +855,8 @@ const EnhancedFoodSearch = ({
       return;
     }
     let active = true;
-    // Show the online section as loading the moment the term changes, rather
-    // than waiting out the 600ms debounce. Otherwise the previous provider's
-    // results linger in the ~300ms gap between the local debounce settling and
-    // this timeout firing, reading as if they belong to the new term. The
-    // < 3 char / no-provider guards above already prevent a spurious spinner.
     setIsOnlineLoading(true);
-    const handler = setTimeout(async () => {
+    void (async () => {
       setSearchProviderId(provider.id);
       setHasOnlineSearchBeenPerformed(true);
       try {
@@ -894,10 +886,9 @@ const EnhancedFoodSearch = ({
       } finally {
         if (active) setIsOnlineLoading(false);
       }
-    }, 600);
+    })();
     return () => {
       active = false;
-      clearTimeout(handler);
     };
   }, [
     searchTerm,
@@ -913,7 +904,9 @@ const EnhancedFoodSearch = ({
   // the trigger, so this only runs when there is genuinely more to load.
   const handleLoadMore = useCallback(async () => {
     const term = searchTerm.trim();
-    if (term.length < 3 || isLoadingMore) return;
+    if (term.length < getFoodProviderSearchMinLength(term) || isLoadingMore) {
+      return;
+    }
     const provider = foodDataProviders.find(
       (p) => p.id === selectedFoodDataProvider
     );
