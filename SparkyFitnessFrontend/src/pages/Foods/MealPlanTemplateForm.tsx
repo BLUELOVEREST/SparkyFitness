@@ -562,17 +562,6 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
           t('common.dinner', 'dinner'),
           t('common.snacks', 'snacks'),
         ];
-  const targetMealTypes = Array.from(
-    new Set(
-      Object.values(resolvedMealMacroTargetsByDay)
-        .flat()
-        .map((target) => target.label)
-    )
-  );
-  const visibleMealTypes =
-    planMode === 'carbCycle' && targetMealTypes.length > 0
-      ? targetMealTypes
-      : mealTypes;
 
   return (
     <>
@@ -804,22 +793,53 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
               {daysOfWeek.map((day) => {
                 const dayIndex = day.id;
                 const dailyTotals = calculateDailyNutrition(dayIndex);
+                const dayMealTargets =
+                  resolvedMealMacroTargetsByDay[dayIndex] ?? [];
+                const dayTargetTotals =
+                  dayMealTargets.length > 0
+                    ? dayMealTargets.reduce(
+                        (totals, target) => ({
+                          calories: totals.calories + target.calories,
+                          protein: totals.protein + target.protein,
+                          carbs: totals.carbs + target.carbs,
+                          fat: totals.fat + target.fat,
+                        }),
+                        { calories: 0, protein: 0, carbs: 0, fat: 0 }
+                      )
+                    : null;
+                const visibleMealTypesForDay =
+                  planMode === 'carbCycle' && dayMealTargets.length > 0
+                    ? Array.from(
+                        new Set(dayMealTargets.map((target) => target.label))
+                      )
+                    : mealTypes;
                 const hasDailyAssignments = extendedAssignments.some(
                   (a) => a.day_of_week === dayIndex
                 );
 
                 return (
                   <div key={dayIndex}>
-                    <h3 className="text-lg font-semibold">{day.name}</h3>
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <h3 className="text-lg font-semibold">{day.name}</h3>
+                      {dayTargetTotals ? (
+                        <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            Daily Target for {day.name}:
+                          </span>{' '}
+                          {dayTargetTotals.calories.toFixed(0)} kcal | P:{' '}
+                          {dayTargetTotals.protein.toFixed(1)}g | C:{' '}
+                          {dayTargetTotals.carbs.toFixed(1)}g | F:{' '}
+                          {dayTargetTotals.fat.toFixed(1)}g
+                        </div>
+                      ) : null}
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
-                      {visibleMealTypes.map((mealType) => {
+                      {visibleMealTypesForDay.map((mealType) => {
                         const mealTypeTotals = calculateMealTypeNutrition(
                           dayIndex,
                           mealType
                         );
-                        const mealTarget = resolvedMealMacroTargetsByDay[
-                          dayIndex
-                        ]?.find(
+                        const mealTarget = dayMealTargets.find(
                           (target) =>
                             target.label.toLowerCase() ===
                             mealType.toLowerCase()
