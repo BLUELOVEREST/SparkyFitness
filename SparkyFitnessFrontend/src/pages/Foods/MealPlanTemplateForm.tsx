@@ -785,9 +785,6 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                   session.day_of_week === day.id
                               ) ?? [];
                             const dayTarget = carbCycleDayTargetsByDay[day.id];
-                            const targetSummary = dayTarget
-                              ? `C: ${dayTarget.carbs.toFixed(1)}g | P: ${dayTarget.protein.toFixed(1)}g | F: ${dayTarget.fat.toFixed(1)}g`
-                              : null;
                             const primary = daySessions.find(
                               (session) => session.is_primary
                             );
@@ -800,16 +797,22 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                 className="rounded-md bg-muted p-2 text-xs"
                               >
                                 <div className="font-medium">{day.name}</div>
-                                <div className="text-muted-foreground">
-                                  {activeCount === 0
-                                    ? 'Rest'
-                                    : `${activeCount} session${activeCount > 1 ? 's' : ''}`}
-                                </div>
-                                {primary ? (
-                                  <div className="mt-1 font-medium text-primary">
-                                    Main: {primary.time_slot}
+                                <div className="space-y-1">
+                                  <div className="text-muted-foreground">
+                                    {activeCount === 0
+                                      ? 'Rest'
+                                      : `${activeCount} session${activeCount > 1 ? 's' : ''}`}
                                   </div>
-                                ) : null}
+                                  <div
+                                    className={
+                                      primary
+                                        ? 'font-medium text-primary'
+                                        : 'font-medium text-muted-foreground'
+                                    }
+                                  >
+                                    Main: {primary?.time_slot ?? '—'}
+                                  </div>
+                                </div>
                                 {dayTarget ? (
                                   <div className="mt-2 space-y-1 border-t pt-2">
                                     <div className="font-medium">
@@ -820,8 +823,23 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                     <div className="text-muted-foreground">
                                       {dayTarget.calories.toFixed(0)} kcal
                                     </div>
-                                    <div className="font-medium">
-                                      {targetSummary}
+                                    <div className="space-y-1 font-medium">
+                                      <div className="flex justify-between gap-2">
+                                        <span>Carbs</span>
+                                        <span>
+                                          {dayTarget.carbs.toFixed(1)}g
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-2">
+                                        <span>Protein</span>
+                                        <span>
+                                          {dayTarget.protein.toFixed(1)}g
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between gap-2">
+                                        <span>Fat</span>
+                                        <span>{dayTarget.fat.toFixed(1)}g</span>
+                                      </div>
                                     </div>
                                   </div>
                                 ) : null}

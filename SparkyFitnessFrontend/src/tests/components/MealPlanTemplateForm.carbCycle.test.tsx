@@ -353,8 +353,12 @@ describe('MealPlanTemplateForm carb cycle mode', () => {
     expect(screen.queryByText('Day 1')).not.toBeInTheDocument();
     expect(screen.getAllByText('Monday').length).toBeGreaterThan(0);
     expect(screen.getByText('High Carb')).toBeInTheDocument();
-    expect(
-      screen.getAllByText(/C: 150\.0g \| P: 100\.0g \| F: 30\.0g/).length
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('Main: —').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Carbs').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Protein').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Fat').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('150.0g').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('100.0g').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('30.0g').length).toBeGreaterThan(0);
   });
 });
