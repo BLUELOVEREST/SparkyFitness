@@ -188,6 +188,53 @@ describe('MealPlanTemplateForm carb cycle mode', () => {
     );
   });
 
+  it('normalizes carb-cycle generation without changing the plan effective dates', async () => {
+    const onSave = jest.fn();
+
+    renderWithClient(
+      <MealPlanTemplateForm
+        template={{
+          plan_name: 'Next week',
+          start_date: '2026-07-07',
+          end_date: '2026-07-13',
+          is_active: false,
+          assignments: [],
+        }}
+        onSave={onSave}
+        onClose={jest.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /carb cycle/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /generate carb cycle targets/i })
+    );
+
+    await waitFor(() => {
+      expect(mockPreview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          weekStartDate: '2026-07-06',
+        })
+      );
+    });
+    expect(
+      await screen.findByText(/Daily Target for Monday/i)
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/startDateLabel/i)).toHaveValue('2026-07-07');
+    expect(screen.getByLabelText(/endDateLabel/i)).toHaveValue('2026-07-13');
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /common.saveChanges/i })
+    );
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        start_date: '2026-07-07',
+        end_date: '2026-07-13',
+      })
+    );
+  });
+
   it('shows only the generated meal targets for each carb-cycle day', async () => {
     const onSave = jest.fn();
     mockPreview.mockResolvedValueOnce({

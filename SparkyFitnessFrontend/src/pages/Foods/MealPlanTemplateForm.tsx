@@ -69,6 +69,14 @@ function getDayOfWeekFromDate(date: string): number {
   return new Date(`${date}T00:00:00.000Z`).getUTCDay();
 }
 
+function getWeekStartDate(date: string, firstDayOfWeek: number): string {
+  const parsedDate = new Date(`${date}T00:00:00.000Z`);
+  const dayOfWeek = parsedDate.getUTCDay();
+  const daysSinceWeekStart = (dayOfWeek - firstDayOfWeek + 7) % 7;
+  parsedDate.setUTCDate(parsedDate.getUTCDate() - daysSinceWeekStart);
+  return parsedDate.toISOString().slice(0, 10);
+}
+
 function formatCarbCycleDayType(dayType: CarbCycleDayType): string {
   switch (dayType) {
     case 'high':
@@ -153,6 +161,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
   const { data: weightData, isLoading: isWeightLoading } =
     useMostRecentMeasurement('weight');
   const previewCarbCycleMutation = usePreviewCarbCycleMutation();
+  const selectedWeekStartDate = useMemo(
+    () => (startDate ? getWeekStartDate(startDate, firstDayOfWeek) : ''),
+    [firstDayOfWeek, startDate]
+  );
   const activeTrainingFocusPlan = useMemo(() => {
     if (!startDate) return null;
     return (
@@ -171,17 +183,19 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     );
   }, [startDate, workoutPlans]);
   const trainingSessionsByDay = useMemo(() => {
-    if (!activeTrainingFocusPlan?.focus_sessions || !startDate) return null;
-    const start = new Date(`${startDate}T00:00:00`);
+    if (!activeTrainingFocusPlan?.focus_sessions || !selectedWeekStartDate) {
+      return null;
+    }
+    const start = new Date(`${selectedWeekStartDate}T00:00:00`);
     return Array.from({ length: 7 }, (_, dayIndex) => {
       const date = new Date(start);
-      date.setDate(start.getDate() + dayIndex);
-      const dayOfWeek = date.getDay();
+      date.setUTCDate(start.getUTCDate() + dayIndex);
+      const dayOfWeek = date.getUTCDay();
       return activeTrainingFocusPlan.focus_sessions!.filter(
         (session: WorkoutPlanFocusSession) => session.day_of_week === dayOfWeek
       );
     });
-  }, [activeTrainingFocusPlan, startDate]);
+  }, [activeTrainingFocusPlan, selectedWeekStartDate]);
   const resolvedMealMacroTargetsByDay =
     planMode === 'carbCycle' ? generatedMealMacroTargetsByDay : {};
   // Helper function to fetch nutrition data for an assignment
@@ -552,8 +566,9 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
       return;
     }
 
+    const previewWeekStartDate = selectedWeekStartDate || startDate;
     const preview = await previewCarbCycleMutation.mutateAsync({
-      weekStartDate: startDate,
+      weekStartDate: previewWeekStartDate,
       bodyWeightKg,
       carbsPerKg: Number(carbCycleForm.carbsPerKg),
       proteinPerKg: Number(carbCycleForm.proteinPerKg),
