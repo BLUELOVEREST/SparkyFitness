@@ -14,7 +14,7 @@ jest.mock('react-i18next', () => ({
 }));
 
 jest.mock('@/contexts/PreferencesContext', () => ({
-  usePreferences: () => ({ loggingLevel: 'debug' }),
+  usePreferences: () => ({ loggingLevel: 'debug', firstDayOfWeek: 1 }),
 }));
 
 jest.mock('@/hooks/use-toast', () => ({
@@ -51,6 +51,35 @@ jest.mock('@/hooks/Goals/useGoals', () => ({
   usePreviewCarbCycleMutation: () => ({
     mutateAsync: mockPreview,
     isPending: false,
+  }),
+}));
+
+jest.mock('@/hooks/Exercises/useWorkoutPlans', () => ({
+  useWorkoutPlanTemplates: () => ({
+    data: [
+      {
+        id: 'training-focus-plan-1',
+        plan_name: 'Next Week Training',
+        plan_mode: 'training_focus',
+        start_date: '2026-07-06',
+        end_date: '2026-07-12',
+        is_active: true,
+        focus_sessions: [
+          {
+            day_of_week: 1,
+            time_slot: 'morning',
+            training_focus: 'back',
+            is_primary: true,
+          },
+          {
+            day_of_week: 2,
+            time_slot: 'morning',
+            training_focus: 'rest',
+            is_primary: false,
+          },
+        ],
+      },
+    ],
   }),
 }));
 
@@ -273,6 +302,12 @@ describe('MealPlanTemplateForm carb cycle mode', () => {
     expect(screen.getAllByText('Pre-Workout')).toHaveLength(1);
     expect(screen.getAllByText('Post-Workout')).toHaveLength(1);
     expect(screen.getAllByText('Breakfast')).toHaveLength(6);
-    expect(screen.getByText(/1200 kcal/)).toBeInTheDocument();
+    expect(screen.getAllByText(/1200 kcal/).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Day 1')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Monday').length).toBeGreaterThan(0);
+    expect(screen.getByText('High Carb')).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/C: 150\.0g \| P: 100\.0g \| F: 30\.0g/).length
+    ).toBeGreaterThan(0);
   });
 });

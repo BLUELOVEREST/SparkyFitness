@@ -22,7 +22,12 @@ import type {
   Meal,
   MealPlanTemplateAssignment,
 } from '@/types/meal';
-import type { CarbCycleMealTarget } from '@/types/goals';
+import type {
+  CarbCycleDayTarget,
+  CarbCycleDayType,
+  CarbCycleMealTarget,
+  CarbCycleWeekResult,
+} from '@/types/goals';
 import type { Food, FoodVariant } from '@/types/food';
 import FoodUnitSelector from '@/components/FoodUnitSelector';
 import MealUnitSelector from './MealUnitSelector';
@@ -60,6 +65,23 @@ interface MealPlanTemplateFormProps {
 
 type MealPlanMode = 'average' | 'carbCycle';
 
+function getDayOfWeekFromDate(date: string): number {
+  return new Date(`${date}T00:00:00.000Z`).getUTCDay();
+}
+
+function formatCarbCycleDayType(dayType: CarbCycleDayType): string {
+  switch (dayType) {
+    case 'high':
+      return 'High Carb';
+    case 'medium':
+      return 'Medium Carb';
+    case 'low':
+      return 'Low Carb';
+    default:
+      return dayType;
+  }
+}
+
 const DEFAULT_TRAINING_SLOTS: CarbCycleTrainingSlots = [
   'rest',
   'rest',
@@ -87,6 +109,8 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
   );
   const [generatedMealMacroTargetsByDay, setGeneratedMealMacroTargetsByDay] =
     useState<Record<number, CarbCycleMealTarget[]>>(initialMacroTargets);
+  const [generatedCarbCyclePreview, setGeneratedCarbCyclePreview] =
+    useState<CarbCycleWeekResult | null>(null);
   const [carbCycleForm, setCarbCycleForm] = useState({
     carbsPerKg: '3',
     proteinPerKg: '2',
@@ -539,6 +563,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     });
     const draft = buildCarbCycleMealPlanDraft(preview);
     setGeneratedMealMacroTargetsByDay(draft.mealTargetsByDay);
+    setGeneratedCarbCyclePreview(preview);
   };
 
   const daysOfWeek = orderItemsByFirstDay(
@@ -562,6 +587,12 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
           t('common.dinner', 'dinner'),
           t('common.snacks', 'snacks'),
         ];
+  const carbCycleDayTargetsByDay = (
+    generatedCarbCyclePreview?.days ?? []
+  ).reduce<Record<number, CarbCycleDayTarget>>((acc, day) => {
+    acc[getDayOfWeekFromDate(day.date)] = day;
+    return acc;
+  }, {});
 
   return (
     <>
@@ -732,36 +763,56 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                           {activeTrainingFocusPlan.plan_name}
                         </div>
                         <div className="grid gap-2 md:grid-cols-7">
-                          {(trainingSessionsByDay ?? []).map(
-                            (daySessions, index) => {
-                              const primary = daySessions.find(
-                                (session) => session.is_primary
-                              );
-                              const activeCount = daySessions.filter(
-                                (session) => session.training_focus !== 'rest'
-                              ).length;
-                              return (
-                                <div
-                                  key={index}
-                                  className="rounded-md bg-muted p-2 text-xs"
-                                >
-                                  <div className="font-medium">
-                                    Day {index + 1}
-                                  </div>
-                                  <div className="text-muted-foreground">
-                                    {activeCount === 0
-                                      ? 'Rest'
-                                      : `${activeCount} session${activeCount > 1 ? 's' : ''}`}
-                                  </div>
-                                  {primary ? (
-                                    <div className="mt-1 font-medium text-primary">
-                                      Main: {primary.time_slot}
-                                    </div>
-                                  ) : null}
+                          {daysOfWeek.map((day) => {
+                            const daySessions =
+                              activeTrainingFocusPlan.focus_sessions?.filter(
+                                (session: WorkoutPlanFocusSession) =>
+                                  session.day_of_week === day.id
+                              ) ?? [];
+                            const dayTarget = carbCycleDayTargetsByDay[day.id];
+                            const targetSummary = dayTarget
+                              ? `C: ${dayTarget.carbs.toFixed(1)}g | P: ${dayTarget.protein.toFixed(1)}g | F: ${dayTarget.fat.toFixed(1)}g`
+                              : null;
+                            const primary = daySessions.find(
+                              (session) => session.is_primary
+                            );
+                            const activeCount = daySessions.filter(
+                              (session) => session.training_focus !== 'rest'
+                            ).length;
+                            return (
+                              <div
+                                key={day.id}
+                                className="rounded-md bg-muted p-2 text-xs"
+                              >
+                                <div className="font-medium">{day.name}</div>
+                                <div className="text-muted-foreground">
+                                  {activeCount === 0
+                                    ? 'Rest'
+                                    : `${activeCount} session${activeCount > 1 ? 's' : ''}`}
                                 </div>
-                              );
-                            }
-                          )}
+                                {primary ? (
+                                  <div className="mt-1 font-medium text-primary">
+                                    Main: {primary.time_slot}
+                                  </div>
+                                ) : null}
+                                {dayTarget ? (
+                                  <div className="mt-2 space-y-1 border-t pt-2">
+                                    <div className="font-medium">
+                                      {formatCarbCycleDayType(
+                                        dayTarget.dayType
+                                      )}
+                                    </div>
+                                    <div className="text-muted-foreground">
+                                      {dayTarget.calories.toFixed(0)} kcal
+                                    </div>
+                                    <div className="font-medium">
+                                      {targetSummary}
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     ) : (
@@ -826,9 +877,9 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                           <span className="font-medium text-foreground">
                             Daily Target for {day.name}:
                           </span>{' '}
-                          {dayTargetTotals.calories.toFixed(0)} kcal | P:{' '}
-                          {dayTargetTotals.protein.toFixed(1)}g | C:{' '}
-                          {dayTargetTotals.carbs.toFixed(1)}g | F:{' '}
+                          {dayTargetTotals.calories.toFixed(0)} kcal | C:{' '}
+                          {dayTargetTotals.carbs.toFixed(1)}g | P:{' '}
+                          {dayTargetTotals.protein.toFixed(1)}g | F:{' '}
                           {dayTargetTotals.fat.toFixed(1)}g
                         </div>
                       ) : null}
@@ -914,11 +965,11 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                       </div>
                                       <div className="flex space-x-3 mt-1 sm:mt-0">
                                         <span>{calories.toFixed(0)} kcal</span>
-                                        <span className="text-blue-500">
-                                          P: {protein.toFixed(1)}g
-                                        </span>
                                         <span className="text-green-500">
                                           C: {carbs.toFixed(1)}g
+                                        </span>
+                                        <span className="text-blue-500">
+                                          P: {protein.toFixed(1)}g
                                         </span>
                                         <span className="text-yellow-500">
                                           F: {fat.toFixed(1)}g
@@ -933,27 +984,27 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                               <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted rounded">
                                 <strong>Total:</strong>{' '}
                                 {mealTypeTotals.totalCalories.toFixed(0)} kcal |{' '}
-                                P: {mealTypeTotals.totalProtein.toFixed(1)}g |{' '}
-                                C: {mealTypeTotals.totalCarbs.toFixed(1)}g | F:{' '}
+                                C: {mealTypeTotals.totalCarbs.toFixed(1)}g | P:{' '}
+                                {mealTypeTotals.totalProtein.toFixed(1)}g | F:{' '}
                                 {mealTypeTotals.totalFat.toFixed(1)}g
                               </div>
                             )}
                             {mealTarget ? (
                               <div className="text-xs text-muted-foreground mt-2 p-2 border border-dashed rounded">
                                 <div className="font-medium text-foreground">
-                                  Target: {mealTarget.calories} kcal | P:{' '}
-                                  {mealTarget.protein}g | C: {mealTarget.carbs}g
+                                  Target: {mealTarget.calories} kcal | C:{' '}
+                                  {mealTarget.carbs}g | P: {mealTarget.protein}g
                                   | F: {mealTarget.fat}g
                                 </div>
                                 <div>
-                                  Remaining: P:{' '}
+                                  Remaining: C:{' '}
+                                  {(
+                                    mealTarget.carbs - mealTypeTotals.totalCarbs
+                                  ).toFixed(1)}
+                                  g | P:{' '}
                                   {(
                                     mealTarget.protein -
                                     mealTypeTotals.totalProtein
-                                  ).toFixed(1)}
-                                  g | C:{' '}
-                                  {(
-                                    mealTarget.carbs - mealTypeTotals.totalCarbs
                                   ).toFixed(1)}
                                   g | F:{' '}
                                   {(
@@ -987,11 +1038,11 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                           <span className="font-medium">
                             {dailyTotals.totalCalories.toFixed(0)} kcal
                           </span>
-                          <span className="text-blue-500">
-                            P: {dailyTotals.totalProtein.toFixed(1)}g
-                          </span>
                           <span className="text-green-500">
                             C: {dailyTotals.totalCarbs.toFixed(1)}g
+                          </span>
+                          <span className="text-blue-500">
+                            P: {dailyTotals.totalProtein.toFixed(1)}g
                           </span>
                           <span className="text-yellow-500">
                             F: {dailyTotals.totalFat.toFixed(1)}g
