@@ -251,7 +251,7 @@ const EnhancedFoodSearch = ({
     useRecentAndTopFoodsQuery(
       itemDisplayLimit,
       mealType,
-      showLocalFoods && isSearchEmpty
+      showLocalFoods && isSearchEmpty && !localDatabaseOnly
     );
   // Recent + frequent meals for the landing quick-pick list, so the landing
   // (like the typed search) surfaces both foods and meals. Only fetched when
@@ -261,12 +261,14 @@ const EnhancedFoodSearch = ({
     topMeals,
     isLoading: isLoadingRecentMeals,
   } = useRecentAndTopMealsQuery(itemDisplayLimit, showMeals && isSearchEmpty);
+  const { mutateAsync: importCsvMutation } = useImportCsvMutation();
+  const showLocalDatabaseResults = !isSearchEmpty || localDatabaseOnly;
   const { data: searchData, isFetching: isFetchingSearch } =
     useDatabaseFoodSearchQuery(
       debouncedSearchTerm,
       foodDisplayLimit,
       mealType,
-      showLocalFoods && !!debouncedSearchTerm.trim()
+      showLocalFoods && showLocalDatabaseResults
     );
 
   const matchesMacroRole = useCallback(
@@ -818,8 +820,6 @@ const EnhancedFoodSearch = ({
     [queryClient, autoScaleOpenFoodFactsImports, foodDisplayLimit]
   );
 
-  // Online results use the submitted term only. Typing in the input does not
-  // call providers until the user presses Enter or clicks Search.
   useEffect(() => {
     if (localDatabaseOnly) {
       searchToken.current += 1;
@@ -829,8 +829,13 @@ const EnhancedFoodSearch = ({
       setExternalResults([]);
       setHasOnlineSearchBeenPerformed(false);
       setIsOnlineLoading(false);
-      return;
     }
+  }, [localDatabaseOnly]);
+
+  // Online results use the submitted term only. Typing in the input does not
+  // call providers until the user presses Enter or clicks Search.
+  useEffect(() => {
+    if (localDatabaseOnly) return;
     // In All Providers mode the aggregated hook owns the online results, so this
     // single-provider effect must fully no-op.
     if (selectedFoodDataProvider === ALL_PROVIDERS_VALUE) {
@@ -1182,9 +1187,15 @@ const EnhancedFoodSearch = ({
     filteredSearchFoodsFavFirst.length === 0 &&
     filteredSearchMealsFavFirst.length === 0;
   const showLocalEmpty =
-    showLocalFoods && !isSearchEmpty && !localPending && noLocalResults;
+    showLocalFoods &&
+    showLocalDatabaseResults &&
+    !localPending &&
+    noLocalResults;
   const showLocalSpinner =
-    showLocalFoods && !isSearchEmpty && localPending && noLocalResults;
+    showLocalFoods &&
+    showLocalDatabaseResults &&
+    localPending &&
+    noLocalResults;
   const showOnlineResults =
     ownershipFilter === 'all' || ownershipFilter === 'public';
 
@@ -1358,7 +1369,7 @@ const EnhancedFoodSearch = ({
 
       <div className="space-y-2 max-h-96 overflow-y-auto">
         {/* Landing: recent + top foods and meals (local mode, empty query) */}
-        {showLocalFoods && isSearchEmpty && (
+        {showLocalFoods && isSearchEmpty && !localDatabaseOnly && (
           <>
             {(isLoadingRecentFoods ||
               isLoadingFavorites ||
@@ -1440,7 +1451,7 @@ const EnhancedFoodSearch = ({
         )}
 
         {/* Search results */}
-        {!isSearchEmpty && (
+        {showLocalDatabaseResults && (
           <>
             {/* Local foods */}
             {showLocalFoods && filteredSearchFoodsFavFirst.length > 0 && (

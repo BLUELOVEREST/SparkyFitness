@@ -141,6 +141,11 @@ export const searchDatabaseFoods = async (
   limit: number,
   mealType?: string
 ) => {
+  if (!term.trim()) {
+    const response = await loadFoods('', 'all', 1, limit, 'name:asc');
+    return { searchResults: response.foods };
+  }
+
   const params = new URLSearchParams({
     name: term,
     broadMatch: 'true',
