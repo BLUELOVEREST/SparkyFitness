@@ -44,6 +44,11 @@ import { formatDateToYYYYMMDD } from '@/lib/utils';
 import { DAYS_OF_WEEK } from '@/constants/exercises';
 import { useWorkoutPlanAssignments } from '@/hooks/Exercises/useWorkoutPlanAssignments';
 import { SortableExerciseItem } from './SortableExerciseItem';
+import {
+  orderItemsByFirstDay,
+  setPrimaryTrainingFocusSession,
+  updateTrainingFocusSession,
+} from '@/utils/trainingFocusPlan';
 
 const TRAINING_FOCUS_TIME_SLOTS: {
   value: TrainingFocusTimeSlot;
@@ -129,7 +134,7 @@ const AddWorkoutPlanDialog = ({
     buildAssignmentsForSave,
   } = useWorkoutPlanAssignments(initialData);
   const { t } = useTranslation();
-  const { weightUnit } = usePreferences();
+  const { weightUnit, firstDayOfWeek } = usePreferences();
   const [planName, setPlanName] = useState(() => initialData?.plan_name || '');
   const [description, setDescription] = useState(
     () => initialData?.description || ''
@@ -228,48 +233,16 @@ const AddWorkoutPlanDialog = ({
     onClose();
   };
 
-  const updateFocusSession = (
-    dayOfWeek: number,
-    timeSlot: TrainingFocusTimeSlot,
-    updates: Partial<WorkoutPlanFocusSession>
-  ) => {
-    setFocusSessions((current) =>
-      current.map((session) => {
-        if (
-          session.day_of_week !== dayOfWeek ||
-          session.time_slot !== timeSlot
-        ) {
-          return session;
-        }
-
-        const trainingFocus = updates.training_focus ?? session.training_focus;
-        return {
-          ...session,
-          ...updates,
-          training_focus: trainingFocus,
-          is_primary:
-            trainingFocus === 'rest'
-              ? false
-              : (updates.is_primary ?? session.is_primary),
-        };
-      })
-    );
-  };
-
   const setPrimaryFocusSession = (
     dayOfWeek: number,
     timeSlot: TrainingFocusTimeSlot
   ) => {
     setFocusSessions((current) =>
-      current.map((session) => ({
-        ...session,
-        is_primary:
-          session.day_of_week === dayOfWeek &&
-          session.time_slot === timeSlot &&
-          session.training_focus !== 'rest',
-      }))
+      setPrimaryTrainingFocusSession(current, dayOfWeek, timeSlot)
     );
   };
+
+  const displayDays = orderItemsByFirstDay(DAYS_OF_WEEK, firstDayOfWeek);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -404,7 +377,7 @@ const AddWorkoutPlanDialog = ({
                 <h4 className="mb-2 text-lg font-medium">
                   Training Focus Sessions
                 </h4>
-                {DAYS_OF_WEEK.map((day) => {
+                {displayDays.map((day) => {
                   const daySessions = focusSessions.filter(
                     (session) => session.day_of_week === day.id
                   );
@@ -447,9 +420,14 @@ const AddWorkoutPlanDialog = ({
                                   className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                                   value={session.training_focus}
                                   onChange={(event) =>
-                                    updateFocusSession(day.id, value, {
-                                      training_focus: event.target.value,
-                                    })
+                                    setFocusSessions((current) =>
+                                      updateTrainingFocusSession(
+                                        current,
+                                        day.id,
+                                        value,
+                                        event.target.value
+                                      )
+                                    )
                                   }
                                 >
                                   {TRAINING_FOCUS_OPTIONS.map((option) => (
@@ -480,7 +458,7 @@ const AddWorkoutPlanDialog = ({
                   collisionDetection={closestCenter}
                   onDragEnd={handleDragEnd}
                 >
-                  {DAYS_OF_WEEK.map((day) => {
+                  {displayDays.map((day) => {
                     const dayAssignments = assignments.filter(
                       (assignment) => assignment.day_of_week === day.id
                     );

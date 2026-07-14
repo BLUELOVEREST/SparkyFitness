@@ -36,6 +36,7 @@ import { useMostRecentMeasurement } from '@/hooks/CheckIn/useCheckIn';
 import { usePreviewCarbCycleMutation } from '@/hooks/Goals/useGoals';
 import { useWorkoutPlanTemplates } from '@/hooks/Exercises/useWorkoutPlans';
 import { buildCarbCycleMealPlanDraft } from '@/utils/carbCycleMealPlan';
+import { orderItemsByFirstDay } from '@/utils/trainingFocusPlan';
 import type { CarbCycleTrainingSlots } from '@/types/goals';
 import type { WorkoutPlanFocusSession } from '@/types/workout';
 
@@ -76,7 +77,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation();
-  const { loggingLevel } = usePreferences(); // Get loggingLevel from preferences
+  const { loggingLevel, firstDayOfWeek } = usePreferences(); // Get loggingLevel from preferences
   const initialMacroTargets =
     Object.keys(mealMacroTargetsByDay).length > 0
       ? mealMacroTargetsByDay
@@ -540,15 +541,18 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     setGeneratedMealMacroTargetsByDay(draft.mealTargetsByDay);
   };
 
-  const daysOfWeek = [
-    t('common.sunday', 'Sunday'),
-    t('common.monday', 'Monday'),
-    t('common.tuesday', 'Tuesday'),
-    t('common.wednesday', 'Wednesday'),
-    t('common.thursday', 'Thursday'),
-    t('common.friday', 'Friday'),
-    t('common.saturday', 'Saturday'),
-  ];
+  const daysOfWeek = orderItemsByFirstDay(
+    [
+      { id: 0, name: t('common.sunday', 'Sunday') },
+      { id: 1, name: t('common.monday', 'Monday') },
+      { id: 2, name: t('common.tuesday', 'Tuesday') },
+      { id: 3, name: t('common.wednesday', 'Wednesday') },
+      { id: 4, name: t('common.thursday', 'Thursday') },
+      { id: 5, name: t('common.friday', 'Friday') },
+      { id: 6, name: t('common.saturday', 'Saturday') },
+    ],
+    firstDayOfWeek
+  );
   const mealTypes =
     availableMealTypes.length > 0
       ? availableMealTypes.map((mt) => mt.name)
@@ -797,7 +801,8 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
               )}
             </div>
             <div className="space-y-4">
-              {daysOfWeek.map((day, dayIndex) => {
+              {daysOfWeek.map((day) => {
+                const dayIndex = day.id;
                 const dailyTotals = calculateDailyNutrition(dayIndex);
                 const hasDailyAssignments = extendedAssignments.some(
                   (a) => a.day_of_week === dayIndex
@@ -805,7 +810,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
 
                 return (
                   <div key={dayIndex}>
-                    <h3 className="text-lg font-semibold">{day}</h3>
+                    <h3 className="text-lg font-semibold">{day.name}</h3>
                     <div className="grid grid-cols-2 gap-4">
                       {visibleMealTypes.map((mealType) => {
                         const mealTypeTotals = calculateMealTypeNutrition(
@@ -956,7 +961,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                     {hasDailyAssignments && (
                       <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/20">
                         <h4 className="font-semibold text-sm mb-2">
-                          Daily Total for {day}
+                          Daily Total for {day.name}
                         </h4>
                         <div className="text-sm space-x-4">
                           <span className="font-medium">
