@@ -76,41 +76,32 @@ describe('carbCyclePlannerService', () => {
     expect(result.days[0].meals.map((meal) => meal.label)).toEqual([
       'Breakfast',
       'Lunch',
-      'Afternoon Meal',
       'Dinner',
     ]);
     expect(result.days[0].meals).toEqual([
       {
         slotKey: 'morning',
         label: 'Breakfast',
-        carbs: 27.6,
-        protein: 35,
-        fat: 30.6,
-        calories: 526,
+        carbs: 36.8,
+        protein: 46.7,
+        fat: 40.8,
+        calories: 701,
       },
       {
         slotKey: 'noon',
         label: 'Lunch',
-        carbs: 27.6,
-        protein: 35,
-        fat: 30.6,
-        calories: 526,
-      },
-      {
-        slotKey: 'afternoon',
-        label: 'Afternoon Meal',
-        carbs: 27.6,
-        protein: 35,
-        fat: 30.6,
-        calories: 526,
+        carbs: 36.8,
+        protein: 46.7,
+        fat: 40.8,
+        calories: 701,
       },
       {
         slotKey: 'evening',
         label: 'Dinner',
-        carbs: 27.4,
-        protein: 35,
-        fat: 30.7,
-        calories: 526,
+        carbs: 36.7,
+        protein: 46.6,
+        fat: 40.9,
+        calories: 701,
       },
     ]);
 
@@ -172,6 +163,45 @@ describe('carbCyclePlannerService', () => {
       'Lunch',
       'Pre-Workout',
       'Post-Workout',
+    ]);
+  });
+
+  it('uses three evenly distributed meals on rest days', () => {
+    const result = calculateCarbCycleWeek({
+      weekStartDate: '2026-07-06',
+      bodyWeightKg: 70,
+      carbsPerKg: 3,
+      proteinPerKg: 2,
+      fatPerKg: 1,
+      template: DEFAULT_CARB_CYCLE_TEMPLATE,
+    });
+
+    expect(result.days[0].trainingSlot).toBe('rest');
+    expect(result.days[0].meals).toEqual([
+      {
+        slotKey: 'morning',
+        label: 'Breakfast',
+        carbs: 36.8,
+        protein: 46.7,
+        fat: 40.8,
+        calories: 701,
+      },
+      {
+        slotKey: 'noon',
+        label: 'Lunch',
+        carbs: 36.8,
+        protein: 46.7,
+        fat: 40.8,
+        calories: 701,
+      },
+      {
+        slotKey: 'evening',
+        label: 'Dinner',
+        carbs: 36.7,
+        protein: 46.6,
+        fat: 40.9,
+        calories: 701,
+      },
     ]);
   });
 

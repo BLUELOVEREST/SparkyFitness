@@ -217,11 +217,17 @@ function buildMealTargets(
   trainingSlot: CarbCycleTrainingSlot
 ): CarbCycleMealTarget[] {
   const labelMap = resolveMealLabels(trainingSlot);
+  const mealSlotKeys: readonly CarbCycleSlotKey[] =
+    trainingSlot === 'rest' ? ['morning', 'noon', 'evening'] : SLOT_KEYS;
   let carbPercentages = [0.25, 0.25, 0.25, 0.25];
   let proteinPercentages = [0.25, 0.25, 0.25, 0.25];
   let fatPercentages = [0.25, 0.25, 0.25, 0.25];
 
-  if (trainingSlot !== 'rest') {
+  if (trainingSlot === 'rest') {
+    carbPercentages = [1 / 3, 1 / 3, 1 / 3];
+    proteinPercentages = [1 / 3, 1 / 3, 1 / 3];
+    fatPercentages = [1 / 3, 1 / 3, 1 / 3];
+  } else {
     carbPercentages = [0.15, 0.15, 0.15, 0.15];
     proteinPercentages = [0.225, 0.225, 0.225, 0.225];
     fatPercentages = [0.45, 0.45, 0.45, 0.45];
@@ -244,7 +250,7 @@ function buildMealTargets(
   const protein = distributeByPercent(totals.protein, proteinPercentages);
   const fat = distributeByPercent(totals.fat, fatPercentages);
 
-  return SLOT_KEYS.map((slotKey, index) => {
+  return mealSlotKeys.map((slotKey, index) => {
     const calories = Math.round(
       carbs[index] * 4 + protein[index] * 4 + fat[index] * 9
     );
