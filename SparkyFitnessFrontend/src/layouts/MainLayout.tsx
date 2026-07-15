@@ -9,6 +9,7 @@ import {
   CalendarHeart,
   BarChart3,
   Utensils, // Used for Foods
+  ChefHat,
   Settings as SettingsIcon,
   LogOut,
   Dumbbell, // Used for Exercises
@@ -219,6 +220,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     if (!isActingOnBehalf) {
       tabs.push(
         { value: '/', label: t('nav.diary'), icon: Home },
+        {
+          value: '/kitchen',
+          label: t('nav.kitchen', 'Kitchen'),
+          icon: ChefHat,
+        },
         { value: '/checkin', label: t('nav.checkin'), icon: Activity }
       );
       if (cycleSettings?.enabled) {
@@ -249,8 +255,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         { value: '/settings', label: t('nav.settings'), icon: SettingsIcon }
       );
     } else {
-      if (hasWritePermission('diary')) {
+      if (hasPermission('diary') || hasWritePermission('diary')) {
         tabs.push({ value: '/', label: t('nav.diary'), icon: Home });
+        tabs.push({
+          value: '/kitchen',
+          label: t('nav.kitchen', 'Kitchen'),
+          icon: ChefHat,
+        });
       }
       if (hasWritePermission('checkin')) {
         tabs.push({
@@ -301,6 +312,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     if (!isActingOnBehalf) {
       mobileTabs.push(
         { value: '/', label: t('nav.diary'), icon: Home },
+        {
+          value: '/kitchen',
+          label: t('nav.kitchen', 'Kitchen'),
+          icon: ChefHat,
+        },
         { value: '/reports', label: t('nav.reports'), icon: BarChart3 },
         {
           value: 'Add',
@@ -310,8 +326,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         { value: '/settings', label: t('nav.settings'), icon: SettingsIcon }
       );
     } else {
-      if (hasWritePermission('diary')) {
+      if (hasPermission('diary') || hasWritePermission('diary')) {
         mobileTabs.push({ value: '/', label: t('nav.diary'), icon: Home });
+        mobileTabs.push({
+          value: '/kitchen',
+          label: t('nav.kitchen', 'Kitchen'),
+          icon: ChefHat,
+        });
       }
       if (hasWritePermission('checkin')) {
         mobileTabs.push({
