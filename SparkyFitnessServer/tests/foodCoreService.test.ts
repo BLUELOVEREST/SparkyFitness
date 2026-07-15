@@ -124,6 +124,38 @@ describe('foodCoreService.createFood', () => {
     );
     expect(result).toEqual(newFood);
   });
+  it('should infer macro_role from the dominant macronutrient when omitted', async () => {
+    const newFood = makeExistingFood({ id: 'food-new-macro' });
+    // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+    foodRepository.findFoodByBarcode.mockResolvedValue(null);
+    // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+    foodRepository.createFood.mockResolvedValue(newFood);
+    await foodCoreService.createFood(
+      TEST_USER_ID,
+      makeFoodData({ protein: 12.1, carbs: 0.1, fat: 10.5, macro_role: null })
+    );
+    expect(foodRepository.createFood).toHaveBeenCalledWith(
+      expect.objectContaining({
+        macro_role: 'protein',
+      })
+    );
+  });
+  it('should preserve an explicitly selected macro_role', async () => {
+    const newFood = makeExistingFood({ id: 'food-new-explicit-macro' });
+    // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+    foodRepository.findFoodByBarcode.mockResolvedValue(null);
+    // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+    foodRepository.createFood.mockResolvedValue(newFood);
+    await foodCoreService.createFood(
+      TEST_USER_ID,
+      makeFoodData({ protein: 12.1, carbs: 0.1, fat: 10.5, macro_role: 'fat' })
+    );
+    expect(foodRepository.createFood).toHaveBeenCalledWith(
+      expect.objectContaining({
+        macro_role: 'fat',
+      })
+    );
+  });
   it('should skip barcode check and create food when no barcode provided', async () => {
     const newFood = makeExistingFood({ id: 'food-new-101' });
     // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message

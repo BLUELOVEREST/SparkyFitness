@@ -21,6 +21,26 @@ import {
 import { searchYazioByBarcode } from '../integrations/yazio/yazioService.js';
 import type { BulkImportFoodData } from '../models/food.js';
 
+function inferMacroRole(foodData: any): 'carb' | 'protein' | 'fat' | null {
+  if (
+    foodData.macro_role === 'carb' ||
+    foodData.macro_role === 'protein' ||
+    foodData.macro_role === 'fat'
+  ) {
+    return foodData.macro_role;
+  }
+
+  const carbs = Number(foodData.carbs) || 0;
+  const protein = Number(foodData.protein) || 0;
+  const fat = Number(foodData.fat) || 0;
+  const maxMacro = Math.max(carbs, protein, fat);
+
+  if (maxMacro <= 0) return null;
+  if (carbs === maxMacro) return 'carb';
+  if (protein === maxMacro) return 'protein';
+  return 'fat';
+}
+
 async function searchFoods(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   authenticatedUserId: any,
@@ -158,6 +178,7 @@ async function createFood(authenticatedUserId: any, foodData: any) {
     }
     const newFood = await foodRepository.createFood({
       ...foodData,
+      macro_role: inferMacroRole(foodData),
       glycemic_index: foodData.glycemic_index || null,
       custom_nutrients: sanitizeCustomNutrients(foodData.custom_nutrients),
     });
