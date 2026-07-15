@@ -4,6 +4,9 @@ export const serverConfigsQueryKey = ['serverConfigs'] as const;
 
 export const dailySummaryQueryKey = (date: string) => ['dailySummary', date] as const;
 
+export const activeMealPlanDayQueryKey = (date: string) =>
+  ['activeMealPlanDay', date] as const;
+
 export const measurementsQueryKey = (date: string) => ['measurements', date] as const;
 
 export const preferencesQueryKey = ['userPreferences'] as const;
