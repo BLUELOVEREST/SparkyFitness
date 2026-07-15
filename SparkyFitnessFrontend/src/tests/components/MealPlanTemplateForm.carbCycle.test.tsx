@@ -487,4 +487,67 @@ describe('MealPlanTemplateForm carb cycle mode', () => {
       })
     );
   });
+
+  it('uses compact carb-cycle food rows instead of duplicate assignment cards', async () => {
+    renderWithClient(
+      <MealPlanTemplateForm
+        template={{
+          plan_name: 'Next week',
+          start_date: '2026-07-06',
+          end_date: '2026-07-12',
+          is_active: false,
+          assignments: [],
+        }}
+        onSave={jest.fn()}
+        onClose={jest.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /carb cycle/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /generate carb cycle targets/i })
+    );
+
+    await waitFor(() => expect(mockPreview).toHaveBeenCalled());
+    const selectButtons = await screen.findAllByRole('button', {
+      name: /select/i,
+    });
+    fireEvent.click(selectButtons[0]!);
+
+    const dialogProps = mockFoodSearchDialog.mock.calls.at(-1)?.[0] as {
+      onFoodSelect: (item: unknown, type: 'food' | 'meal') => void;
+    };
+    act(() => {
+      dialogProps.onFoodSelect(
+        {
+          id: 'rice-food',
+          name: 'Rice',
+          macro_role: 'carb',
+          default_variant: {
+            id: 'rice-100g',
+            serving_size: 100,
+            serving_unit: 'g',
+            calories: 130,
+            carbs: 20,
+            protein: 2,
+            fat: 1,
+          },
+        },
+        'food'
+      );
+    });
+
+    expect(await screen.findByText(/Rice · 150g/)).toBeInTheDocument();
+    expect(screen.queryByTitle('Edit quantity')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Remove')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /change carbs food/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /edit carbs quantity/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /clear carbs food/i })
+    ).toBeInTheDocument();
+  });
 });

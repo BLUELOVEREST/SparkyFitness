@@ -31,7 +31,7 @@ import type {
 import type { Food, FoodVariant } from '@/types/food';
 import FoodUnitSelector from '@/components/FoodUnitSelector';
 import MealUnitSelector from './MealUnitSelector';
-import { Edit, X } from 'lucide-react';
+import { Edit, Search, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { mealViewOptions } from '@/hooks/Foods/useMeals';
 import { foodViewOptions } from '@/hooks/Foods/useFoods';
@@ -599,6 +599,24 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     setExtendedAssignments((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleRemoveMacroAssignment = (
+    dayIndex: number,
+    mealType: string,
+    role: FoodMacroRole
+  ) => {
+    const isSameMacroSlot = (assignment: MealPlanTemplateAssignment) =>
+      assignment.day_of_week === dayIndex &&
+      assignment.meal_type.toLowerCase() === mealType.toLowerCase() &&
+      assignment.macro_role === role;
+
+    setAssignments((prev) =>
+      prev.filter((assignment) => !isSameMacroSlot(assignment))
+    );
+    setExtendedAssignments((prev) =>
+      prev.filter((assignment) => !isSameMacroSlot(assignment))
+    );
+  };
+
   const handleEditAssignment = async (index: number) => {
     const assignment = extendedAssignments[index];
     if (!assignment) return;
@@ -1101,78 +1119,89 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                             <h4 className="font-semibold capitalize">
                               {mealType}
                             </h4>
-                            <div className="space-y-2 mt-2">
-                              {assignmentsForMealType.map((assignment, idx) => {
-                                const actualIndex =
-                                  extendedAssignments.indexOf(assignment);
-                                const denominator =
-                                  (assignment.serving_size || 1) *
-                                  (assignment.total_servings || 1);
-                                const scale =
-                                  (assignment.quantity || 1) / denominator;
-                                const calories =
-                                  (assignment.calories || 0) * scale;
-                                const protein =
-                                  (assignment.protein || 0) * scale;
-                                const carbs = (assignment.carbs || 0) * scale;
-                                const fat = (assignment.fat || 0) * scale;
+                            {!(planMode === 'carbCycle' && mealTarget) && (
+                              <div className="space-y-2 mt-2">
+                                {assignmentsForMealType.map(
+                                  (assignment, idx) => {
+                                    const actualIndex =
+                                      extendedAssignments.indexOf(assignment);
+                                    const denominator =
+                                      (assignment.serving_size || 1) *
+                                      (assignment.total_servings || 1);
+                                    const scale =
+                                      (assignment.quantity || 1) / denominator;
+                                    const calories =
+                                      (assignment.calories || 0) * scale;
+                                    const protein =
+                                      (assignment.protein || 0) * scale;
+                                    const carbs =
+                                      (assignment.carbs || 0) * scale;
+                                    const fat = (assignment.fat || 0) * scale;
 
-                                return (
-                                  <div
-                                    key={idx}
-                                    className="flex flex-col p-3 border rounded-md space-y-2 bg-gray-50 dark:bg-gray-800"
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-medium">
-                                        {assignment.item_type === 'meal'
-                                          ? assignment.meal_name
-                                          : assignment.food_name}
-                                      </span>
-                                      <div className="flex items-center space-x-1">
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() =>
-                                            handleEditAssignment(actualIndex)
-                                          }
-                                          title="Edit quantity"
-                                        >
-                                          <Edit className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() =>
-                                            handleRemoveAssignment(actualIndex)
-                                          }
-                                          title="Remove"
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className="flex flex-col p-3 border rounded-md space-y-2 bg-gray-50 dark:bg-gray-800"
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <span className="font-medium">
+                                            {assignment.item_type === 'meal'
+                                              ? assignment.meal_name
+                                              : assignment.food_name}
+                                          </span>
+                                          <div className="flex items-center space-x-1">
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() =>
+                                                handleEditAssignment(
+                                                  actualIndex
+                                                )
+                                              }
+                                              title="Edit quantity"
+                                            >
+                                              <Edit className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() =>
+                                                handleRemoveAssignment(
+                                                  actualIndex
+                                                )
+                                              }
+                                              title="Remove"
+                                            >
+                                              <X className="h-4 w-4" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row justify-between text-sm text-muted-foreground">
+                                          <div>
+                                            {assignment.quantity || 1}{' '}
+                                            {assignment.unit || 'serving'}
+                                          </div>
+                                          <div className="flex space-x-3 mt-1 sm:mt-0">
+                                            <span>
+                                              {calories.toFixed(0)} kcal
+                                            </span>
+                                            <span className="text-green-500">
+                                              C: {carbs.toFixed(1)}g
+                                            </span>
+                                            <span className="text-blue-500">
+                                              P: {protein.toFixed(1)}g
+                                            </span>
+                                            <span className="text-yellow-500">
+                                              F: {fat.toFixed(1)}g
+                                            </span>
+                                          </div>
+                                        </div>
                                       </div>
-                                    </div>
-                                    <div className="flex flex-col sm:flex-row justify-between text-sm text-muted-foreground">
-                                      <div>
-                                        {assignment.quantity || 1}{' '}
-                                        {assignment.unit || 'serving'}
-                                      </div>
-                                      <div className="flex space-x-3 mt-1 sm:mt-0">
-                                        <span>{calories.toFixed(0)} kcal</span>
-                                        <span className="text-green-500">
-                                          C: {carbs.toFixed(1)}g
-                                        </span>
-                                        <span className="text-blue-500">
-                                          P: {protein.toFixed(1)}g
-                                        </span>
-                                        <span className="text-yellow-500">
-                                          F: {fat.toFixed(1)}g
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                    );
+                                  }
+                                )}
+                              </div>
+                            )}
                             {assignmentsForMealType.length > 0 && (
                               <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted rounded">
                                 <strong>Total:</strong>{' '}
@@ -1243,21 +1272,65 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                           'None selected'
                                         )}
                                       </div>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                          handleAddFood(
-                                            dayIndex,
-                                            mealType,
-                                            role
-                                          )
-                                        }
-                                      >
-                                        {selectedRoleAssignment
-                                          ? 'Change'
-                                          : 'Select'}
-                                      </Button>
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          variant="outline"
+                                          size="icon"
+                                          aria-label={
+                                            selectedRoleAssignment
+                                              ? `Change ${MACRO_ROLE_LABELS[role]} food`
+                                              : `Select ${MACRO_ROLE_LABELS[role]} food`
+                                          }
+                                          title={
+                                            selectedRoleAssignment
+                                              ? `Change ${MACRO_ROLE_LABELS[role]} food`
+                                              : `Select ${MACRO_ROLE_LABELS[role]} food`
+                                          }
+                                          onClick={() =>
+                                            handleAddFood(
+                                              dayIndex,
+                                              mealType,
+                                              role
+                                            )
+                                          }
+                                        >
+                                          <Search className="h-4 w-4" />
+                                        </Button>
+                                        {selectedRoleAssignment ? (
+                                          <>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              aria-label={`Edit ${MACRO_ROLE_LABELS[role]} quantity`}
+                                              title={`Edit ${MACRO_ROLE_LABELS[role]} quantity`}
+                                              onClick={() =>
+                                                handleEditAssignment(
+                                                  extendedAssignments.indexOf(
+                                                    selectedRoleAssignment
+                                                  )
+                                                )
+                                              }
+                                            >
+                                              <Edit className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              aria-label={`Clear ${MACRO_ROLE_LABELS[role]} food`}
+                                              title={`Clear ${MACRO_ROLE_LABELS[role]} food`}
+                                              onClick={() =>
+                                                handleRemoveMacroAssignment(
+                                                  dayIndex,
+                                                  mealType,
+                                                  role
+                                                )
+                                              }
+                                            >
+                                              <X className="h-4 w-4" />
+                                            </Button>
+                                          </>
+                                        ) : null}
+                                      </div>
                                     </div>
                                   );
                                 })}
