@@ -429,6 +429,59 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
         });
         return;
       }
+
+      if (planMode === 'carbCycle' && currentMacroRole) {
+        const selectedVariant = food.default_variant;
+        if (!selectedVariant) {
+          toast({
+            title: t('common.error', 'Error'),
+            description: 'This food has no default nutrition variant.',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        const quantity =
+          calculateRecommendedQuantity(food, currentMacroRole) || 1;
+        const newAssignment: MealPlanTemplateAssignment = {
+          item_type: 'food',
+          day_of_week: currentDay,
+          meal_type: currentMealType,
+          food_id: food.id,
+          food_name: food.name,
+          variant_id: selectedVariant.id,
+          quantity,
+          unit: selectedVariant.serving_unit,
+          macro_role: currentMacroRole,
+        };
+        const extendedAssignment: ExtendedAssignment = {
+          ...newAssignment,
+          calories: selectedVariant.calories,
+          protein: selectedVariant.protein,
+          carbs: selectedVariant.carbs,
+          fat: selectedVariant.fat,
+          serving_size: selectedVariant.serving_size,
+          serving_unit: selectedVariant.serving_unit,
+        };
+        const isSameMacroSlot = (assignment: MealPlanTemplateAssignment) =>
+          assignment.day_of_week === currentDay &&
+          assignment.meal_type.toLowerCase() ===
+            currentMealType.toLowerCase() &&
+          assignment.macro_role === currentMacroRole;
+
+        setAssignments((prev) => [
+          ...prev.filter((assignment) => !isSameMacroSlot(assignment)),
+          newAssignment,
+        ]);
+        setExtendedAssignments((prev) => [
+          ...prev.filter((assignment) => !isSameMacroSlot(assignment)),
+          extendedAssignment,
+        ]);
+        setCurrentMacroRole(null);
+        setRecommendedQuantity(undefined);
+        return;
+      }
+
       if (currentMacroRole) {
         setRecommendedQuantity(
           calculateRecommendedQuantity(food, currentMacroRole)
@@ -1178,9 +1231,17 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                         </div>
                                       </div>
                                       <div className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">
-                                        {selectedRoleAssignment
-                                          ? selectedRoleAssignment.food_name
-                                          : 'None selected'}
+                                        {selectedRoleAssignment ? (
+                                          <>
+                                            {selectedRoleAssignment.food_name}
+                                            {selectedRoleAssignment.quantity &&
+                                            selectedRoleAssignment.unit
+                                              ? ` · ${selectedRoleAssignment.quantity}${selectedRoleAssignment.unit}`
+                                              : ''}
+                                          </>
+                                        ) : (
+                                          'None selected'
+                                        )}
                                       </div>
                                       <Button
                                         variant="outline"

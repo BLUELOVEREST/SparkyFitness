@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import MealPlanTemplateForm from '@/pages/Foods/MealPlanTemplateForm';
 import { renderWithClient } from '../test-utils';
@@ -48,6 +48,7 @@ jest.mock('@/hooks/CheckIn/useCheckIn', () => ({
 
 const mockPreview = jest.fn();
 const mockFoodSearchDialog = jest.fn();
+const mockFoodUnitSelector = jest.fn();
 jest.mock('@/hooks/Goals/useGoals', () => ({
   usePreviewCarbCycleMutation: () => ({
     mutateAsync: mockPreview,
@@ -90,7 +91,12 @@ jest.mock('@/components/FoodSearch/FoodSearchDialog', () => {
     return null;
   };
 });
-jest.mock('@/components/FoodUnitSelector', () => () => null);
+jest.mock('@/components/FoodUnitSelector', () => {
+  return function MockFoodUnitSelector(props: unknown) {
+    mockFoodUnitSelector(props);
+    return null;
+  };
+});
 jest.mock('@/pages/Foods/MealUnitSelector', () => () => null);
 jest.mock('@/hooks/Foods/useMeals', () => ({
   mealViewOptions: (id: string) => ({
@@ -401,6 +407,83 @@ describe('MealPlanTemplateForm carb cycle mode', () => {
         hideMealTab: true,
         localDatabaseOnly: true,
         macroRoleFilter: 'carb',
+      })
+    );
+  });
+
+  it('selects a carb-cycle food directly and saves the calculated quantity without opening the unit selector', async () => {
+    const onSave = jest.fn();
+
+    renderWithClient(
+      <MealPlanTemplateForm
+        template={{
+          plan_name: 'Next week',
+          start_date: '2026-07-06',
+          end_date: '2026-07-12',
+          is_active: false,
+          assignments: [],
+        }}
+        onSave={onSave}
+        onClose={jest.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /carb cycle/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /generate carb cycle targets/i })
+    );
+
+    await waitFor(() => expect(mockPreview).toHaveBeenCalled());
+    const selectButtons = await screen.findAllByRole('button', {
+      name: /select/i,
+    });
+    fireEvent.click(selectButtons[0]!);
+
+    const dialogProps = mockFoodSearchDialog.mock.calls.at(-1)?.[0] as {
+      onFoodSelect: (item: unknown, type: 'food' | 'meal') => void;
+    };
+    act(() => {
+      dialogProps.onFoodSelect(
+        {
+          id: 'rice-food',
+          name: 'Rice',
+          macro_role: 'carb',
+          default_variant: {
+            id: 'rice-100g',
+            serving_size: 100,
+            serving_unit: 'g',
+            calories: 130,
+            carbs: 20,
+            protein: 2,
+            fat: 1,
+          },
+        },
+        'food'
+      );
+    });
+
+    expect(mockFoodUnitSelector).not.toHaveBeenCalledWith(
+      expect.objectContaining({ open: true })
+    );
+    expect(await screen.findByText(/Rice · 150g/)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /common.saveChanges/i })
+    );
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assignments: [
+          expect.objectContaining({
+            item_type: 'food',
+            food_id: 'rice-food',
+            food_name: 'Rice',
+            variant_id: 'rice-100g',
+            quantity: 150,
+            unit: 'g',
+            macro_role: 'carb',
+          }),
+        ],
       })
     );
   });
