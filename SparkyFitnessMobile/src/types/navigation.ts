@@ -12,6 +12,7 @@ import type { FoodFormData } from '../components/FoodForm';
 import type { Exercise } from './exercise';
 import type { Meal, MealIngredientDraft } from './meals';
 import type { FoodEntryMeal } from './foodEntryMeals';
+import type { ActiveMealPlanDayMeal } from './mealPlan';
 import type {
   EquivalentUnit,
   FoodUnitSelectionResult,
@@ -95,7 +96,12 @@ export type RootStackParamList = {
     adjustedUnitSelection?: FoodUnitSelectionResult;
     adjustedCustomNutrients?: Record<string, string | number> | null;
   };
-  MealTypeDetail: { date: string; mealType: MealTypeKey; mealLabel?: string };
+  MealTypeDetail: {
+    date: string;
+    mealType: MealTypeKey;
+    mealLabel?: string;
+    plannedMeal?: ActiveMealPlanDayMeal;
+  };
   DailyNutritionDetails: { date: string };
   NutrientTrends: {
     nutrientKey: string;

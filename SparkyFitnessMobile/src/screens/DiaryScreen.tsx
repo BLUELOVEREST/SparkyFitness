@@ -17,7 +17,14 @@ import EmptyDayIllustration from '../components/EmptyDayIllustration';
 import DiaryCalorieMacroSummary from '../components/DiaryCalorieMacroSummary';
 import StatusView from '../components/StatusView';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
-import { useServerConnection, useDailySummary, useCustomNutrients, useNutrientDisplayPreferences } from '../hooks';
+import {
+  useActiveMealPlanDay,
+  useCustomNutrients,
+  useDailySummary,
+  useNutrientDisplayPreferences,
+  useLogActiveMealPlanMeal,
+  useServerConnection,
+} from '../hooks';
 import { useMeasurements } from '../hooks/useMeasurements';
 import { usePreferences } from '../hooks/usePreferences';
 import { useExerciseImageSource } from '../hooks/useExerciseImageSource';
@@ -29,6 +36,7 @@ import { useNativeIOSTabsActive } from '../services/nativeTabBarPreference';
 import { useActiveWorkoutStore } from '../stores/activeWorkoutStore';
 import { useDiaryDateStore } from '../stores/diaryDateStore';
 import type { MealTypeKey } from '../utils/mealNutrition';
+import type { ActiveMealPlanDayMeal } from '../types/mealPlan';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -39,6 +47,15 @@ type DiaryScreenProps = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'Diary'>,
   NativeStackScreenProps<RootStackParamList>
 >;
+
+const getPlannedMealTypeKey = (meal: ActiveMealPlanDayMeal): MealTypeKey => {
+  const value = `${meal.mealType ?? ''} ${meal.key} ${meal.label}`.toLowerCase();
+  if (value.includes('breakfast')) return 'breakfast';
+  if (value.includes('lunch')) return 'lunch';
+  if (value.includes('dinner')) return 'dinner';
+  if (value.includes('snack')) return 'snacks';
+  return 'other';
+};
 
 const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -122,6 +139,15 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
     navigation.navigate('MealTypeDetail', { date: selectedDate, mealType });
   }, [navigation, selectedDate]);
 
+  const openPlannedMealDetail = useCallback((meal: ActiveMealPlanDayMeal) => {
+    navigation.navigate('MealTypeDetail', {
+      date: selectedDate,
+      mealType: getPlannedMealTypeKey(meal),
+      mealLabel: meal.label,
+      plannedMeal: meal,
+    });
+  }, [navigation, selectedDate]);
+
   const { preferences } = usePreferences();
   const weightUnit = (preferences?.default_weight_unit as 'kg' | 'lbs') ?? 'kg';
   const distanceUnit = (preferences?.default_distance_unit as 'km' | 'miles') ?? 'km';
@@ -136,6 +162,23 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
     date: selectedDate,
     enabled: isConnected,
   });
+  const { activeMealPlanDay, refetch: refetchActiveMealPlanDay } =
+    useActiveMealPlanDay({
+      date: selectedDate,
+      enabled: isConnected,
+    });
+  const {
+    mutate: logPlannedMeal,
+    isPending: isLoggingPlannedMeal,
+  } = useLogActiveMealPlanMeal();
+  const plannedMeals = activeMealPlanDay?.mode === 'carbCycle'
+    ? activeMealPlanDay.meals
+    : [];
+  const plannedMealsWithItems = plannedMeals.filter((meal) => meal.items.length > 0);
+  const handleLogPlannedMeal = useCallback((meal: ActiveMealPlanDayMeal) => {
+    if (!meal.mealTypeId) return;
+    logPlannedMeal({ date: selectedDate, mealTypeId: meal.mealTypeId });
+  }, [logPlannedMeal, selectedDate]);
   const { measurements, refetch: refetchMeasurements } = useMeasurements({
     date: selectedDate,
     enabled: isConnected,
@@ -163,9 +206,9 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
   const activeWorkoutBarPadding = useActiveWorkoutBarPadding();
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refetch(), refetchMeasurements()]);
+    await Promise.all([refetch(), refetchMeasurements(), refetchActiveMealPlanDay()]);
     setRefreshing(false);
-  }, [refetch, refetchMeasurements]);
+  }, [refetch, refetchActiveMealPlanDay, refetchMeasurements]);
 
   const renderContent = () => {
     if (!isConnectionLoading && !isConnected) {
@@ -241,7 +284,7 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
             customNutrients={customNutrients}
           />
         )}
-        {summary.foodEntries.length === 0 && summary.exerciseEntries.length === 0 && !hasAnyMeasurement ? (
+        {summary.foodEntries.length === 0 && summary.exerciseEntries.length === 0 && !hasAnyMeasurement && plannedMealsWithItems.length === 0 ? (
           <>
             <EmptyDayIllustration />
             <Button
@@ -258,6 +301,10 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
               foodEntries={summary.foodEntries}
               goals={summary.goals}
               calorieGoal={summary.calorieGoal}
+              plannedMeals={plannedMeals}
+              isLoggingPlannedMeal={isLoggingPlannedMeal}
+              onLogPlannedMeal={handleLogPlannedMeal}
+              onPressPlannedMeal={openPlannedMealDetail}
               onAddFood={() => navigation.navigate('FoodSearch', { date: selectedDate })}
               onAdjustServing={(entry) => servingSheetRef.current?.present(entry)}
               onPressMealType={openMealTypeDetail}

@@ -10,7 +10,7 @@ import CopyMealSheet, { type CopyMealSheetRef } from '../components/CopyMealShee
 import SwipeableFoodRow from '../components/SwipeableFoodRow';
 import StatusView from '../components/StatusView';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
-import { useDailySummary, useServerConnection } from '../hooks';
+import { useDailySummary, useLogActiveMealPlanMeal, useServerConnection } from '../hooks';
 import { useCopyFoodEntries } from '../hooks/useCopyFoodEntries';
 import { usePreferences } from '../hooks/usePreferences';
 import { useScreenHeader } from '../hooks/useScreenHeader';
@@ -28,7 +28,7 @@ import type { RootStackScreenProps } from '../types/navigation';
 type MealTypeDetailScreenProps = RootStackScreenProps<'MealTypeDetail'>;
 
 const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({ navigation, route }) => {
-  const { date, mealType, mealLabel } = route.params;
+  const { date, mealType, mealLabel, plannedMeal } = route.params;
   const insets = useSafeAreaInsets();
   const usesNativeHeader = useNativeIOSHeadersActive();
   const activeWorkoutBarPadding = useActiveWorkoutBarPadding('stack');
@@ -61,6 +61,10 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({ navigation,
   const { copyMeal, isPending: isCopying } = useCopyFoodEntries({
     onSuccess: () => copySheetRef.current?.dismiss(),
   });
+  const {
+    mutate: logPlannedMeal,
+    isPending: isLoggingPlannedMeal,
+  } = useLogActiveMealPlanMeal();
   // "other" is a synthetic bucket that aggregates every non-standard meal type,
   // so it has no single real meal type to copy from (the server would match
   // nothing). Only offer copy for concrete meal types.
@@ -116,7 +120,7 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({ navigation,
       );
     }
 
-    if (entries.length === 0) {
+    if (entries.length === 0 && !plannedMeal) {
       return (
         <StatusView
           icon="food"
@@ -127,6 +131,44 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({ navigation,
         />
       );
     }
+
+    const plannedMealCard = plannedMeal ? (
+      <View className="bg-surface rounded-xl p-4 shadow-sm border border-accent-primary/20">
+        <View className="flex-row items-center mb-2">
+          <Text className="text-base font-bold text-text-primary flex-1">
+            {plannedMeal.label}
+          </Text>
+          <Text className="text-xs text-accent-primary font-semibold">
+            {Math.round(plannedMeal.target.calories)} Cal
+          </Text>
+        </View>
+        <Text className="text-xs text-text-muted mb-3">
+          Target: C {Math.round(plannedMeal.target.carbs)}g · P {Math.round(plannedMeal.target.protein)}g · F {Math.round(plannedMeal.target.fat)}g
+        </Text>
+        {plannedMeal.items.map((item) => (
+          <View key={`${item.type}-${item.id}`} className="flex-row justify-between py-1">
+            <Text className="text-sm text-text-primary flex-1">{item.name}</Text>
+            <Text className="text-sm text-text-muted">{item.amountLabel}</Text>
+          </View>
+        ))}
+        <Button
+          variant={plannedMeal.logged ? 'secondary' : 'primary'}
+          className="mt-4"
+          disabled={
+            plannedMeal.logged ||
+            !plannedMeal.mealTypeId ||
+            plannedMeal.items.length === 0 ||
+            isLoggingPlannedMeal
+          }
+          onPress={() => {
+            if (!plannedMeal.mealTypeId) return;
+            logPlannedMeal({ date, mealTypeId: plannedMeal.mealTypeId });
+          }}
+        >
+          {plannedMeal.logged ? 'Logged from Plan' : 'Log from Plan'}
+        </Button>
+      </View>
+    ) : null;
 
     return (
       <ScrollView
@@ -146,23 +188,36 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({ navigation,
           customNutrients={Object.keys(nutrition.customNutrients).length > 0 ? nutrition.customNutrients : null}
           calorieGoal={targetCalories > 0 ? targetCalories : undefined}
         />
+        {plannedMealCard}
 
-        <View className="bg-surface rounded-xl p-4 shadow-sm">
-          <View className="flex-row items-center mb-3">
-            <Text className="text-base font-bold text-text-secondary flex-1">Foods</Text>
-            <Text className="text-xs text-text-muted font-medium">
-              {entries.length} {entries.length === 1 ? 'item' : 'items'}
-            </Text>
+        {entries.length > 0 && (
+          <FoodNutritionSummary
+            name={label}
+            brand={formatDateLabel(date)}
+            values={nutrition.values}
+            showNetCarbs={showNetCarbs}
+            customNutrients={Object.keys(nutrition.customNutrients).length > 0 ? nutrition.customNutrients : null}
+          />
+        )}
+
+        {entries.length > 0 && (
+          <View className="bg-surface rounded-xl p-4 shadow-sm">
+            <View className="flex-row items-center mb-3">
+              <Text className="text-base font-bold text-text-secondary flex-1">Foods</Text>
+              <Text className="text-xs text-text-muted font-medium">
+                {entries.length} {entries.length === 1 ? 'item' : 'items'}
+              </Text>
+            </View>
+            {entries.map((entry, index) => (
+              <SwipeableFoodRow
+                key={entry.id || index}
+                entry={entry}
+                nutrition={calculateEntryNutrition(entry)}
+                onAdjustServing={(foodEntry) => servingSheetRef.current?.present(foodEntry)}
+              />
+            ))}
           </View>
-          {entries.map((entry, index) => (
-            <SwipeableFoodRow
-              key={entry.id || index}
-              entry={entry}
-              nutrition={calculateEntryNutrition(entry)}
-              onAdjustServing={(foodEntry) => servingSheetRef.current?.present(foodEntry)}
-            />
-          ))}
-        </View>
+        )}
       </ScrollView>
     );
   };
