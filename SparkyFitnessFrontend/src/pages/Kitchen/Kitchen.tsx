@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, CalendarDays, ChefHat, Utensils } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -127,7 +127,7 @@ const KitchenMealCard = ({ meal }: { meal: KitchenMealPreview }) => (
 export default function Kitchen({ todayOverride }: KitchenProps) {
   const { activeUserId } = useActiveUser();
   const todayDate = todayOverride ?? localDateString();
-  const [selectedDate, setSelectedDate] = useState(todayDate);
+  const [userSelectedDate, setUserSelectedDate] = useState<string | null>(null);
   const {
     data: templates,
     isError,
@@ -144,9 +144,8 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
     [templates, todayDate]
   );
 
-  useEffect(() => {
-    setSelectedDate(getInitialSelectedDate(activeTemplate, todayDate));
-  }, [activeTemplate?.id, todayDate]);
+  const selectedDate =
+    userSelectedDate ?? getInitialSelectedDate(activeTemplate, todayDate);
 
   const week = useMemo(() => {
     if (!activeTemplate) return undefined;
@@ -235,7 +234,7 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
                 <KitchenDayTab
                   key={day.date}
                   day={day}
-                  onSelect={setSelectedDate}
+                  onSelect={setUserSelectedDate}
                 />
               ))}
             </div>
