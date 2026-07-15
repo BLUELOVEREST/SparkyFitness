@@ -44,6 +44,7 @@ import FoodsLibraryScreen from './src/screens/FoodsLibraryScreen';
 import MealsLibraryScreen from './src/screens/MealsLibraryScreen';
 import ExercisesLibraryScreen from './src/screens/ExercisesLibraryScreen';
 import WorkoutPresetsLibraryScreen from './src/screens/WorkoutPresetsLibraryScreen';
+import KitchenScreen from './src/screens/KitchenScreen';
 import FoodDetailScreen from './src/screens/FoodDetailScreen';
 import MealDetailScreen from './src/screens/MealDetailScreen';
 import ExerciseDetailScreen from './src/screens/ExerciseDetailScreen';
@@ -192,6 +193,7 @@ const SafeFoodsLibrary = withErrorBoundary(FoodsLibraryScreen, 'FoodsLibrary', {
 const SafeMealsLibrary = withErrorBoundary(MealsLibraryScreen, 'MealsLibrary', { canGoBack: true });
 const SafeExercisesLibrary = withErrorBoundary(ExercisesLibraryScreen, 'ExercisesLibrary', { canGoBack: true });
 const SafeWorkoutPresetsLibrary = withErrorBoundary(WorkoutPresetsLibraryScreen, 'WorkoutPresetsLibrary', { canGoBack: true });
+const SafeKitchen = withErrorBoundary(KitchenScreen, 'Kitchen', { canGoBack: true });
 const SafeFoodDetail = withErrorBoundary(FoodDetailScreen, 'FoodDetail', { canGoBack: true });
 const SafeMealDetail = withErrorBoundary(MealDetailScreen, 'MealDetail', { canGoBack: true });
 const SafeExerciseDetail = withErrorBoundary(ExerciseDetailScreen, 'ExerciseDetail', { canGoBack: true });
@@ -896,6 +898,11 @@ function AppContent() {
             name="WorkoutPresetsLibrary"
             component={SafeWorkoutPresetsLibrary}
             options={createStackScreenOptions('Workout Presets', { headerBackTitle: 'Library' })}
+          />
+          <Stack.Screen
+            name="Kitchen"
+            component={SafeKitchen}
+            options={createStackScreenOptions('Kitchen', { headerBackTitle: 'Library' })}
           />
           <Stack.Screen
             name="WorkoutPresetDetail"

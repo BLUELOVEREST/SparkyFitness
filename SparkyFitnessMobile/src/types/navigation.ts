@@ -43,6 +43,7 @@ export type RootStackParamList = {
   MealsLibrary: undefined;
   ExercisesLibrary: undefined;
   WorkoutPresetsLibrary: undefined;
+  Kitchen: undefined;
   WorkoutPresetDetail: { preset: WorkoutPreset; updatedPreset?: WorkoutPreset };
   WorkoutPresetForm:
     | { mode: 'create-preset'; selectedExercise?: Exercise; selectionNonce?: number }
