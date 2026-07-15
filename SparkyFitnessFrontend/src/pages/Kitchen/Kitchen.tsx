@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, CalendarDays, ChefHat, Utensils } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -59,72 +60,88 @@ const KitchenDayTab = ({
 }: {
   day: KitchenDayPreview;
   onSelect: (date: string) => void;
-}) => (
-  <button
-    type="button"
-    role="tab"
-    aria-selected={day.isSelected}
-    aria-current={day.isToday ? 'date' : undefined}
-    className={`min-w-28 rounded-xl border px-4 py-3 text-left transition-colors ${
-      day.isSelected
-        ? 'border-primary bg-primary text-primary-foreground'
-        : 'border-border bg-card hover:bg-accent'
-    } ${day.isToday && !day.isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
-    onClick={() => onSelect(day.date)}
-  >
-    <span className="block text-sm font-medium">{day.weekdayLabel}</span>
-    <span className="block text-lg font-semibold">{day.dayNumberLabel}</span>
-    {day.isToday ? (
-      <span className="mt-1 inline-flex rounded-full bg-background/80 px-2 py-0.5 text-xs text-foreground">
-        Today
-      </span>
-    ) : null}
-  </button>
-);
+}) => {
+  const { t } = useTranslation();
 
-const KitchenMealCard = ({ meal }: { meal: KitchenMealPreview }) => (
-  <Card>
-    <CardHeader>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <CardTitle className="text-xl">{meal.label}</CardTitle>
-          <CardDescription>
-            Target C {formatMacro(meal.target.carbs)}g / P{' '}
-            {formatMacro(meal.target.protein)}g / F{' '}
-            {formatMacro(meal.target.fat)}g /{' '}
-            {formatMacro(meal.target.calories)} kcal
-          </CardDescription>
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={day.isSelected}
+      aria-current={day.isToday ? 'date' : undefined}
+      className={`min-w-28 rounded-xl border px-4 py-3 text-left transition-colors ${
+        day.isSelected
+          ? 'border-primary bg-primary text-primary-foreground'
+          : 'border-border bg-card hover:bg-accent'
+      } ${day.isToday && !day.isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+      onClick={() => onSelect(day.date)}
+    >
+      <span className="block text-sm font-medium">{day.weekdayLabel}</span>
+      <span className="block text-lg font-semibold">{day.dayNumberLabel}</span>
+      {day.isToday ? (
+        <span className="mt-1 inline-flex rounded-full bg-background/80 px-2 py-0.5 text-xs text-foreground">
+          {t('common.today', 'Today')}
+        </span>
+      ) : null}
+    </button>
+  );
+};
+
+const KitchenMealCard = ({ meal }: { meal: KitchenMealPreview }) => {
+  const { t } = useTranslation();
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="text-xl">{meal.label}</CardTitle>
+            <CardDescription>
+              {t('kitchen.targetSummary', {
+                defaultValue:
+                  'Target C {{carbs}}g / P {{protein}}g / F {{fat}}g / {{calories}} kcal',
+                carbs: formatMacro(meal.target.carbs),
+                protein: formatMacro(meal.target.protein),
+                fat: formatMacro(meal.target.fat),
+                calories: formatMacro(meal.target.calories),
+              })}
+            </CardDescription>
+          </div>
+          <Badge variant="secondary">
+            {formatMacro(meal.target.calories)} {t('common.kcal', 'kcal')}
+          </Badge>
         </div>
-        <Badge variant="secondary">
-          {formatMacro(meal.target.calories)} kcal
-        </Badge>
-      </div>
-    </CardHeader>
-    <CardContent>
-      {meal.items.length > 0 ? (
-        <ul className="space-y-3">
-          {meal.items.map((item) => (
-            <li
-              key={`${meal.key}-${item.id}`}
-              className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3"
-            >
-              <span className="font-medium">{item.name}</span>
-              <span className="text-sm text-muted-foreground">
-                {item.amountLabel}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="rounded-lg bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
-          No planned foods for this meal yet.
-        </p>
-      )}
-    </CardContent>
-  </Card>
-);
+      </CardHeader>
+      <CardContent>
+        {meal.items.length > 0 ? (
+          <ul className="space-y-3">
+            {meal.items.map((item) => (
+              <li
+                key={`${meal.key}-${item.id}`}
+                className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3"
+              >
+                <span className="font-medium">{item.name}</span>
+                <span className="text-sm text-muted-foreground">
+                  {item.amountLabel}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="rounded-lg bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+            {t(
+              'kitchen.noPlannedFoodsForMeal',
+              'No planned foods for this meal yet.'
+            )}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 export default function Kitchen({ todayOverride }: KitchenProps) {
+  const { t } = useTranslation();
   const { activeUserId } = useActiveUser();
   const todayDate = todayOverride ?? localDateString();
   const [userSelectedDate, setUserSelectedDate] = useState<string | null>(null);
@@ -160,11 +177,18 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
         <div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <ChefHat className="h-5 w-5" aria-hidden="true" />
-            <span className="text-sm font-medium">Meal plan preview</span>
+            <span className="text-sm font-medium">
+              {t('kitchen.mealPlanPreview', 'Meal plan preview')}
+            </span>
           </div>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">Kitchen</h1>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">
+            {t('nav.kitchen', 'Kitchen')}
+          </h1>
           <p className="mt-1 text-muted-foreground">
-            Read-only cooking view for the active Meal Plan.
+            {t(
+              'kitchen.description',
+              'Read-only cooking view for the active Meal Plan.'
+            )}
           </p>
         </div>
         {activeTemplate ? (
@@ -181,7 +205,7 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
               className="h-5 w-5 animate-pulse"
               aria-hidden="true"
             />
-            Loading your active meal plan...
+            {t('kitchen.loadingActivePlan', 'Loading your active meal plan...')}
           </CardContent>
         </Card>
       ) : null}
@@ -194,12 +218,17 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
                 className="h-5 w-5 text-destructive"
                 aria-hidden="true"
               />
-              <CardTitle>Unable to load Kitchen</CardTitle>
+              <CardTitle>
+                {t('kitchen.unableToLoad', 'Unable to load Kitchen')}
+              </CardTitle>
             </div>
             <CardDescription>
               {error instanceof Error
                 ? error.message
-                : 'We could not load the active Meal Plan. Please try again.'}
+                : t(
+                    'kitchen.loadError',
+                    'We could not load the active Meal Plan. Please try again.'
+                  )}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -208,15 +237,24 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
       {!isLoading && !isError && !activeTemplate ? (
         <Card>
           <CardHeader>
-            <CardTitle>No active meal plan</CardTitle>
+            <CardTitle>
+              {t('kitchen.noActiveMealPlan', 'No active meal plan')}
+            </CardTitle>
             <CardDescription>
-              Kitchen uses your active Meal Plan to show what to cook and weigh
-              for each day.
+              {t(
+                'kitchen.noActiveMealPlanDescription',
+                'Kitchen uses your active Meal Plan to show what to cook and weigh for each day.'
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <Link to="/foods">Create or activate a Meal Plan</Link>
+              <Link to="/foods">
+                {t(
+                  'kitchen.createOrActivateMealPlan',
+                  'Create or activate a Meal Plan'
+                )}
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -227,7 +265,7 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
           <section aria-label="Kitchen week">
             <div
               role="tablist"
-              aria-label="Select kitchen date"
+              aria-label={t('kitchen.selectDate', 'Select kitchen date')}
               className="flex gap-3 overflow-x-auto pb-2"
             >
               {week.days.map((day) => (
@@ -253,20 +291,20 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <KitchenMetric
-                  label="Calories"
-                  value={`${formatMacro(selectedDay.targetCalories)} kcal`}
+                  label={t('nutrition.calories', 'Calories')}
+                  value={`${formatMacro(selectedDay.targetCalories)} ${t('common.kcal', 'kcal')}`}
                 />
                 <KitchenMetric
-                  label="Carbs"
-                  value={`${formatMacro(selectedDay.targetCarbs)}g carbs`}
+                  label={t('nutrition.carbs', 'Carbs')}
+                  value={`${formatMacro(selectedDay.targetCarbs)}g ${t('nutrition.carbs', 'carbs')}`}
                 />
                 <KitchenMetric
-                  label="Protein"
-                  value={`${formatMacro(selectedDay.targetProtein)}g protein`}
+                  label={t('nutrition.protein', 'Protein')}
+                  value={`${formatMacro(selectedDay.targetProtein)}g ${t('nutrition.protein', 'protein')}`}
                 />
                 <KitchenMetric
-                  label="Fat"
-                  value={`${formatMacro(selectedDay.targetFat)}g fat`}
+                  label={t('nutrition.fat', 'Fat')}
+                  value={`${formatMacro(selectedDay.targetFat)}g ${t('nutrition.fat', 'fat')}`}
                 />
               </div>
             </CardContent>
@@ -284,7 +322,10 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
               <Card>
                 <CardContent className="flex items-center gap-3 p-6 text-muted-foreground">
                   <Utensils className="h-5 w-5" aria-hidden="true" />
-                  No meals are planned for this day.
+                  {t(
+                    'kitchen.noMealsPlannedForDay',
+                    'No meals are planned for this day.'
+                  )}
                 </CardContent>
               </Card>
             )}

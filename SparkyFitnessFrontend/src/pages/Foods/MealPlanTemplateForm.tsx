@@ -66,11 +66,6 @@ interface MealPlanTemplateFormProps {
 
 type MealPlanMode = 'average' | 'carbCycle';
 const MACRO_ROLE_ORDER: FoodMacroRole[] = ['carb', 'protein', 'fat'];
-const MACRO_ROLE_LABELS: Record<FoodMacroRole, string> = {
-  carb: 'Carbs',
-  protein: 'Protein',
-  fat: 'Fat',
-};
 const MACRO_ROLE_TARGET_KEY: Record<
   FoodMacroRole,
   'carbs' | 'protein' | 'fat'
@@ -92,19 +87,6 @@ function getWeekStartDate(date: string, firstDayOfWeek: number): string {
   return parsedDate.toISOString().slice(0, 10);
 }
 
-function formatCarbCycleDayType(dayType: CarbCycleDayType): string {
-  switch (dayType) {
-    case 'high':
-      return 'High Carb';
-    case 'medium':
-      return 'Medium Carb';
-    case 'low':
-      return 'Low Carb';
-    default:
-      return dayType;
-  }
-}
-
 const DEFAULT_TRAINING_SLOTS: CarbCycleTrainingSlots = [
   'rest',
   'rest',
@@ -122,6 +104,23 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation();
+  const macroRoleLabels: Record<FoodMacroRole, string> = {
+    carb: t('nutrition.carbs', 'Carbs'),
+    protein: t('nutrition.protein', 'Protein'),
+    fat: t('nutrition.fat', 'Fat'),
+  };
+  const formatCarbCycleDayType = (dayType: CarbCycleDayType): string => {
+    switch (dayType) {
+      case 'high':
+        return t('cycle.highCarb', 'High Carb');
+      case 'medium':
+        return t('cycle.mediumCarb', 'Medium Carb');
+      case 'low':
+        return t('cycle.lowCarb', 'Low Carb');
+      default:
+        return dayType;
+    }
+  };
   const { loggingLevel, firstDayOfWeek } = usePreferences(); // Get loggingLevel from preferences
   const initialMacroTargets =
     Object.keys(mealMacroTargetsByDay).length > 0
@@ -424,7 +423,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
       ) {
         toast({
           title: t('common.error', 'Error'),
-          description: `Choose a ${MACRO_ROLE_LABELS[currentMacroRole]} food for this slot.`,
+          description: t('mealPlanTemplateForm.chooseMacroRoleFood', {
+            defaultValue: 'Choose a {{macroRole}} food for this slot.',
+            macroRole: macroRoleLabels[currentMacroRole],
+          }),
           variant: 'destructive',
         });
         return;
@@ -435,7 +437,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
         if (!selectedVariant) {
           toast({
             title: t('common.error', 'Error'),
-            description: 'This food has no default nutrition variant.',
+            description: t(
+              'mealPlanTemplateForm.noDefaultNutritionVariant',
+              'This food has no default nutrition variant.'
+            ),
             variant: 'destructive',
           });
           return;
@@ -729,7 +734,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     if (!startDate) {
       toast({
         title: t('common.error'),
-        description: 'Choose a week start date before generating targets.',
+        description: t(
+          'mealPlanTemplateForm.chooseWeekStartDate',
+          'Choose a week start date before generating targets.'
+        ),
         variant: 'destructive',
       });
       return;
@@ -737,8 +745,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     if (!bodyWeightKg || bodyWeightKg <= 0) {
       toast({
         title: t('common.error'),
-        description:
-          'Log a body weight check-in before generating carb cycle targets.',
+        description: t(
+          'mealPlanTemplateForm.logWeightBeforeGeneratingTargets',
+          'Log a body weight check-in before generating carb cycle targets.'
+        ),
         variant: 'destructive',
       });
       return;
@@ -861,21 +871,21 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
             </div>
             <div className="space-y-3 rounded-lg border p-4">
               <div className="space-y-1">
-                <Label>Plan Mode</Label>
+                <Label>{t('mealPlanTemplateForm.planMode', 'Plan Mode')}</Label>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
                     variant={planMode === 'average' ? 'default' : 'outline'}
                     onClick={() => setPlanMode('average')}
                   >
-                    Average
+                    {t('mealPlanTemplateForm.averageMode', 'Average')}
                   </Button>
                   <Button
                     type="button"
                     variant={planMode === 'carbCycle' ? 'default' : 'outline'}
                     onClick={() => setPlanMode('carbCycle')}
                   >
-                    Carb Cycle
+                    {t('mealPlanTemplateForm.carbCycleMode', 'Carb Cycle')}
                   </Button>
                 </div>
               </div>
@@ -883,20 +893,31 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
               {planMode === 'carbCycle' ? (
                 <div className="space-y-4">
                   <div className="rounded-md bg-muted p-3 text-sm">
-                    <div className="font-medium">Current body weight</div>
+                    <div className="font-medium">
+                      {t(
+                        'mealPlanTemplateForm.currentBodyWeight',
+                        'Current body weight'
+                      )}
+                    </div>
                     <div className="text-muted-foreground">
                       {isWeightLoading
-                        ? 'Loading latest weight...'
+                        ? t(
+                            'mealPlanTemplateForm.loadingLatestWeight',
+                            'Loading latest weight...'
+                          )
                         : weightData?.weight
                           ? `${weightData.weight.toFixed(1)} kg`
-                          : 'No weight check-in found. Log weight before generating targets.'}
+                          : t(
+                              'mealPlanTemplateForm.noWeightCheckIn',
+                              'No weight check-in found. Log weight before generating targets.'
+                            )}
                     </div>
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="meal-plan-carb-cycle-carbs">
-                        Carbs / kg
+                        {t('mealPlanTemplateForm.carbsPerKg', 'Carbs / kg')}
                       </Label>
                       <Input
                         id="meal-plan-carb-cycle-carbs"
@@ -914,7 +935,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="meal-plan-carb-cycle-protein">
-                        Protein / kg
+                        {t('mealPlanTemplateForm.proteinPerKg', 'Protein / kg')}
                       </Label>
                       <Input
                         id="meal-plan-carb-cycle-protein"
@@ -931,7 +952,9 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="meal-plan-carb-cycle-fat">Fat / kg</Label>
+                      <Label htmlFor="meal-plan-carb-cycle-fat">
+                        {t('mealPlanTemplateForm.fatPerKg', 'Fat / kg')}
+                      </Label>
                       <Input
                         id="meal-plan-carb-cycle-fat"
                         type="number"
@@ -949,7 +972,12 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                   </div>
 
                   <div className="space-y-2 rounded-md border p-3">
-                    <Label>Training Focus Plan</Label>
+                    <Label>
+                      {t(
+                        'mealPlanTemplateForm.trainingFocusPlan',
+                        'Training Focus Plan'
+                      )}
+                    </Label>
                     {activeTrainingFocusPlan ? (
                       <div className="space-y-2">
                         <div className="text-sm font-medium">
@@ -978,8 +1006,12 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                 <div className="space-y-1">
                                   <div className="text-muted-foreground">
                                     {activeCount === 0
-                                      ? 'Rest'
-                                      : `${activeCount} session${activeCount > 1 ? 's' : ''}`}
+                                      ? t('exercise.rest', 'Rest')
+                                      : t(
+                                          'mealPlanTemplateForm.sessionCount',
+                                          '{{count}} session',
+                                          { count: activeCount }
+                                        )}
                                   </div>
                                   <div
                                     className={
@@ -988,7 +1020,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                         : 'font-medium text-muted-foreground'
                                     }
                                   >
-                                    Main: {primary?.time_slot ?? '—'}
+                                    {t('mealPlanTemplateForm.mainSlot', {
+                                      defaultValue: 'Main: {{slot}}',
+                                      slot: primary?.time_slot ?? '—',
+                                    })}
                                   </div>
                                 </div>
                                 {dayTarget ? (
@@ -1028,9 +1063,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        No active Training Focus Plan covers this start date.
-                        Carb Cycle targets will be generated as rest days until
-                        you create and activate one under Workout Plans.
+                        {t(
+                          'mealPlanTemplateForm.noActiveTrainingFocusPlan',
+                          'No active Training Focus Plan covers this start date. Carb Cycle targets will be generated as rest days until you create and activate one under Workout Plans.'
+                        )}
                       </p>
                     )}
                   </div>
@@ -1041,13 +1077,18 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                     onClick={handleGenerateCarbCycleTargets}
                     disabled={previewCarbCycleMutation.isPending}
                   >
-                    Generate Carb Cycle Targets
+                    {t(
+                      'mealPlanTemplateForm.generateCarbCycleTargets',
+                      'Generate Carb Cycle Targets'
+                    )}
                   </Button>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Average mode keeps SparkyFitness default meal planning. Meal
-                  calorie targets come from your normal meal percentages.
+                  {t(
+                    'mealPlanTemplateForm.averageModeDescription',
+                    'Average mode keeps SparkyFitness default meal planning. Meal calorie targets come from your normal meal percentages.'
+                  )}
                 </p>
               )}
             </div>
@@ -1086,7 +1127,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                       {dayTargetTotals ? (
                         <div className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">
-                            Daily Target for {day.name}:
+                            {t('mealPlanTemplateForm.dailyTargetForDay', {
+                              defaultValue: 'Daily Target for {{day}}:',
+                              day: day.name,
+                            })}
                           </span>{' '}
                           {dayTargetTotals.calories.toFixed(0)} kcal | C:{' '}
                           {dayTargetTotals.carbs.toFixed(1)}g | P:{' '}
@@ -1158,7 +1202,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                                   actualIndex
                                                 )
                                               }
-                                              title="Edit quantity"
+                                              title={t(
+                                                'mealPlanTemplateForm.editQuantity',
+                                                'Edit quantity'
+                                              )}
                                             >
                                               <Edit className="h-4 w-4" />
                                             </Button>
@@ -1170,7 +1217,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                                   actualIndex
                                                 )
                                               }
-                                              title="Remove"
+                                              title={t(
+                                                'common.remove',
+                                                'Remove'
+                                              )}
                                             >
                                               <X className="h-4 w-4" />
                                             </Button>
@@ -1179,7 +1229,8 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                         <div className="flex flex-col sm:flex-row justify-between text-sm text-muted-foreground">
                                           <div>
                                             {assignment.quantity || 1}{' '}
-                                            {assignment.unit || 'serving'}
+                                            {assignment.unit ||
+                                              t('common.serving', 'serving')}
                                           </div>
                                           <div className="flex space-x-3 mt-1 sm:mt-0">
                                             <span>
@@ -1204,7 +1255,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                             )}
                             {assignmentsForMealType.length > 0 && (
                               <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted rounded">
-                                <strong>Total:</strong>{' '}
+                                <strong>{t('common.total', 'Total')}:</strong>{' '}
                                 {mealTypeTotals.totalCalories.toFixed(0)} kcal |{' '}
                                 C: {mealTypeTotals.totalCarbs.toFixed(1)}g | P:{' '}
                                 {mealTypeTotals.totalProtein.toFixed(1)}g | F:{' '}
@@ -1214,12 +1265,17 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                             {mealTarget ? (
                               <div className="text-xs text-muted-foreground mt-2 p-2 border border-dashed rounded">
                                 <div className="font-medium text-foreground">
-                                  Target: {mealTarget.calories} kcal | C:{' '}
+                                  {t('mealPlanTemplateForm.target', 'Target')}:{' '}
+                                  {mealTarget.calories} kcal | C:{' '}
                                   {mealTarget.carbs}g | P: {mealTarget.protein}g
                                   | F: {mealTarget.fat}g
                                 </div>
                                 <div>
-                                  Remaining: C:{' '}
+                                  {t(
+                                    'mealPlanTemplateForm.remaining',
+                                    'Remaining'
+                                  )}
+                                  : C:{' '}
                                   {(
                                     mealTarget.carbs - mealTypeTotals.totalCarbs
                                   ).toFixed(1)}
@@ -1253,10 +1309,16 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                     >
                                       <div>
                                         <div className="font-medium">
-                                          {MACRO_ROLE_LABELS[role]}
+                                          {macroRoleLabels[role]}
                                         </div>
                                         <div className="text-xs text-muted-foreground">
-                                          Target {targetValue}g
+                                          {t(
+                                            'mealPlanTemplateForm.targetGrams',
+                                            {
+                                              defaultValue: 'Target {{value}}g',
+                                              value: targetValue,
+                                            }
+                                          )}
                                         </div>
                                       </div>
                                       <div className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">
@@ -1269,7 +1331,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                               : ''}
                                           </>
                                         ) : (
-                                          'None selected'
+                                          t(
+                                            'mealPlanTemplateForm.noneSelected',
+                                            'None selected'
+                                          )
                                         )}
                                       </div>
                                       <div className="flex items-center gap-1">
@@ -1278,13 +1343,45 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                           size="icon"
                                           aria-label={
                                             selectedRoleAssignment
-                                              ? `Change ${MACRO_ROLE_LABELS[role]} food`
-                                              : `Select ${MACRO_ROLE_LABELS[role]} food`
+                                              ? t(
+                                                  'mealPlanTemplateForm.changeMacroFood',
+                                                  {
+                                                    defaultValue:
+                                                      'Change {{macroRole}} food',
+                                                    macroRole:
+                                                      macroRoleLabels[role],
+                                                  }
+                                                )
+                                              : t(
+                                                  'mealPlanTemplateForm.selectMacroFood',
+                                                  {
+                                                    defaultValue:
+                                                      'Select {{macroRole}} food',
+                                                    macroRole:
+                                                      macroRoleLabels[role],
+                                                  }
+                                                )
                                           }
                                           title={
                                             selectedRoleAssignment
-                                              ? `Change ${MACRO_ROLE_LABELS[role]} food`
-                                              : `Select ${MACRO_ROLE_LABELS[role]} food`
+                                              ? t(
+                                                  'mealPlanTemplateForm.changeMacroFood',
+                                                  {
+                                                    defaultValue:
+                                                      'Change {{macroRole}} food',
+                                                    macroRole:
+                                                      macroRoleLabels[role],
+                                                  }
+                                                )
+                                              : t(
+                                                  'mealPlanTemplateForm.selectMacroFood',
+                                                  {
+                                                    defaultValue:
+                                                      'Select {{macroRole}} food',
+                                                    macroRole:
+                                                      macroRoleLabels[role],
+                                                  }
+                                                )
                                           }
                                           onClick={() =>
                                             handleAddFood(
@@ -1301,8 +1398,24 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                             <Button
                                               variant="ghost"
                                               size="icon"
-                                              aria-label={`Edit ${MACRO_ROLE_LABELS[role]} quantity`}
-                                              title={`Edit ${MACRO_ROLE_LABELS[role]} quantity`}
+                                              aria-label={t(
+                                                'mealPlanTemplateForm.editMacroQuantity',
+                                                {
+                                                  defaultValue:
+                                                    'Edit {{macroRole}} quantity',
+                                                  macroRole:
+                                                    macroRoleLabels[role],
+                                                }
+                                              )}
+                                              title={t(
+                                                'mealPlanTemplateForm.editMacroQuantity',
+                                                {
+                                                  defaultValue:
+                                                    'Edit {{macroRole}} quantity',
+                                                  macroRole:
+                                                    macroRoleLabels[role],
+                                                }
+                                              )}
                                               onClick={() =>
                                                 handleEditAssignment(
                                                   extendedAssignments.indexOf(
@@ -1316,8 +1429,24 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                             <Button
                                               variant="ghost"
                                               size="icon"
-                                              aria-label={`Clear ${MACRO_ROLE_LABELS[role]} food`}
-                                              title={`Clear ${MACRO_ROLE_LABELS[role]} food`}
+                                              aria-label={t(
+                                                'mealPlanTemplateForm.clearMacroFood',
+                                                {
+                                                  defaultValue:
+                                                    'Clear {{macroRole}} food',
+                                                  macroRole:
+                                                    macroRoleLabels[role],
+                                                }
+                                              )}
+                                              title={t(
+                                                'mealPlanTemplateForm.clearMacroFood',
+                                                {
+                                                  defaultValue:
+                                                    'Clear {{macroRole}} food',
+                                                  macroRole:
+                                                    macroRoleLabels[role],
+                                                }
+                                              )}
                                               onClick={() =>
                                                 handleRemoveMacroAssignment(
                                                   dayIndex,
@@ -1357,7 +1486,10 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                     {hasDailyAssignments && (
                       <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/20">
                         <h4 className="font-semibold text-sm mb-2">
-                          Daily Total for {day.name}
+                          {t('mealPlanTemplateForm.dailyTotalForDay', {
+                            defaultValue: 'Daily Total for {{day}}',
+                            day: day.name,
+                          })}
                         </h4>
                         <div className="text-sm space-x-4">
                           <span className="font-medium">

@@ -447,7 +447,7 @@ const MealCard = ({
 
           {meal.entries.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              No foods added yet
+              {t('diary.noFoodsAddedYet', 'No foods added yet')}
             </div>
           ) : (
             <div className="space-y-3">
@@ -566,7 +566,7 @@ const MealCard = ({
                             )}
                             {isFromMealPlan && (
                               <Badge variant="outline" className="text-[10px]">
-                                From Plan
+                                {t('diary.fromPlan', 'From Plan')}
                               </Badge>
                             )}
                             {giValue &&
@@ -657,7 +657,7 @@ const MealCard = ({
                             );
                             onEditEntry(item);
                           }}
-                          title="Edit entry"
+                          title={t('diary.editEntry', 'Edit entry')}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -676,7 +676,7 @@ const MealCard = ({
                               isFoodEntryMeal ? 'foodEntryMeal' : 'foodEntry'
                             );
                           }}
-                          title="Remove entry"
+                          title={t('diary.removeEntry', 'Remove entry')}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -711,7 +711,7 @@ const MealCard = ({
                         )}
                         {isFromMealPlan && (
                           <Badge variant="outline" className="text-xs w-fit">
-                            From Plan
+                            {t('diary.fromPlan', 'From Plan')}
                           </Badge>
                         )}
                         {giValue &&
@@ -769,7 +769,7 @@ const MealCard = ({
                           );
                           onEditEntry(item); // Pass the item directly
                         }}
-                        title="Edit entry"
+                        title={t('diary.editEntry', 'Edit entry')}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -799,7 +799,10 @@ const MealCard = ({
 
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2 gap-4">
                 <span className="font-semibold dark:text-slate-300">
-                  {meal.name} Total:
+                  {t('diary.mealTotal', {
+                    defaultValue: '{{mealName}} Total:',
+                    mealName: meal.name,
+                  })}
                 </span>
                 <div
                   className="grid gap-x-2 gap-y-2 text-xs sm:text-sm w-full sm:w-[35%] sm:ml-auto"
