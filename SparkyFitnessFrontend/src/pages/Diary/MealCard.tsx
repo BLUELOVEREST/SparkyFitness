@@ -17,6 +17,7 @@ import {
   History,
   Utensils,
   ClipboardCopy,
+  ClipboardCheck,
   PlusCircle,
   Users,
 } from 'lucide-react';
@@ -61,6 +62,7 @@ import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import AllergenBadges from '@/components/AllergenBadges';
 import type { CarbCycleMealTarget } from '@/types/goals';
+import type { ActiveMealPlanDayMeal } from '@/types/meal';
 
 const MOBILE_ENTRY_NUTRIENT_LIMIT = 4;
 
@@ -102,6 +104,9 @@ interface MealCardProps {
   customNutrients?: UserCustomNutrient[]; // Add customNutrients prop
   shouldOpenFoodSearch?: boolean;
   onFoodSearchClose?: () => void;
+  plannedMeal?: ActiveMealPlanDayMeal;
+  onLogPlannedMeal?: (meal: ActiveMealPlanDayMeal) => void;
+  isLoggingPlannedMeal?: boolean;
 }
 
 const MealCard = ({
@@ -120,6 +125,9 @@ const MealCard = ({
   onFoodSearchClose,
   selectedDate,
   customNutrients = [], // Default to empty array
+  plannedMeal,
+  onLogPlannedMeal,
+  isLoggingPlannedMeal = false,
 }: MealCardProps) => {
   const { t } = useTranslation();
   const { loggingLevel, nutrientDisplayPreferences, getDateRelationToToday } =
@@ -357,6 +365,86 @@ const MealCard = ({
           </div>
         </CardHeader>
         <CardContent>
+          {plannedMeal ? (
+            <div className="mb-4 rounded-lg border border-dashed border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">
+                      {t('diary.plannedMeal', 'Planned')}
+                    </Badge>
+                    <span className="text-sm font-medium">
+                      {Math.round(
+                        convertEnergy(
+                          plannedMeal.target.calories,
+                          'kcal',
+                          energyUnit
+                        )
+                      )}{' '}
+                      {getEnergyUnitString(energyUnit)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      C {plannedMeal.target.carbs}g / P{' '}
+                      {plannedMeal.target.protein}g / F {plannedMeal.target.fat}
+                      g
+                    </span>
+                  </div>
+                  {plannedMeal.items.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 text-sm">
+                      {plannedMeal.items.map((item) => (
+                        <span
+                          key={`${item.type}-${item.id}-${item.macroRole ?? 'item'}`}
+                          className="rounded-full bg-background px-2 py-1 text-muted-foreground shadow-sm"
+                        >
+                          <span className="font-medium text-foreground">
+                            {item.name}
+                          </span>{' '}
+                          {item.amountLabel}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      {t(
+                        'diary.noPlannedFoods',
+                        'No planned foods for this meal.'
+                      )}
+                    </div>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant={plannedMeal.logged ? 'secondary' : 'default'}
+                  disabled={
+                    plannedMeal.logged ||
+                    plannedMeal.items.length === 0 ||
+                    !plannedMeal.mealTypeId ||
+                    isLoggingPlannedMeal
+                  }
+                  onClick={() => {
+                    if (
+                      meal.entries.length > 0 &&
+                      !window.confirm(
+                        t(
+                          'diary.logPlannedMealWithExistingEntriesConfirm',
+                          'This meal already has diary entries. Add the planned meal anyway?'
+                        )
+                      )
+                    ) {
+                      return;
+                    }
+                    onLogPlannedMeal?.(plannedMeal);
+                  }}
+                >
+                  <ClipboardCheck className="mr-2 h-4 w-4" />
+                  {plannedMeal.logged
+                    ? t('diary.loggedFromPlan', 'Logged from Plan')
+                    : t('diary.logFromPlan', 'Log from Plan')}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           {meal.entries.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               No foods added yet

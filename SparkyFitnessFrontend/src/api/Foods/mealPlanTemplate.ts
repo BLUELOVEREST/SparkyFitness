@@ -1,5 +1,5 @@
 import { api } from '@/api/api';
-import type { MealPlanTemplate } from '@/types/meal';
+import type { ActiveMealPlanDay, MealPlanTemplate } from '@/types/meal';
 
 export const getMealPlanTemplates = async (
   userId: string
@@ -47,4 +47,19 @@ export const deleteMealPlanTemplate = async (
     url += `&currentClientDate=${currentClientDate}`;
   }
   await api.delete(url);
+};
+
+export const getActiveMealPlanDay = async (
+  date: string
+): Promise<ActiveMealPlanDay> => {
+  return await api.get(`/meal-plan-templates/active/day?date=${date}`);
+};
+
+export const logActiveMealPlanMealToDiary = async (
+  date: string,
+  mealTypeId: string
+) => {
+  return await api.post('/meal-plan-templates/active/log-meal-to-diary', {
+    body: { date, mealTypeId },
+  });
 };

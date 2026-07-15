@@ -66,6 +66,61 @@ router.get('/', authenticate, async (req, res, next) => {
     next(error);
   }
 });
+
+router.get('/active/day', authenticate, async (req, res, next) => {
+  try {
+    const { date } = req.query;
+    if (typeof date !== 'string' || !date) {
+      return res.status(400).json({ error: 'date is required.' });
+    }
+
+    const dayView = await mealPlanTemplateService.getActiveMealPlanDay(
+      req.userId,
+      date
+    );
+    res.status(200).json(dayView);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post(
+  '/active/log-meal-to-diary',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      const { date, mealTypeId } = req.body;
+      if (!date || !mealTypeId) {
+        return res
+          .status(400)
+          .json({ error: 'date and mealTypeId are required.' });
+      }
+
+      const loggedMeal =
+        await mealPlanTemplateService.logActiveMealPlanMealToDiary(
+          req.userId,
+          date,
+          mealTypeId
+        );
+      res.status(201).json(loggedMeal);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'This planned meal has already been logged.') {
+          return res.status(409).json({ error: error.message });
+        }
+        if (
+          error.message ===
+            'No active carb cycle meal plan found for this date.' ||
+          error.message === 'No planned meal found for this meal type.' ||
+          error.message === 'No planned foods found for this meal.'
+        ) {
+          return res.status(404).json({ error: error.message });
+        }
+      }
+      next(error);
+    }
+  }
+);
 /**
  * @swagger
  * /meal-plan-templates/{id}:

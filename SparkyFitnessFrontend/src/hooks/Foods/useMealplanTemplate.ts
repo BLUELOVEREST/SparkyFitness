@@ -2,7 +2,9 @@ import { mealPlanKeys } from '@/api/keys/meals';
 import {
   createMealPlanTemplate,
   deleteMealPlanTemplate,
+  getActiveMealPlanDay,
   getMealPlanTemplates,
+  logActiveMealPlanMealToDiary,
   updateMealPlanTemplate,
 } from '@/api/Foods/mealPlanTemplate';
 import { MealPlanTemplate } from '@/types/meal';
@@ -23,6 +25,47 @@ export const useMealPlanTemplates = (userId?: string | null) => {
       ),
     },
     enabled: !!userId,
+  });
+};
+
+export const useActiveMealPlanDay = (date: string) => {
+  const { t } = useTranslation();
+
+  return useQuery({
+    queryKey: mealPlanKeys.activeDay(date),
+    queryFn: () => getActiveMealPlanDay(date),
+    enabled: !!date,
+    meta: {
+      errorMessage: t(
+        'mealManagement.failedToLoadActivePlanDay',
+        'Failed to load active meal plan for this day.'
+      ),
+    },
+  });
+};
+
+export const useLogActiveMealPlanMealMutation = () => {
+  const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  return useMutation({
+    mutationFn: ({ date, mealTypeId }: { date: string; mealTypeId: string }) =>
+      logActiveMealPlanMealToDiary(date, mealTypeId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: mealPlanKeys.activeDay(variables.date),
+      });
+      queryClient.invalidateQueries({ queryKey: ['foodEntries'] });
+      queryClient.invalidateQueries({ queryKey: ['foodEntryMeals'] });
+      queryClient.invalidateQueries({ queryKey: ['dailyProgress'] });
+    },
+    meta: {
+      errorMessage: t(
+        'diary.logPlannedMealError',
+        'Failed to log planned meal.'
+      ),
+      successMessage: t('diary.logPlannedMealSuccess', 'Planned meal logged.'),
+    },
   });
 };
 export const useCreateMealPlanMutation = () => {

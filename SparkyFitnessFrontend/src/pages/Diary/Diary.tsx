@@ -44,6 +44,10 @@ import {
   useFoodEntryMeals,
 } from '@/hooks/Diary/useFoodEntries';
 import { todayInZone, prefillEntryTime } from '@workspace/shared';
+import {
+  useActiveMealPlanDay,
+  useLogActiveMealPlanMealMutation,
+} from '@/hooks/Foods/useMealplanTemplate';
 import { useDailySummary } from '@/hooks/Diary/useDailyProgress';
 
 const Diary = () => {
@@ -95,6 +99,8 @@ const Diary = () => {
   const { data: availableMealTypes, isLoading: mealTypesLoading } =
     useMealTypes();
   const { data: goals, isLoading: goalsLoading } = useDiaryGoals(selectedDate);
+  const { data: activeMealPlanDay, isLoading: activeMealPlanDayLoading } =
+    useActiveMealPlanDay(selectedDate);
   const { data: summaryData, isLoading: summaryLoading } =
     useDailySummary(selectedDate);
   const { data: fetchedFoodEntries, isLoading: foodEntriesLoading } =
@@ -114,10 +120,42 @@ const Diary = () => {
       : goals
     : undefined;
 
+  const isCarbCycleDiary =
+    activeMealPlanDay?.mode === 'carbCycle' &&
+    activeMealPlanDay.meals.length > 0;
+
+  const diaryGoals = effectiveGoals
+    ? isCarbCycleDiary
+      ? {
+          ...effectiveGoals,
+          calories: activeMealPlanDay.meals.reduce(
+            (total, meal) => total + meal.target.calories,
+            0
+          ),
+          carbs: activeMealPlanDay.meals.reduce(
+            (total, meal) => total + meal.target.carbs,
+            0
+          ),
+          protein: activeMealPlanDay.meals.reduce(
+            (total, meal) => total + meal.target.protein,
+            0
+          ),
+          fat: activeMealPlanDay.meals.reduce(
+            (total, meal) => total + meal.target.fat,
+            0
+          ),
+          meal_macro_targets: activeMealPlanDay.meals.map(
+            (meal) => meal.target
+          ),
+        }
+      : effectiveGoals
+    : undefined;
+
   const loading =
     customNutrientsLoading ||
     mealTypesLoading ||
     goalsLoading ||
+    activeMealPlanDayLoading ||
     summaryLoading ||
     foodEntriesLoading ||
     foodEntryMealsLoading;
@@ -126,6 +164,8 @@ const Diary = () => {
   const { mutateAsync: removeFoodEntry } = useDeleteFoodEntryMutation();
   const { mutateAsync: copyFoodEntries } = useCopyFoodEntriesMutation();
   const { mutateAsync: deleteFoodEntryMeal } = useDeleteFoodEntryMealMutation();
+  const { mutateAsync: logPlannedMeal, isPending: loggingPlannedMeal } =
+    useLogActiveMealPlanMealMutation();
 
   const foodEntries = fetchedFoodEntries
     ? fetchedFoodEntries.filter((entry) => !entry.food_entry_meal_id)
@@ -326,11 +366,15 @@ const Diary = () => {
     [availableMealTypes]
   );
 
+  const handleLogPlannedMeal = async (mealTypeId: string) => {
+    await logPlannedMeal({ date: selectedDate, mealTypeId });
+  };
+
   // Build the ordered widget registry: energy, nutrition, water, one card per
   // visible meal type, then exercise. Keys match buildWidgetKeys() so the saved
   // grid layout reconciles cleanly against the user's current meal types.
   const widgets: DiaryWidget[] = useMemo(() => {
-    if (!effectiveGoals) return [];
+    if (!diaryGoals) return [];
     const list: DiaryWidget[] = [
       {
         key: 'energy',
@@ -346,7 +390,7 @@ const Diary = () => {
           <NutritionSummaryCard
             selectedDate={selectedDate}
             dayTotals={dayTotals as unknown as DayTotals}
-            goals={effectiveGoals}
+            goals={diaryGoals}
             energyUnit={energyUnit}
             convertEnergy={convertEnergy}
             customNutrients={customNutrients}
@@ -361,24 +405,38 @@ const Diary = () => {
       },
     ];
 
-    for (const mealTypeObj of visibleMealTypes) {
+    const mealCards = isCarbCycleDiary
+      ? activeMealPlanDay.meals.map((plannedMeal) => ({
+          key: `planned-${plannedMeal.key}`,
+          title: plannedMeal.label,
+          mealName: plannedMeal.label,
+          plannedMeal,
+        }))
+      : visibleMealTypes.map((mealTypeObj) => ({
+          key: mealWidgetKey(mealTypeObj.id),
+          title: mealTypeObj.name,
+          mealName: mealTypeObj.name,
+          plannedMeal: undefined,
+        }));
+
+    for (const mealCard of mealCards) {
       list.push({
-        key: mealWidgetKey(mealTypeObj.id),
-        title: mealTypeObj.name,
+        key: mealCard.key,
+        title: mealCard.title,
         icon: UtensilsCrossed,
         render: () => (
           <MealCard
             meal={{
               ...getMealData(
-                mealTypeObj.name,
+                mealCard.mealName,
                 foodEntries,
                 foodEntryMeals ?? [],
-                effectiveGoals
+                diaryGoals
               ),
               selectedDate: selectedDate,
             }}
             totals={getMealTotals(
-              mealTypeObj.name,
+              mealCard.mealName,
               foodEntries,
               foodEntryMeals ?? []
             )}
@@ -397,9 +455,16 @@ const Diary = () => {
             customNutrients={customNutrients}
             shouldOpenFoodSearch={
               openFoodSearchForMealType?.toLowerCase() ===
-              mealTypeObj.name.toLowerCase()
+              mealCard.mealName.toLowerCase()
             }
             onFoodSearchClose={() => setOpenFoodSearchForMealType(null)}
+            plannedMeal={mealCard.plannedMeal}
+            onLogPlannedMeal={(plannedMeal) => {
+              if (plannedMeal.mealTypeId) {
+                handleLogPlannedMeal(plannedMeal.mealTypeId);
+              }
+            }}
+            isLoggingPlannedMeal={loggingPlannedMeal}
           />
         ),
       });
@@ -421,8 +486,10 @@ const Diary = () => {
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    effectiveGoals,
+    diaryGoals,
     visibleMealTypes,
+    activeMealPlanDay,
+    isCarbCycleDiary,
     selectedDate,
     dayTotals,
     foodEntries,
@@ -431,6 +498,7 @@ const Diary = () => {
     customNutrients,
     exercisesToLogFromPreset,
     openFoodSearchForMealType,
+    loggingPlannedMeal,
     t,
   ]);
 

@@ -1517,6 +1517,7 @@ interface FlattenContext {
   entryDate: any;
   entryTime?: string | null;
   foodEntryMealId: string;
+  mealPlanTemplateId?: string | null;
 }
 
 // Recursively flattens a meal's ingredient list (foods and linked sub-meals)
@@ -1676,6 +1677,7 @@ async function buildLeafFoodEntries(
       entry_date: ctx.entryDate,
       entry_time: ctx.entryTime ?? null,
       food_entry_meal_id: ctx.foodEntryMealId,
+      meal_plan_template_id: ctx.mealPlanTemplateId || null,
       ...snapshot,
     });
   }
@@ -1806,6 +1808,7 @@ async function createFoodEntryMeal(
         entryDate: mealData.entry_date,
         entryTime: newFoodEntryMeal.entry_time ?? null,
         foodEntryMealId: newFoodEntryMeal.id,
+        mealPlanTemplateId: mealData.meal_plan_template_id || null,
       }
     );
     if (entriesToCreate.length > 0) {
@@ -1864,6 +1867,19 @@ async function updateFoodEntryMeal(
     if (!updatedFoodEntryMeal) {
       throw new Error('Food entry meal not found or not authorized to update.');
     }
+    const existingComponentEntries =
+      await foodRepository.getFoodEntryComponentsByFoodEntryMealId(
+        foodEntryMealId,
+        authenticatedUserId
+      );
+    const preservedMealPlanTemplateId =
+      updatedMealData.meal_plan_template_id ||
+      existingComponentEntries.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (entry: any) => entry.meal_plan_template_id
+      )?.meal_plan_template_id ||
+      null;
+
     // 2. Delete existing component food_entries
     await foodRepository.deleteFoodEntryComponentsByFoodEntryMealId(
       foodEntryMealId,
@@ -1980,6 +1996,7 @@ async function updateFoodEntryMeal(
         entry_date: updatedMealData.entry_date,
         entry_time: updatedFoodEntryMeal.entry_time ?? null,
         food_entry_meal_id: foodEntryMealId, // Link to the existing food_entry_meals ID
+        meal_plan_template_id: preservedMealPlanTemplateId,
         ...snapshot,
       });
     }

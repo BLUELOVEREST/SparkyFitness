@@ -856,6 +856,7 @@ async function getFoodEntryComponentsByFoodEntryMealId(
         fe.variant_id,
         fe.entry_date,
         fe.entry_time,
+        fe.meal_plan_template_id,
         fe.food_entry_meal_id,
         fe.food_name, 
         fe.brand_name, 

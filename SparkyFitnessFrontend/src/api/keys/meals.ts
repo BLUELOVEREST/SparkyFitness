@@ -32,6 +32,8 @@ export const foodKeys = {
 export const mealPlanKeys = {
   all: ['mealPlans'] as const,
   byUser: (userId: string) => [...mealPlanKeys.all, userId] as const,
+  activeDay: (date: string) =>
+    [...mealPlanKeys.all, 'active-day', date] as const,
 };
 
 export const customNutrientsKeys = {
