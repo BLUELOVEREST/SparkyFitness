@@ -31,10 +31,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { Food, NutritionixItem } from '@/types/food';
+import type { FoodDataForBackend } from '@/types/food.ts';
 import type { Meal } from '@/types/meal';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useDatabaseFoodSearchQuery,
+  useImportCsvMutation,
   useRecentAndTopFoodsQuery,
 } from '@/hooks/Foods/useFoods.ts';
 import { useCustomNutrients } from '@/hooks/Foods/useCustomNutrients.ts';
@@ -55,6 +57,7 @@ import {
 import { useFavoritesQuery } from '@/hooks/Foods/useFavorites.ts';
 import FoodResultCard from './FoodResultCard.tsx';
 import { BarcodeScannerDialog } from './BarcodeScannerDialog.tsx';
+import { CsvImportDialog } from './CsvImportDialog.tsx';
 import { FoodFormDialog } from './FoodFormDialog.tsx';
 import { useExternalProvidersQuery } from '@/hooks/Settings/useExternalProviderSettings.ts';
 import {
@@ -1065,6 +1068,14 @@ const EnhancedFoodSearch = ({
     }
   };
 
+  const handleCsvImport = async (
+    foods: FoodDataForBackend[],
+    overwrite: boolean
+  ) => {
+    await importCsvMutation({ foods, overwrite });
+    setShowImportFromCsvDialog(false);
+  };
+
   const handleNutritionixEdit = async (
     item: NutritionixItem,
     providerIdOverride?: string
@@ -1577,8 +1588,8 @@ const EnhancedFoodSearch = ({
                     : !anyProviderLoading && (
                         <div className="text-center py-4 text-gray-500 text-sm">
                           {t('enhancedFoodSearch.noResults', 'No results')}
-                      </div>
-                    )}
+                        </div>
+                      )}
 
                   <SectionHeader>
                     {t('enhancedFoodSearch.bySource', 'By Source')}
@@ -1717,6 +1728,11 @@ const EnhancedFoodSearch = ({
         selectedProviderId={selectedBarcodeProvider}
         onProviderChange={setBarcodeProviderId}
         providers={foodDataProviders}
+      />
+      <CsvImportDialog
+        isOpen={showImportFromCsvDialog}
+        onOpenChange={setShowImportFromCsvDialog}
+        onSave={handleCsvImport}
       />
     </div>
   );

@@ -140,7 +140,6 @@ const ICON_MAP = {
 
   // Wellness / Cycle
   'wellness': { sf: 'heart.circle', ion: 'heart-circle-outline' },
-  'calendar': { sf: 'calendar', ion: 'calendar-outline' },
 } as const;
 
 export type IconName = keyof typeof ICON_MAP;

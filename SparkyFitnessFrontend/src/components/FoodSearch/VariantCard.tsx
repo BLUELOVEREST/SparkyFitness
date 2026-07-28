@@ -38,7 +38,6 @@ import { NutrientGrid } from './NutrientFormGrid';
 import { AiEstimateSection } from '@/components/FoodUnitSelector/AiEstimateSection';
 import type { AiEstimateData } from '@/hooks/Foods/useUnitConversion';
 import { NumericInput } from '../NumericInput';
-import { formatServingLabel } from '@/utils/foodServing';
 
 // Tone classes for the AI provenance badge ("Good/Fair/Rough estimate").
 // `green` (true grass-green, hue ~142°) replaces `emerald` (~160°,
