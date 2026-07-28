@@ -7,7 +7,12 @@ export const dailySummaryQueryKey = (date: string) => ['dailySummary', date] as 
 export const activeMealPlanDayQueryKey = (date: string) =>
   ['activeMealPlanDay', date] as const;
 
+export const mealPlanTemplatesQueryKey = ['mealPlanTemplates'] as const;
+
 export const measurementsQueryKey = (date: string) => ['measurements', date] as const;
+
+export const mostRecentMeasurementQueryKey = (measurementType: string) =>
+  ['measurements', 'mostRecent', measurementType] as const;
 
 export const preferencesQueryKey = ['userPreferences'] as const;
 
@@ -96,6 +101,11 @@ export const workoutPresetSearchQueryKey = (searchTerm: string) => ['workoutPres
 
 export const workoutPresetsLibraryQueryKey = (searchTerm: string) =>
   ['workoutPresetsLibrary', searchTerm] as const;
+
+export const workoutPlanTemplatesQueryKey = ['workoutPlanTemplates'] as const;
+
+export const activeTrainingFocusPlanQueryKey = (date: string) =>
+  ['workoutPlanTemplates', 'activeTrainingFocus', date] as const;
 
 export const activeAiServiceSettingQueryKey = ['ai-service-settings', 'active'] as const;
 export const userAiConfigAllowedQueryKey = ['ai-service-settings', 'allow-user-ai-config'] as const;

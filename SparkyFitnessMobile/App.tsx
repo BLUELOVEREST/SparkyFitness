@@ -45,6 +45,10 @@ import MealsLibraryScreen from './src/screens/MealsLibraryScreen';
 import ExercisesLibraryScreen from './src/screens/ExercisesLibraryScreen';
 import WorkoutPresetsLibraryScreen from './src/screens/WorkoutPresetsLibraryScreen';
 import KitchenScreen from './src/screens/KitchenScreen';
+import MealPlanTemplatesScreen from './src/screens/MealPlanTemplatesScreen';
+import MealPlanTemplateFormScreen from './src/screens/MealPlanTemplateFormScreen';
+import WorkoutPlanTemplatesScreen from './src/screens/WorkoutPlanTemplatesScreen';
+import WorkoutPlanTemplateFormScreen from './src/screens/WorkoutPlanTemplateFormScreen';
 import FoodDetailScreen from './src/screens/FoodDetailScreen';
 import MealDetailScreen from './src/screens/MealDetailScreen';
 import ExerciseDetailScreen from './src/screens/ExerciseDetailScreen';
@@ -194,6 +198,10 @@ const SafeMealsLibrary = withErrorBoundary(MealsLibraryScreen, 'MealsLibrary', {
 const SafeExercisesLibrary = withErrorBoundary(ExercisesLibraryScreen, 'ExercisesLibrary', { canGoBack: true });
 const SafeWorkoutPresetsLibrary = withErrorBoundary(WorkoutPresetsLibraryScreen, 'WorkoutPresetsLibrary', { canGoBack: true });
 const SafeKitchen = withErrorBoundary(KitchenScreen, 'Kitchen', { canGoBack: true });
+const SafeMealPlanTemplates = withErrorBoundary(MealPlanTemplatesScreen, 'MealPlanTemplates', { canGoBack: true });
+const SafeMealPlanTemplateForm = withErrorBoundary(MealPlanTemplateFormScreen, 'MealPlanTemplateForm', { canGoBack: true });
+const SafeWorkoutPlanTemplates = withErrorBoundary(WorkoutPlanTemplatesScreen, 'WorkoutPlanTemplates', { canGoBack: true });
+const SafeWorkoutPlanTemplateForm = withErrorBoundary(WorkoutPlanTemplateFormScreen, 'WorkoutPlanTemplateForm', { canGoBack: true });
 const SafeFoodDetail = withErrorBoundary(FoodDetailScreen, 'FoodDetail', { canGoBack: true });
 const SafeMealDetail = withErrorBoundary(MealDetailScreen, 'MealDetail', { canGoBack: true });
 const SafeExerciseDetail = withErrorBoundary(ExerciseDetailScreen, 'ExerciseDetail', { canGoBack: true });
@@ -903,6 +911,26 @@ function AppContent() {
             name="Kitchen"
             component={SafeKitchen}
             options={createStackScreenOptions('Kitchen', { headerBackTitle: 'Library' })}
+          />
+          <Stack.Screen
+            name="MealPlanTemplates"
+            component={SafeMealPlanTemplates}
+            options={createStackScreenOptions('Meal Plans', { headerBackTitle: 'Library' })}
+          />
+          <Stack.Screen
+            name="MealPlanTemplateForm"
+            component={SafeMealPlanTemplateForm}
+            options={createStackScreenOptions('New Meal Plan', { headerBackTitle: 'Meal Plans' })}
+          />
+          <Stack.Screen
+            name="WorkoutPlanTemplates"
+            component={SafeWorkoutPlanTemplates}
+            options={createStackScreenOptions('Workout Plans', { headerBackTitle: 'Library' })}
+          />
+          <Stack.Screen
+            name="WorkoutPlanTemplateForm"
+            component={SafeWorkoutPlanTemplateForm}
+            options={createStackScreenOptions('Training Focus Plan', { headerBackTitle: 'Workout Plans' })}
           />
           <Stack.Screen
             name="WorkoutPresetDetail"

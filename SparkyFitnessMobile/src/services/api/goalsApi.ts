@@ -1,5 +1,9 @@
 import { apiFetch } from './apiClient';
-import type { DailyGoals } from '../../types/goals';
+import type {
+  CarbCycleInput,
+  CarbCycleWeekResult,
+  DailyGoals,
+} from '../../types/goals';
 
 /**
  * Fetches daily goals for a given date.
@@ -11,3 +15,14 @@ export const fetchDailyGoals = async (date: string): Promise<DailyGoals> => {
     operation: 'fetch goals',
   });
 };
+
+export const previewCarbCycleWeek = async (
+  input: CarbCycleInput,
+): Promise<CarbCycleWeekResult> =>
+  apiFetch<CarbCycleWeekResult>({
+    endpoint: '/api/weekly-goal-plans/carb-cycle/preview',
+    serviceName: 'Goals API',
+    operation: 'preview carb cycle week',
+    method: 'POST',
+    body: input,
+  });

@@ -1,10 +1,15 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import KitchenScreen from '../../src/screens/KitchenScreen';
 import { useActiveMealPlanDay } from '../../src/hooks/useActiveMealPlanDay';
+import { usePreferences } from '../../src/hooks/usePreferences';
 
 jest.mock('../../src/hooks/useActiveMealPlanDay', () => ({
   useActiveMealPlanDay: jest.fn(),
+}));
+
+jest.mock('../../src/hooks/usePreferences', () => ({
+  usePreferences: jest.fn(),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -15,12 +20,28 @@ jest.mock('uniwind', () => ({
   useCSSVariable: () => '#2563EB',
 }));
 
+jest.mock('../../src/utils/dateUtils', () => {
+  const actual = jest.requireActual('../../src/utils/dateUtils');
+  return {
+    ...actual,
+    getTodayDate: () => '2026-07-15',
+  };
+});
+
 const mockUseActiveMealPlanDay =
   useActiveMealPlanDay as jest.MockedFunction<typeof useActiveMealPlanDay>;
+const mockUsePreferences = usePreferences as jest.MockedFunction<typeof usePreferences>;
 
 describe('KitchenScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUsePreferences.mockReturnValue({
+      preferences: { language: 'en' },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+    });
   });
 
   it('renders active carb-cycle planned meals', () => {
@@ -42,7 +63,18 @@ describe('KitchenScreen', () => {
             logged: false,
             target: { calories: 300, carbs: 30, protein: 25, fat: 8 },
             items: [
-              { id: 'egg', type: 'food', name: '鸡蛋', amountLabel: '2 个' },
+              { id: 'egg', type: 'food', name: '鸡蛋', quantity: 100, unit: 'g', amountLabel: '100 g' },
+            ],
+          },
+          {
+            key: 'lunch',
+            mealTypeId: 'meal-type-2',
+            mealType: 'lunch',
+            label: 'Lunch',
+            logged: false,
+            target: { calories: 400, carbs: 50, protein: 30, fat: 10 },
+            items: [
+              { id: 'egg', type: 'food', name: '鸡蛋', quantity: 50, unit: 'g', amountLabel: '50 g' },
             ],
           },
         ],
@@ -55,7 +87,68 @@ describe('KitchenScreen', () => {
 
     expect(screen.getByText('Weekly Carb Cycle')).toBeTruthy();
     expect(screen.getByText('Breakfast')).toBeTruthy();
-    expect(screen.getByText('鸡蛋')).toBeTruthy();
-    expect(screen.getByText('2 个')).toBeTruthy();
+    expect(screen.getByText('Lunch')).toBeTruthy();
+    expect(screen.getByText('Ingredient Summary')).toBeTruthy();
+    expect(screen.getAllByText('鸡蛋').length).toBeGreaterThan(0);
+    expect(screen.getByText('150 g')).toBeTruthy();
+    expect(screen.getByText('Breakfast · Lunch')).toBeTruthy();
+  });
+
+  it('lets the user switch to another day in the current week', () => {
+    mockUseActiveMealPlanDay.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+      activeMealPlanDay: {
+        mode: 'carbCycle',
+        date: '2026-07-15',
+        planName: 'Weekly Carb Cycle',
+        meals: [],
+      },
+    });
+
+    const screen = render(
+      <KitchenScreen navigation={{} as never} route={{} as never} />,
+    );
+
+    expect(mockUseActiveMealPlanDay).toHaveBeenLastCalledWith({
+      date: '2026-07-15',
+    });
+
+    fireEvent.press(screen.getByText('Thu'));
+
+    expect(mockUseActiveMealPlanDay).toHaveBeenLastCalledWith({
+      date: '2026-07-16',
+    });
+  });
+
+  it('uses Simplified Chinese labels for kitchen text', () => {
+    mockUsePreferences.mockReturnValue({
+      preferences: { language: 'zh-CN' },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    mockUseActiveMealPlanDay.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+      activeMealPlanDay: {
+        mode: 'carbCycle',
+        date: '2026-07-15',
+        planName: null,
+        meals: [],
+      },
+    });
+
+    const screen = render(
+      <KitchenScreen navigation={{} as never} route={{} as never} />,
+    );
+
+    expect(screen.getByText('厨房')).toBeTruthy();
+    expect(screen.getByText('没有计划餐')).toBeTruthy();
   });
 });

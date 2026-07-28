@@ -1,4 +1,4 @@
-import { fetchDailyGoals } from '../../src/services/api/goalsApi';
+import { fetchDailyGoals, previewCarbCycleWeek } from '../../src/services/api/goalsApi';
 import { getActiveServerConfig, ServerConfig } from '../../src/services/storage';
 
 jest.mock('../../src/services/storage', () => ({
@@ -117,6 +117,52 @@ describe('goalsApi', () => {
 
       await expect(fetchDailyGoals(testDate)).rejects.toThrow(
         'Network request failed'
+      );
+    });
+  });
+
+  describe('previewCarbCycleWeek', () => {
+    const testConfig: ServerConfig = {
+      id: 'test-id',
+      url: 'https://example.com',
+      apiKey: 'test-api-key-12345',
+    };
+
+    test('posts carb cycle input to the preview endpoint', async () => {
+      const payload = {
+        weekStartDate: '2026-07-13',
+        bodyWeightKg: 80,
+        carbsPerKg: 2,
+        proteinPerKg: 1.5,
+        fatPerKg: 0.8,
+      };
+      const responseData = {
+        weekStartDate: '2026-07-13',
+        weekTotals: { calories: 1000, carbs: 100, protein: 100, fat: 50 },
+        days: [],
+      };
+
+      mockGetActiveServerConfig.mockResolvedValue(testConfig);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(responseData),
+      });
+
+      const result = await previewCarbCycleWeek(payload);
+
+      expect(result).toEqual(responseData);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://example.com/api/weekly-goal-plans/carb-cycle/preview',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer test-api-key-12345',
+
+            'X-Meal-Model-Version': '2',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        }),
       );
     });
   });

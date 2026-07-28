@@ -1,6 +1,17 @@
-import { renderHook, waitFor } from '@testing-library/react-native';
-import { useActiveMealPlanDay } from '../../src/hooks/useActiveMealPlanDay';
-import { fetchActiveMealPlanDay } from '../../src/services/api/mealPlanTemplatesApi';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import Toast from 'react-native-toast-message';
+import {
+  useActiveMealPlanDay,
+  useLogActiveMealPlanMeal,
+} from '../../src/hooks/useActiveMealPlanDay';
+import {
+  fetchActiveMealPlanDay,
+  logActiveMealPlanMealToDiary,
+} from '../../src/services/api/mealPlanTemplatesApi';
+import {
+  activeMealPlanDayQueryKey,
+  dailySummaryQueryKey,
+} from '../../src/hooks/queryKeys';
 import { createQueryWrapper, createTestQueryClient, type QueryClient } from './queryTestUtils';
 
 jest.mock('../../src/services/api/mealPlanTemplatesApi', () => ({
@@ -8,8 +19,14 @@ jest.mock('../../src/services/api/mealPlanTemplatesApi', () => ({
   logActiveMealPlanMealToDiary: jest.fn(),
 }));
 
+jest.mock('react-native-toast-message', () => ({
+  show: jest.fn(),
+}));
+
 const mockFetchActiveMealPlanDay =
   fetchActiveMealPlanDay as jest.MockedFunction<typeof fetchActiveMealPlanDay>;
+const mockLogActiveMealPlanMealToDiary =
+  logActiveMealPlanMealToDiary as jest.MockedFunction<typeof logActiveMealPlanMealToDiary>;
 
 describe('useActiveMealPlanDay', () => {
   let queryClient: QueryClient;
@@ -44,6 +61,39 @@ describe('useActiveMealPlanDay', () => {
       mode: 'carbCycle',
       date: '2026-07-15',
       meals: [],
+    });
+  });
+
+  it('logs a planned meal and refreshes the active plan day and diary summary', async () => {
+    mockLogActiveMealPlanMealToDiary.mockResolvedValueOnce({
+      foodEntries: [],
+    });
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(() => useLogActiveMealPlanMeal(), {
+      wrapper: createQueryWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        date: '2026-07-15',
+        mealTypeId: 'meal-type-pre-workout',
+      });
+    });
+
+    expect(mockLogActiveMealPlanMealToDiary).toHaveBeenCalledWith(
+      '2026-07-15',
+      'meal-type-pre-workout',
+    );
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: activeMealPlanDayQueryKey('2026-07-15'),
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: dailySummaryQueryKey('2026-07-15'),
+    });
+    expect(Toast.show).toHaveBeenCalledWith({
+      type: 'success',
+      text1: 'Planned meal logged',
     });
   });
 });

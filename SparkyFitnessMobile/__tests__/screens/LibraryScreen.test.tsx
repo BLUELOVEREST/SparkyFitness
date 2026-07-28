@@ -310,6 +310,12 @@ describe('LibraryScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('WorkoutPresetsLibrary');
   });
 
+  it('navigates to WorkoutPlanTemplates when the Workout Plans row is pressed', () => {
+    const screen = renderScreen();
+    fireEvent.press(screen.getByText('Workout Plans'));
+    expect(navigation.navigate).toHaveBeenCalledWith('WorkoutPlanTemplates');
+  });
+
   it('does not queue multiple create screens during the same navigation transition', () => {
     const screen = renderScreen();
 

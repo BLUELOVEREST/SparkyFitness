@@ -4,12 +4,14 @@ export {
   serverConfigsQueryKey,
   dailySummaryQueryKey,
   measurementsQueryKey,
+  mostRecentMeasurementQueryKey,
   preferencesQueryKey,
   waterContainersQueryKey,
   foodsQueryKey,
   foodSearchQueryKey,
   foodsLibraryQueryKey,
   mealsQueryKey,
+  mealPlanTemplatesQueryKey,
   mealDetailQueryKey,
   recentMealsQueryKeyRoot,
   recentMealsQueryKey,
@@ -72,6 +74,14 @@ export { useDebounce } from './useDebounce';
 export { useFoodSearch } from './useFoodSearch';
 export { useFoodsLibrary } from './useFoodsLibrary';
 export { useMeals, useRecentMeals, useTopMeals, useMeal, useCreateMeal, useUpdateMeal, useDeleteMeal } from './useMeals';
+export {
+  useMealPlanTemplates,
+  useMostRecentWeight,
+  useCreateMealPlanTemplate,
+  usePreviewCarbCycleWeek,
+  useUpdateMealPlanTemplate,
+  useDeleteMealPlanTemplate,
+} from './useMealPlanTemplates';
 export { useMealSearch } from './useMealSearch';
 export { useExternalProviders } from './useExternalProviders';
 export { useExternalFoodSearch } from './useExternalFoodSearch';
@@ -144,4 +154,3 @@ export { useSymptomEntries, useSymptomMutations } from './useSymptoms';
 export { useCycleHistory } from './useCycleHistory';
 export { useCycleOverview, useCycleInsights, useCycleCorrelations } from './useCycleInsights';
 export { useCycleTests, useCycleTestMutations } from './useCycleTests';
-

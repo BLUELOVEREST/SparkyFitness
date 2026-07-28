@@ -13,12 +13,14 @@ import type { Exercise } from './exercise';
 import type { Meal, MealIngredientDraft } from './meals';
 import type { FoodEntryMeal } from './foodEntryMeals';
 import type { ActiveMealPlanDayMeal } from './mealPlan';
+import type { MealPlanTemplate } from './mealPlan';
 import type {
   EquivalentUnit,
   FoodUnitSelectionResult,
   FoodUnitVariant,
 } from './foodUnitVariants';
 import type { WorkoutPreset } from './workoutPresets';
+import type { WorkoutPlanTemplate } from './workoutPlan';
 import type { MealTypeKey } from '../utils/mealNutrition';
 import type { SaveFoodPayload } from '../services/api/foodsApi';
 
@@ -44,6 +46,14 @@ export type RootStackParamList = {
   ExercisesLibrary: undefined;
   WorkoutPresetsLibrary: undefined;
   Kitchen: undefined;
+  MealPlanTemplates: undefined;
+  MealPlanTemplateForm:
+    | { mode: 'create' }
+    | { mode: 'edit'; template: MealPlanTemplate };
+  WorkoutPlanTemplates: undefined;
+  WorkoutPlanTemplateForm:
+    | { mode: 'create' }
+    | { mode: 'edit'; template: WorkoutPlanTemplate };
   WorkoutPresetDetail: { preset: WorkoutPreset; updatedPreset?: WorkoutPreset };
   WorkoutPresetForm:
     | { mode: 'create-preset'; selectedExercise?: Exercise; selectionNonce?: number }

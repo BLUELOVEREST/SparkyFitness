@@ -8,9 +8,12 @@ import Icon, { type IconName } from './Icon';
 import Button from './ui/Button';
 import { MEAL_TYPES, MEAL_CONFIG } from '../constants/meals';
 import SwipeableFoodRow from './SwipeableFoodRow';
+import { usePreferences } from '../hooks/usePreferences';
+import { createMobileTranslator } from '../utils/mobileI18n';
 import {
   calculateEntryNutrition,
   calculateMealNutrition,
+  getFoodEntryMealTypeKey,
   groupFoodEntriesByMealType,
   getMealPercentage,
   type MealTypeKey,
@@ -34,8 +37,11 @@ interface MealSectionProps {
   entries: FoodEntry[];
   goals?: DailyGoals;
   calorieGoal?: number;
+  label?: string;
+  target?: ActiveMealPlanDayMeal['target'];
   onAdjustServing?: (entry: FoodEntry) => void;
   onPressMealType?: (mealType: MealTypeKey, entries: FoodEntry[]) => void;
+  targetLabel?: string;
 }
 
 const MealSection: React.FC<MealSectionProps> = ({
@@ -43,8 +49,11 @@ const MealSection: React.FC<MealSectionProps> = ({
   entries,
   goals,
   calorieGoal,
+  label,
+  target,
   onAdjustServing,
   onPressMealType,
+  targetLabel = 'Target',
 }) => {
   const config = MEAL_CONFIG[mealType] || { label: mealType, icon: 'meal-snack' as IconName };
   const accentPrimary = useCSSVariable('--color-accent-primary') as string;
@@ -59,7 +68,7 @@ const MealSection: React.FC<MealSectionProps> = ({
   const headerContent = (
     <>
       <Icon name={config.icon} size={18} color={accentPrimary} />
-      <Text className="text-base font-bold text-text-secondary flex-1">{config.label}</Text>
+      <Text className="text-base font-bold text-text-secondary flex-1">{label ?? config.label}</Text>
       {(totalCalories > 0 || targetCalories > 0) && (
         <View className="bg-accent-primary/5 rounded-full px-2.5 py-0.5">
           <Text className="text-xs text-accent-primary font-semibold">
@@ -90,6 +99,11 @@ const MealSection: React.FC<MealSectionProps> = ({
           {headerContent}
         </View>
       )}
+      {target && (
+        <Text className="text-xs text-text-muted mb-3">
+          {targetLabel}: C {formatMacroTarget(target.carbs)} / P {formatMacroTarget(target.protein)} / F {formatMacroTarget(target.fat)}
+        </Text>
+      )}
       {entries.map((entry, index) => {
         const nutrition = calculateEntryNutrition(entry);
         return (
@@ -107,12 +121,42 @@ const MealSection: React.FC<MealSectionProps> = ({
 
 const formatMacroTarget = (value: number) => `${Math.round(value)}g`;
 
+const normalizeMealName = (value?: string | null) =>
+  (value ?? '').trim().toLowerCase();
+
+const matchesPlannedMeal = (
+  entry: FoodEntry,
+  plannedMeal: ActiveMealPlanDayMeal,
+) => {
+  if (entry.meal_type_id && plannedMeal.mealTypeId && entry.meal_type_id === plannedMeal.mealTypeId) {
+    return true;
+  }
+
+  const entryMealType = normalizeMealName(entry.meal_type);
+  return [
+    plannedMeal.mealType,
+    plannedMeal.key,
+    plannedMeal.label,
+  ].some((value) => normalizeMealName(value) === entryMealType);
+};
+
 const PlannedMealCard: React.FC<{
   meal: ActiveMealPlanDayMeal;
   isLogging?: boolean;
   onLog?: (meal: ActiveMealPlanDayMeal) => void;
   onPress?: (meal: ActiveMealPlanDayMeal) => void;
-}> = ({ meal, isLogging, onLog, onPress }) => {
+  targetLabel: string;
+  logFromPlanLabel: string;
+  loggedFromPlanLabel: string;
+}> = ({
+  meal,
+  isLogging,
+  onLog,
+  onPress,
+  targetLabel,
+  logFromPlanLabel,
+  loggedFromPlanLabel,
+}) => {
   const accentPrimary = useCSSVariable('--color-accent-primary') as string;
   const isLogDisabled = meal.logged || meal.items.length === 0 || !meal.mealTypeId || isLogging;
 
@@ -137,7 +181,7 @@ const PlannedMealCard: React.FC<{
         {onPress && <Icon name="chevron-forward" size={14} color={accentPrimary} />}
       </Pressable>
       <Text className="text-xs text-text-muted mb-3">
-        C {formatMacroTarget(meal.target.carbs)} / P {formatMacroTarget(meal.target.protein)} / F {formatMacroTarget(meal.target.fat)}
+        {targetLabel}: C {formatMacroTarget(meal.target.carbs)} / P {formatMacroTarget(meal.target.protein)} / F {formatMacroTarget(meal.target.fat)}
       </Text>
       {meal.items.map((item) => (
         <View key={`${item.type}-${item.id}`} className="flex-row justify-between py-1">
@@ -151,7 +195,7 @@ const PlannedMealCard: React.FC<{
         disabled={isLogDisabled}
         onPress={() => onLog?.(meal)}
       >
-        {meal.logged ? 'Logged from Plan' : 'Log from Plan'}
+        {meal.logged ? loggedFromPlanLabel : logFromPlanLabel}
       </Button>
     </View>
   );
@@ -169,24 +213,52 @@ const FoodSummary: React.FC<FoodSummaryProps> = ({
   onAdjustServing,
   onPressMealType,
 }) => {
-  const plannedMealCards = plannedMeals?.filter((meal) => meal.items.length > 0) ?? [];
+  const { preferences } = usePreferences();
+  const t = createMobileTranslator(preferences?.language);
+  const plannedMealsWithItems = plannedMeals?.filter((meal) => meal.items.length > 0) ?? [];
 
-  if (foodEntries.length === 0 && plannedMealCards.length === 0) {
+  if (foodEntries.length === 0 && plannedMealsWithItems.length === 0) {
     return (
       <Pressable onPress={onAddFood} className="bg-surface rounded-xl p-4 mb-2 shadow-sm items-center py-6">
-        <Text className="text-text-muted text-base">Tap to add food</Text>
+        <Text className="text-text-muted text-base">
+          {t('foodSummary.tapToAddFood')}
+        </Text>
       </Pressable>
     );
   }
 
   const grouped = groupFoodEntriesByMealType(foodEntries);
-  const mealTypesWithEntries = MEAL_TYPES.filter((mealType) => grouped[mealType].length > 0);
-  const hasOther = grouped.other.length > 0;
+  const plannedLoggedMealSections = plannedMealsWithItems
+    .map((meal) => ({
+      meal,
+      entries: foodEntries.filter((entry) => matchesPlannedMeal(entry, meal)),
+    }))
+    .filter((section) => section.entries.length > 0);
+  const plannedLoggedMealKeys = new Set(
+    plannedLoggedMealSections.map((section) => section.meal.key),
+  );
+  const plannedMealCards = plannedMealsWithItems.filter(
+    (meal) => !plannedLoggedMealKeys.has(meal.key),
+  );
+  const plannedLoggedEntryIds = new Set(
+    plannedLoggedMealSections.flatMap((section) => section.entries.map((entry) => entry.id)),
+  );
+  const mealTypesWithEntries = MEAL_TYPES.filter((mealType) =>
+    grouped[mealType].some((entry) => !plannedLoggedEntryIds.has(entry.id))
+  );
+  const hasOther = grouped.other.some((entry) => !plannedLoggedEntryIds.has(entry.id));
 
-  if (mealTypesWithEntries.length === 0 && !hasOther && plannedMealCards.length === 0) {
+  if (
+    mealTypesWithEntries.length === 0 &&
+    !hasOther &&
+    plannedMealCards.length === 0 &&
+    plannedLoggedMealSections.length === 0
+  ) {
     return (
       <Pressable onPress={onAddFood} className="bg-surface rounded-xl p-4 mb-2 shadow-sm items-center py-6">
-        <Text className="text-text-muted text-base">Tap to add food</Text>
+        <Text className="text-text-muted text-base">
+          {t('foodSummary.tapToAddFood')}
+        </Text>
       </Pressable>
     );
   }
@@ -200,13 +272,28 @@ const FoodSummary: React.FC<FoodSummaryProps> = ({
           isLogging={isLoggingPlannedMeal}
           onLog={onLogPlannedMeal}
           onPress={onPressPlannedMeal}
+          targetLabel={t('foodSummary.target')}
+          logFromPlanLabel={t('foodSummary.logFromPlan')}
+          loggedFromPlanLabel={t('foodSummary.loggedFromPlan')}
+        />
+      ))}
+      {plannedLoggedMealSections.map(({ meal, entries }) => (
+        <MealSection
+          key={`logged-${meal.mealTypeId ?? meal.key}`}
+          mealType={getFoodEntryMealTypeKey(entries[0])}
+          label={meal.label}
+          target={meal.target}
+          entries={entries}
+          onAdjustServing={onAdjustServing}
+          onPressMealType={onPressMealType}
+          targetLabel={t('foodSummary.target')}
         />
       ))}
       {mealTypesWithEntries.map((mealType) => (
         <MealSection
           key={mealType}
           mealType={mealType}
-          entries={grouped[mealType]}
+          entries={grouped[mealType].filter((entry) => !plannedLoggedEntryIds.has(entry.id))}
           goals={goals}
           calorieGoal={calorieGoal}
           onAdjustServing={onAdjustServing}
@@ -216,7 +303,7 @@ const FoodSummary: React.FC<FoodSummaryProps> = ({
       {hasOther && (
         <MealSection
           mealType="other"
-          entries={grouped.other}
+          entries={grouped.other.filter((entry) => !plannedLoggedEntryIds.has(entry.id))}
           goals={goals}
           calorieGoal={calorieGoal}
           onAdjustServing={onAdjustServing}

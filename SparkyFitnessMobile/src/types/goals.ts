@@ -29,3 +29,70 @@ export interface DailyGoals {
   custom_nutrients?: Record<string, string | number>;
   custom_meal_percentages?: Record<string, number>;
 }
+
+export type CarbCycleDayType = 'high' | 'medium' | 'low';
+export type CarbCycleTrainingSlot =
+  | 'rest'
+  | 'morning'
+  | 'noon'
+  | 'afternoon'
+  | 'evening';
+
+export type CarbCycleTrainingSlots = [
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+  CarbCycleTrainingSlot,
+];
+
+export interface CarbCycleTrainingSession {
+  day_of_week?: number;
+  time_slot: 'morning' | 'noon' | 'afternoon' | 'evening';
+  training_focus: string;
+  is_primary: boolean;
+}
+
+export interface CarbCycleInput {
+  weekStartDate: string;
+  bodyWeightKg: number;
+  carbsPerKg: number;
+  proteinPerKg: number;
+  fatPerKg: number;
+  trainingSlots?: CarbCycleTrainingSlots;
+  trainingSessionsByDay?: CarbCycleTrainingSession[][];
+}
+
+export interface CarbCycleMealTarget {
+  slotKey: 'morning' | 'noon' | 'afternoon' | 'evening';
+  label: string;
+  calories: number;
+  carbs: number;
+  protein: number;
+  fat: number;
+}
+
+export interface CarbCycleDayTarget {
+  date: string;
+  dayType: CarbCycleDayType;
+  calories: number;
+  carbs: number;
+  protein: number;
+  fat: number;
+  trainingSlot: CarbCycleTrainingSlot;
+  trainingSessions?: CarbCycleTrainingSession[];
+  meals: CarbCycleMealTarget[];
+}
+
+export interface CarbCycleWeekResult {
+  weekStartDate: string;
+  weekTotals: {
+    calories: number;
+    carbs: number;
+    protein: number;
+    fat: number;
+  };
+  days: CarbCycleDayTarget[];
+}

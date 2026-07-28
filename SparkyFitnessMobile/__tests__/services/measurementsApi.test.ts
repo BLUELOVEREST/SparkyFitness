@@ -4,6 +4,7 @@ import {
   fetchWaterContainers,
   changeWaterIntake,
   upsertCheckIn,
+  fetchMostRecentMeasurement,
 } from '../../src/services/api/measurementsApi';
 import { getActiveServerConfig, ServerConfig } from '../../src/services/storage';
 
@@ -157,6 +158,48 @@ describe('measurementsApi', () => {
       await expect(fetchMeasurements(testDate)).rejects.toThrow(
         'Network request failed'
       );
+    });
+  });
+
+  describe('fetchMostRecentMeasurement', () => {
+    const testConfig: ServerConfig = {
+      id: 'test-id',
+      url: 'https://example.com',
+      apiKey: 'test-api-key-12345',
+    };
+
+    test('fetches the most recent measurement by type', async () => {
+      const responseData = { entry_date: '2026-07-15', weight: 80 };
+      mockGetActiveServerConfig.mockResolvedValue(testConfig);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(responseData),
+      });
+
+      const result = await fetchMostRecentMeasurement('weight');
+
+      expect(result).toEqual(responseData);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://example.com/api/measurements/most-recent/weight',
+        expect.objectContaining({
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer test-api-key-12345',
+
+            'X-Meal-Model-Version': '2',
+          },
+        }),
+      );
+    });
+
+    test('returns null when no measurement exists', async () => {
+      mockGetActiveServerConfig.mockResolvedValue(testConfig);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      await expect(fetchMostRecentMeasurement('weight')).resolves.toBeNull();
     });
   });
 

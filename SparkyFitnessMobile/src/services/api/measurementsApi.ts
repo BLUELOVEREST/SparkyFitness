@@ -14,6 +14,22 @@ export const fetchMeasurements = async (date: string): Promise<CheckInMeasuremen
   return (rows?.[0] ?? {}) as CheckInMeasurement;
 };
 
+export const fetchMostRecentMeasurement = async (
+  measurementType: string
+): Promise<CheckInMeasurement | null> => {
+  const measurement = await apiFetch<CheckInMeasurement | Record<string, never>>({
+    endpoint: `/api/measurements/most-recent/${encodeURIComponent(measurementType)}`,
+    serviceName: 'Measurements API',
+    operation: 'fetch most recent measurement',
+  });
+
+  if (!measurement || Object.keys(measurement).length === 0) {
+    return null;
+  }
+
+  return measurement as CheckInMeasurement;
+};
+
 /**
  * Fetches water intake for a given date.
  */

@@ -36,6 +36,7 @@ export interface FoodItem {
   provider_external_id?: string | null;
   provider_verified?: boolean;
   is_quick_food?: boolean;
+  macro_role?: 'carb' | 'protein' | 'fat' | null;
   // Present only on items returned by the favorites endpoint.
   favorited_at?: string;
   default_variant: FoodDefaultVariant;

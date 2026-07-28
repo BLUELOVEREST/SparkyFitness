@@ -305,6 +305,28 @@ const LibraryScreen: React.FC<LibraryScreenProps> = ({ navigation }) => {
           </Pressable>
           <Pressable
             className="px-4 py-4 flex-row items-center justify-between border-b border-border-subtle"
+            onPress={() => navigation.navigate('MealPlanTemplates')}
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
+          >
+            <Text className="text-base font-semibold text-text-primary">Meal Plans</Text>
+            <View className="flex-row items-center">
+              <Text className="text-text-secondary text-base mr-2">Weekly templates</Text>
+              <Icon name="chevron-forward" size={20} color="#999" />
+            </View>
+          </Pressable>
+          <Pressable
+            className="px-4 py-4 flex-row items-center justify-between border-b border-border-subtle"
+            onPress={() => navigation.navigate('WorkoutPlanTemplates')}
+            style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
+          >
+            <Text className="text-base font-semibold text-text-primary">Workout Plans</Text>
+            <View className="flex-row items-center">
+              <Text className="text-text-secondary text-base mr-2">Training focus</Text>
+              <Icon name="chevron-forward" size={20} color="#999" />
+            </View>
+          </Pressable>
+          <Pressable
+            className="px-4 py-4 flex-row items-center justify-between border-b border-border-subtle"
             onPress={() => navigation.navigate('ExercisesLibrary')}
             style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
           >
