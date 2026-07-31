@@ -8,6 +8,7 @@ export const getSupportedLanguages = (): string[] => {
     'da',
     'de',
     'en',
+    'zh-Hans',
     'es',
     'fi',
     'fr',
@@ -29,7 +30,6 @@ export const getSupportedLanguages = (): string[] => {
     'sv',
     'ta',
     'uk',
-    'zh-Hans',
   ];
 };
 

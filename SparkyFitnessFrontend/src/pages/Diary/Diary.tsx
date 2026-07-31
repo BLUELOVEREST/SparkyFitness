@@ -151,6 +151,13 @@ const Diary = () => {
       : effectiveGoals
     : undefined;
 
+  const carbCycleTargetCalories = isCarbCycleDiary
+    ? activeMealPlanDay.meals.reduce(
+        (total, meal) => total + meal.target.calories,
+        0
+      )
+    : undefined;
+
   const loading =
     customNutrientsLoading ||
     mealTypesLoading ||
@@ -380,7 +387,12 @@ const Diary = () => {
         key: 'energy',
         title: t('diary.dailyEnergyGoal', 'Daily Energy Goal'),
         icon: Flame,
-        render: () => <DailyProgress selectedDate={selectedDate} />,
+        render: () => (
+          <DailyProgress
+            selectedDate={selectedDate}
+            carbCycleTargetCalories={carbCycleTargetCalories}
+          />
+        ),
       },
       {
         key: 'nutrition',
@@ -490,6 +502,7 @@ const Diary = () => {
     visibleMealTypes,
     activeMealPlanDay,
     isCarbCycleDiary,
+    carbCycleTargetCalories,
     selectedDate,
     dayTotals,
     foodEntries,

@@ -50,7 +50,15 @@ import { ACTIVITY_MULTIPLIERS } from '@/utils/calorieCalculations';
 import { CalorieTargetBreakdown } from '@/components/CalorieTargetBreakdown';
 import { useNutrientGoalPreferences } from '@/hooks/Settings/useNutrientGoalPreferences';
 
-const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
+interface DailyProgressProps {
+  selectedDate: string;
+  carbCycleTargetCalories?: number;
+}
+
+const DailyProgress = ({
+  selectedDate,
+  carbCycleTargetCalories,
+}: DailyProgressProps) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const {
@@ -138,7 +146,14 @@ const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
   const exerciseSource = calorieBalance.exerciseSource;
   const tdeeProjection = calorieBalance.tdeeProjection;
 
-  const goalCalories = calorieBalance.goal;
+  const usesCarbCycleGoal =
+    carbCycleTargetCalories !== undefined &&
+    Number.isFinite(carbCycleTargetCalories) &&
+    carbCycleTargetCalories > 0;
+
+  const goalCalories = usesCarbCycleGoal
+    ? carbCycleTargetCalories
+    : calorieBalance.goal;
   const eatenCalories = calorieBalance.eaten;
 
   const otherExerciseCalories = exerciseData?.otherCalories || 0;
@@ -148,15 +163,21 @@ const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
   const backgroundSteps = Math.max(0, dailySteps - activitySteps);
   const stepCalories = summaryData.stepCalories || 0;
 
-  const totalCaloriesBurned = calorieBalance.burned;
-  const netCalories = calorieBalance.net;
+  const totalCaloriesBurned = usesCarbCycleGoal ? 0 : calorieBalance.burned;
+  const netCalories = usesCarbCycleGoal ? eatenCalories : calorieBalance.net;
 
   const projectedBurn = tdeeProjection?.projectedBurn ?? 0;
   const sparkyfitnessBurned = tdeeProjection?.baselineBurn ?? 0;
   const tdeeAdjustment = tdeeProjection?.adjustment ?? 0;
 
-  const caloriesRemaining = calorieBalance.remaining;
-  const calorieProgress = calorieBalance.progress;
+  const caloriesRemaining = usesCarbCycleGoal
+    ? goalCalories - eatenCalories
+    : calorieBalance.remaining;
+  const calorieProgress = usesCarbCycleGoal
+    ? goalCalories > 0
+      ? Math.min(100, Math.max(0, (eatenCalories / goalCalories) * 100))
+      : 0
+    : calorieBalance.progress;
   const exerciseCredited = computeExerciseCredited(
     caloriesRemaining,
     goalCalories,
@@ -321,7 +342,20 @@ const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
             }
           />
           {/* Energy Breakdown */}
-          <div className="grid grid-cols-3 gap-2 text-center text-sm">
+          {usesCarbCycleGoal && (
+            <div className="rounded-lg bg-emerald-50 p-2 text-center text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+              {t(
+                'exercise.dailyProgress.carbCycleGoalHint',
+                'Using today’s carb-cycle meal plan target.'
+              )}
+            </div>
+          )}
+
+          <div
+            className={`grid gap-2 text-center text-sm ${
+              usesCarbCycleGoal ? 'grid-cols-2' : 'grid-cols-3'
+            }`}
+          >
             {/* Eaten */}
             <div className="space-y-1">
               <div className="flex items-center justify-center text-lg font-bold text-green-600">
@@ -335,96 +369,98 @@ const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
             </div>
 
             {/* Burned (with Tooltip) */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="space-y-1 cursor-help">
-                    <div className="flex items-center justify-center text-lg font-bold text-orange-600">
-                      <Flame className="w-4 h-4 mr-1" />
-                      {display.burnedTotal}
+            {!usesCarbCycleGoal && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="space-y-1 cursor-help">
+                      <div className="flex items-center justify-center text-lg font-bold text-orange-600">
+                        <Flame className="w-4 h-4 mr-1" />
+                        {display.burnedTotal}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {t('exercise.dailyProgress.burned', 'burned')}{' '}
+                        {getEnergyUnitString(energyUnit)}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500">
-                      {t('exercise.dailyProgress.burned', 'burned')}{' '}
-                      {getEnergyUnitString(energyUnit)}
-                    </div>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent className="bg-black text-white text-xs p-2 rounded-md">
-                  <p>
-                    {t(
-                      'exercise.dailyProgress.burnedEnergyBreakdown',
-                      'Burned Energy Breakdown:'
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-black text-white text-xs p-2 rounded-md">
+                    <p>
+                      {t(
+                        'exercise.dailyProgress.burnedEnergyBreakdown',
+                        'Burned Energy Breakdown:'
+                      )}
+                    </p>
+
+                    {exerciseSource === 'logged' && (
+                      <p>
+                        {t(
+                          'exercise.dailyProgress.otherExerciseCalories',
+                          'Other Exercise: {{exerciseCalories}} {{energyUnit}}',
+                          {
+                            exerciseCalories: display.exerciseOther,
+                            energyUnit: getEnergyUnitString(energyUnit),
+                          }
+                        )}
+                      </p>
                     )}
-                  </p>
 
-                  {exerciseSource === 'logged' && (
-                    <p>
-                      {t(
-                        'exercise.dailyProgress.otherExerciseCalories',
-                        'Other Exercise: {{exerciseCalories}} {{energyUnit}}',
-                        {
-                          exerciseCalories: display.exerciseOther,
-                          energyUnit: getEnergyUnitString(energyUnit),
-                        }
-                      )}
-                    </p>
-                  )}
-
-                  {exerciseSource === 'active' && (
-                    <p>
-                      {t(
-                        'exercise.dailyProgress.activeCalories',
-                        'Active Calories: {{activeCaloriesFromExercise}} {{energyUnit}}',
-                        {
-                          activeCaloriesFromExercise: display.exerciseActive,
-                          energyUnit: getEnergyUnitString(energyUnit),
-                        }
-                      )}
-                    </p>
-                  )}
-
-                  {exerciseSource === 'steps' && (
-                    <p>
-                      {t(
-                        'exercise.dailyProgress.stepsCalories',
-                        'Steps: {{dailySteps}} = {{stepsCalories}} {{energyUnit}}',
-                        {
-                          dailySteps: backgroundSteps.toLocaleString(),
-                          stepsCalories: display.steps,
-                          energyUnit: getEnergyUnitString(energyUnit),
-                        }
-                      )}
-                    </p>
-                  )}
-
-                  {bmr && (
-                    <p>
-                      {t(
-                        'exercise.dailyProgress.bmrCalories',
-                        'BMR: {{bmr}} {{energyUnit}}',
-                        {
-                          bmr: display.bmr,
-                          energyUnit: getEnergyUnitString(energyUnit),
-                        }
-                      )}
-                      {bmrSource === 'external' &&
-                        ` (${t('exercise.dailyProgress.bmrSourceExternal', 'Health App')})`}
-                    </p>
-                  )}
-
-                  <p>
-                    {t(
-                      'exercise.dailyProgress.totalCaloriesBurned',
-                      'Total: {{totalCaloriesBurned}} {{energyUnit}}',
-                      {
-                        totalCaloriesBurned: display.burnedTotal,
-                        energyUnit: getEnergyUnitString(energyUnit),
-                      }
+                    {exerciseSource === 'active' && (
+                      <p>
+                        {t(
+                          'exercise.dailyProgress.activeCalories',
+                          'Active Calories: {{activeCaloriesFromExercise}} {{energyUnit}}',
+                          {
+                            activeCaloriesFromExercise: display.exerciseActive,
+                            energyUnit: getEnergyUnitString(energyUnit),
+                          }
+                        )}
+                      </p>
                     )}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+
+                    {exerciseSource === 'steps' && (
+                      <p>
+                        {t(
+                          'exercise.dailyProgress.stepsCalories',
+                          'Steps: {{dailySteps}} = {{stepsCalories}} {{energyUnit}}',
+                          {
+                            dailySteps: backgroundSteps.toLocaleString(),
+                            stepsCalories: display.steps,
+                            energyUnit: getEnergyUnitString(energyUnit),
+                          }
+                        )}
+                      </p>
+                    )}
+
+                    {bmr && (
+                      <p>
+                        {t(
+                          'exercise.dailyProgress.bmrCalories',
+                          'BMR: {{bmr}} {{energyUnit}}',
+                          {
+                            bmr: display.bmr,
+                            energyUnit: getEnergyUnitString(energyUnit),
+                          }
+                        )}
+                        {bmrSource === 'external' &&
+                          ` (${t('exercise.dailyProgress.bmrSourceExternal', 'Health App')})`}
+                      </p>
+                    )}
+
+                    <p>
+                      {t(
+                        'exercise.dailyProgress.totalCaloriesBurned',
+                        'Total: {{totalCaloriesBurned}} {{energyUnit}}',
+                        {
+                          totalCaloriesBurned: display.burnedTotal,
+                          energyUnit: getEnergyUnitString(energyUnit),
+                        }
+                      )}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
 
             {/* Goal */}
             <div className="space-y-1">
@@ -440,7 +476,7 @@ const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
           </div>
 
           {/* Detailed Burned Breakdown (Visible if data present) */}
-          {(exerciseSource !== 'none' || bmr) && (
+          {!usesCarbCycleGoal && (exerciseSource !== 'none' || bmr) && (
             <div className="text-center p-2 bg-blue-50 rounded-lg space-y-1">
               <div className="text-sm font-medium text-blue-700">
                 {t(
