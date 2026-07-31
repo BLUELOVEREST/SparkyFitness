@@ -1,17 +1,22 @@
-name: Build Android APK
+name: Build Eric Android Release APK
 
 on:
   push:
-    #    branches: [ main ]
     tags:
-      - "v*"
+      - "v*-eric.*"
   workflow_dispatch:
 
 jobs:
-  build:
+  build-release-apk:
+    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
+    env:
+      APP_VARIANT: production
+      NODE_ENV: production
+      GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8"
 
     steps:
       - name: Checkout repository
@@ -29,15 +34,16 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: |
-          pnpm install --frozen-lockfile
-          cd SparkyFitnessMobile
-          APP_VARIANT=production npx expo prebuild --platform android
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate production Android project
+        working-directory: SparkyFitnessMobile
+        run: pnpm exec expo prebuild --platform android --clean
 
       - name: Cache Gradle packages
         uses: actions/cache@v4
@@ -45,7 +51,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-Wrapper.properties') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
@@ -53,84 +59,35 @@ jobs:
         run: chmod +x SparkyFitnessMobile/android/gradlew
 
       - name: Create local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_HOME" > SparkyFitnessMobile/android/local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > SparkyFitnessMobile/android/local.properties
 
-      - name: Decode and setup keystore
-        if: github.event_name != 'pull_request'
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > SparkyFitnessMobile/android/app/sparky-fitness-release-key.keystore
-          echo "Keystore created at: $(pwd)/SparkyFitnessMobile/android/app/sparky-fitness-release-key.keystore"
-          ls -la SparkyFitnessMobile/android/app/sparky-fitness-release-key.keystore
+      - name: Verify production Android variant
+        run: grep -n "applicationId 'com.SparkyApps.SparkyFitnessMobile'" SparkyFitnessMobile/android/app/build.gradle
 
-      - name: Run Gradle to generate codegen (will fail but generates files)
-        run: |
-          cd SparkyFitnessMobile/android
-          ./gradlew :app:assembleDebug || true
+      - name: Build release APK
+        working-directory: SparkyFitnessMobile/android
+        run: ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2 --stacktrace
 
-      - name: Verify codegen was generated
-        run: |
-          if [ -d "SparkyFitnessMobile/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/" ]; then
-            echo "✅ Codegen directory exists"
-            ls -la SparkyFitnessMobile/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/
-          else
-            echo "❌ Codegen directory NOT found"
-          fi
-
-      - name: Build Release APK
-        if: github.event_name != 'pull_request'
-        run: |
-          cd SparkyFitnessMobile/android
-          ./gradlew :app:assembleRelease \
-            -PMYAPP_RELEASE_STORE_FILE=${{ github.workspace }}/SparkyFitnessMobile/android/app/sparky-fitness-release-key.keystore \
-            -PMYAPP_RELEASE_KEY_ALIAS=${{ secrets.RELEASE_KEY_ALIAS }} \
-            -PMYAPP_RELEASE_STORE_PASSWORD=${{ secrets.RELEASE_STORE_PASSWORD }} \
-            -PMYAPP_RELEASE_KEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD }} \
-            --stacktrace
-
-      - name: Get APK path
-        if: github.event_name != 'pull_request'
+      - name: Prepare APK artifact
         id: apk
         run: |
           APK_PATH=$(find SparkyFitnessMobile/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          echo "path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "name=$(basename $APK_PATH)" >> $GITHUB_OUTPUT
+          test -n "$APK_PATH"
+          APK_NAME="SparkyFitness-${GITHUB_REF_NAME:-manual}-arm64-release.apk"
+          cp "$APK_PATH" "$APK_NAME"
+          echo "name=$APK_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Build Release AAB
-        if: github.event_name != 'pull_request'
-        run: |
-          cd SparkyFitnessMobile/android
-          ./gradlew :app:bundleRelease \
-            -PMYAPP_RELEASE_STORE_FILE=${{ github.workspace }}/SparkyFitnessMobile/android/app/sparky-fitness-release-key.keystore \
-            -PMYAPP_RELEASE_KEY_ALIAS=${{ secrets.RELEASE_KEY_ALIAS }} \
-            -PMYAPP_RELEASE_STORE_PASSWORD=${{ secrets.RELEASE_STORE_PASSWORD }} \
-            -PMYAPP_RELEASE_KEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD }} \
-            --stacktrace
-
-      - name: Get AAB path
-        if: github.event_name != 'pull_request'
-        id: aab
-        run: |
-          AAB_PATH=$(find SparkyFitnessMobile/android/app/build/outputs/bundle/release -name "*.aab" | head -n 1)
-          echo "path=$AAB_PATH" >> $GITHUB_OUTPUT
-          echo "name=$(basename $AAB_PATH)" >> $GITHUB_OUTPUT
-
-      - name: Get version from package.json
-        if: github.event_name != 'pull_request'
-        id: version
-        run: |
-          VERSION=$(node -p "require('./SparkyFitnessMobile/package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: |
-            ${{ steps.apk.outputs.path }}
-            ${{ steps.aab.outputs.path }}
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ steps.apk.outputs.name }}
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.apk.outputs.name }}
           draft: false
           prerelease: false
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -42,6 +42,7 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, TabParamList } from '../types/navigation';
 import { useHeaderActionColors } from '../hooks/useHeaderActionColors';
+import { applyCarbCycleTargetsToDailySummary } from '../utils/carbCycleDailySummary';
 
 type DiaryScreenProps = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'Diary'>,
@@ -258,6 +259,8 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
       return null;
     }
 
+    const effectiveSummary = applyCarbCycleTargetsToDailySummary(summary, activeMealPlanDay);
+
     return (
       <ScrollView
         ref={scrollViewRef}
@@ -276,15 +279,15 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={accentColor} />
         }
       >
-        {(summary.foodEntries.length > 0 || summary.exerciseEntries.length > 0 || summary.calorieGoal > 0) && (
+        {(effectiveSummary.foodEntries.length > 0 || effectiveSummary.exerciseEntries.length > 0 || effectiveSummary.calorieGoal > 0) && (
           <DiaryCalorieMacroSummary
-            summary={summary}
+            summary={effectiveSummary}
             showNetCarbs={preferences?.show_net_carbs === true}
             customNutrientKeys={customNutrientKeys}
             customNutrients={customNutrients}
           />
         )}
-        {summary.foodEntries.length === 0 && summary.exerciseEntries.length === 0 && !hasAnyMeasurement && plannedMealsWithItems.length === 0 ? (
+        {effectiveSummary.foodEntries.length === 0 && effectiveSummary.exerciseEntries.length === 0 && !hasAnyMeasurement && plannedMealsWithItems.length === 0 ? (
           <>
             <EmptyDayIllustration />
             <Button
@@ -298,9 +301,9 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
         ) : (
           <>
             <FoodSummary
-              foodEntries={summary.foodEntries}
-              goals={summary.goals}
-              calorieGoal={summary.calorieGoal}
+              foodEntries={effectiveSummary.foodEntries}
+              goals={effectiveSummary.goals}
+              calorieGoal={effectiveSummary.calorieGoal}
               plannedMeals={plannedMeals}
               isLoggingPlannedMeal={isLoggingPlannedMeal}
               onLogPlannedMeal={handleLogPlannedMeal}
@@ -310,7 +313,7 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
               onPressMealType={openMealTypeDetail}
             />
             <ExerciseSummary
-              exerciseEntries={summary.exerciseEntries}
+              exerciseEntries={effectiveSummary.exerciseEntries}
               entryDate={selectedDate}
               getImageSource={getImageSource}
               weightUnit={weightUnit}

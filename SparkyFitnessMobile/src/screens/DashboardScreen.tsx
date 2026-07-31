@@ -15,6 +15,7 @@ import {
   useWidgetSync,
   useCustomNutrients,
   useNutrientDisplayPreferences,
+  useActiveMealPlanDay,
   fastingRootQueryKey,
 } from '../hooks';
 import type { StepsRange } from '../hooks';
@@ -45,6 +46,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, TabParamList } from '../types/navigation';
 import { NUTRIENT_META } from '../constants/nutrients';
 import { useHeaderActionColors } from '../hooks/useHeaderActionColors';
+import { applyCarbCycleTargetsToDailySummary } from '../utils/carbCycleDailySummary';
 
 const RANGE_SEGMENTS: Segment<StepsRange>[] = [
   { key: '7d', label: '7d' },
@@ -119,6 +121,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
     date: selectedDate,
     enabled: isConnected,
   });
+  const { activeMealPlanDay, isLoading: isActiveMealPlanDayLoading, refetch: refetchActiveMealPlanDay } =
+    useActiveMealPlanDay({
+      date: selectedDate,
+      enabled: isConnected,
+    });
   const { preferences, isLoading: isPreferencesLoading, isError: isPreferencesError, refetch: refetchPreferences } = usePreferences({
     enabled: isConnected,
   });
@@ -139,7 +146,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
   const { customNutrients, refetch: refetchCustomNutrients } = useCustomNutrients({ enabled: isConnected });
   const { summaryNutrients, refetch: refetchNutrientPrefs } = useNutrientDisplayPreferences({ enabled: isConnected });
 
-  useWidgetSync(summary);
+  const effectiveSummary = useMemo(
+    () => summary ? applyCarbCycleTargetsToDailySummary(summary, activeMealPlanDay) : undefined,
+    [summary, activeMealPlanDay],
+  );
+
+  useWidgetSync(effectiveSummary);
 
   // The chart is a single-axis line graph; if the user picked stones+lbs, plot lbs.
   const weightUnit: 'kg' | 'lbs' =
@@ -186,11 +198,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
       refetchSteps(),
       refetchCustomNutrients(),
       refetchNutrientPrefs(),
+      refetchActiveMealPlanDay(),
       // FastingCard owns its own queries; nudge them on pull-to-refresh.
       queryClient.invalidateQueries({ queryKey: fastingRootQueryKey }),
     ]);
     setRefreshing(false);
-  }, [refetch, refetchPreferences, refetchMeasurements, refetchSteps, refetchCustomNutrients, refetchNutrientPrefs, queryClient]);
+  }, [refetch, refetchPreferences, refetchMeasurements, refetchSteps, refetchCustomNutrients, refetchNutrientPrefs, refetchActiveMealPlanDay, queryClient]);
 
   // Render content based on state
   const renderContent = () => {
@@ -216,7 +229,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
     }
 
     // Loading state
-    if (isLoading || isConnectionLoading || isPreferencesLoading || isMeasurementsLoading) {
+    if (isLoading || isConnectionLoading || isPreferencesLoading || isMeasurementsLoading || isActiveMealPlanDayLoading) {
       return (
         <View className="flex-1 items-center justify-center p-8 shadow-sm">
           <ActivityIndicator size="large" color="#3B82F6" />
@@ -252,7 +265,8 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
       return null;
     }
 
-    const { eaten, burned, remaining, goal, progress } = summary.calorieBalance;
+    const renderSummary = effectiveSummary ?? summary;
+    const { eaten, burned, remaining, goal, progress } = renderSummary.calorieBalance;
     const showNetCarbs = preferences.show_net_carbs === true;
 
     return (
@@ -272,7 +286,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={accentColor || '#3B82F6'} />
         }
       >
-        {(summary.foodEntries.length > 0 || summary.exerciseEntries.length > 0 || goal > 0) && (
+        {(renderSummary.foodEntries.length > 0 || renderSummary.exerciseEntries.length > 0 || goal > 0) && (
           <CalorieRingCard
             caloriesConsumed={eaten}
             caloriesBurned={burned}
@@ -301,7 +315,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
             Only the 4 core macros (with goals) and user-defined custom nutrients are
             shown here. Other enabled nutrients (sodium, sugars, etc.) belong in a
             detail view, not the at-a-glance dashboard grid. */}
-        {summary.foodEntries.length > 0 && summaryNutrients.length > 0 ? (() => {
+        {renderSummary.foodEntries.length > 0 && summaryNutrients.length > 0 ? (() => {
           const CORE_MACROS = new Set(['protein', 'carbs', 'fat', 'dietary_fiber']);
           const customNutrientNames = new Set(customNutrients.map((cn) => cn.name));
           const dashboardNutrients = summaryNutrients.filter(
@@ -342,17 +356,17 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
                   // Resolve consumed value.
                   let consumed: number;
                   if (nutrientKey === 'carbs' && showNetCarbs) {
-                    consumed = getNetCarbsValue(summary.carbs.consumed, summary.fiber.consumed);
+                    consumed = getNetCarbsValue(renderSummary.carbs.consumed, renderSummary.fiber.consumed);
                   } else if (nutrientKey === 'protein') {
-                    consumed = summary.protein.consumed;
+                    consumed = renderSummary.protein.consumed;
                   } else if (nutrientKey === 'carbs') {
-                    consumed = summary.carbs.consumed;
+                    consumed = renderSummary.carbs.consumed;
                   } else if (nutrientKey === 'fat') {
-                    consumed = summary.fat.consumed;
+                    consumed = renderSummary.fat.consumed;
                   } else if (nutrientKey === 'dietary_fiber') {
-                    consumed = summary.fiber.consumed;
+                    consumed = renderSummary.fiber.consumed;
                   } else {
-                    consumed = summary.customNutrientTotals[nutrientKey] ?? 0;
+                    consumed = renderSummary.customNutrientTotals[nutrientKey] ?? 0;
                   }
 
                   // Resolve goal. Core macros use their tracked goals; custom
@@ -360,11 +374,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
                   // custom nutrient has no goal, `goal` stays undefined and
                   // MacroCard hides the "/0".
                   let goal: number | undefined;
-                  if (nutrientKey === 'protein') goal = summary.protein.goal || undefined;
-                  else if (nutrientKey === 'carbs') goal = summary.carbs.goal || undefined;
-                  else if (nutrientKey === 'fat') goal = summary.fat.goal || undefined;
-                  else if (nutrientKey === 'dietary_fiber') goal = summary.fiber.goal || undefined;
-                  else goal = summary.customNutrientGoals[nutrientKey] || undefined;
+                  if (nutrientKey === 'protein') goal = renderSummary.protein.goal || undefined;
+                  else if (nutrientKey === 'carbs') goal = renderSummary.carbs.goal || undefined;
+                  else if (nutrientKey === 'fat') goal = renderSummary.fat.goal || undefined;
+                  else if (nutrientKey === 'dietary_fiber') goal = renderSummary.fiber.goal || undefined;
+                  else goal = renderSummary.customNutrientGoals[nutrientKey] || undefined;
 
                   const displayLabel = nutrientKey === 'carbs' && showNetCarbs ? 'Net Carbs' : label;
 
@@ -385,7 +399,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
           );
         })() : null}
 
-        {summary.foodEntries.length === 0 && (
+        {renderSummary.foodEntries.length === 0 && (
           <Pressable
             className="bg-surface rounded-xl p-4 mb-3 shadow-sm"
             onPress={() => navigation.navigate('FoodSearch', { date: selectedDate })}
@@ -395,13 +409,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
           </Pressable>
         )}
 
-        {(summary.foodEntries.length > 0 || summary.exerciseEntries.length > 0) &&
-          (summary.exerciseMinutesGoal > 0 || summary.exerciseCaloriesGoal > 0 || summary.exerciseMinutes > 0 || summary.otherExerciseCalories > 0) && (
+        {(renderSummary.foodEntries.length > 0 || renderSummary.exerciseEntries.length > 0) &&
+          (renderSummary.exerciseMinutesGoal > 0 || renderSummary.exerciseCaloriesGoal > 0 || renderSummary.exerciseMinutes > 0 || renderSummary.otherExerciseCalories > 0) && (
           <ExerciseProgressCard
-            exerciseMinutes={summary.exerciseMinutes}
-            exerciseMinutesGoal={summary.exerciseMinutesGoal}
-            exerciseCalories={summary.otherExerciseCalories}
-            exerciseCaloriesGoal={summary.exerciseCaloriesGoal}
+            exerciseMinutes={renderSummary.exerciseMinutes}
+            exerciseMinutesGoal={renderSummary.exerciseMinutesGoal}
+            exerciseCalories={renderSummary.otherExerciseCalories}
+            exerciseCaloriesGoal={renderSummary.exerciseCaloriesGoal}
           />
         )}
 
@@ -409,13 +423,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
             Dashboard Settings. */}
         {hydrationCardVisible && (
           <HydrationGauge
-            consumed={summary.waterConsumed}
-            goal={summary.waterGoal}
+            consumed={renderSummary.waterConsumed}
+            goal={renderSummary.waterGoal}
             unit={waterUnit}
             containerVolume={servingVolume}
             onIncrement={isContainersLoaded ? incrementWater : undefined}
             onDecrement={isContainersLoaded ? decrementWater : undefined}
-            disableDecrement={summary.waterConsumed <= 0}
+            disableDecrement={renderSummary.waterConsumed <= 0}
             containers={waterContainers}
             activeContainerId={activeWaterContainer?.id}
             onSelectContainer={selectWaterContainer}
