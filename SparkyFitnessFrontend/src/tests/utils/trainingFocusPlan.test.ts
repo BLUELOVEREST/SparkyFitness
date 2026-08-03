@@ -1,6 +1,8 @@
 import type { WorkoutPlanFocusSession } from '@/types/workout';
 import {
+  buildTrainingFocusOptions,
   orderItemsByFirstDay,
+  resolveTrainingFocusValue,
   setPrimaryTrainingFocusSession,
   updateTrainingFocusSession,
 } from '@/utils/trainingFocusPlan';
@@ -64,5 +66,37 @@ describe('trainingFocusPlan utils', () => {
         1
       ).map((day) => day.name)
     ).toEqual(['Monday', 'Tuesday', 'Sunday']);
+  });
+
+  it('adds prior custom focus values to the option list without duplicating built-ins', () => {
+    const options = buildTrainingFocusOptions([
+      { training_focus: 'Core' },
+      { training_focus: ' legs ' },
+      { training_focus: 'Push Day' },
+      { training_focus: 'core' },
+      { training_focus: 'custom' },
+      { training_focus: 'rest' },
+    ]);
+
+    expect(options.map((option) => option.value)).toEqual([
+      'rest',
+      'chest',
+      'back',
+      'legs',
+      'shoulders',
+      'arms',
+      'cardio',
+      'full_body',
+      'Core',
+      'Push Day',
+      'custom',
+    ]);
+  });
+
+  it('resolves custom input to the saved focus text and normalizes built-in labels', () => {
+    expect(resolveTrainingFocusValue('custom', ' Core ')).toBe('Core');
+    expect(resolveTrainingFocusValue('custom', 'Legs')).toBe('legs');
+    expect(resolveTrainingFocusValue('custom', '   ')).toBe('rest');
+    expect(resolveTrainingFocusValue('back', 'Core')).toBe('back');
   });
 });

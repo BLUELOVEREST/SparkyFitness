@@ -1,5 +1,7 @@
 import {
   buildDefaultFocusSessions,
+  buildTrainingFocusOptions,
+  resolveTrainingFocusValue,
   setPrimaryTrainingFocusSession,
   updateTrainingFocusSession,
   validateTrainingFocusSessions,
@@ -10,7 +12,7 @@ describe('trainingFocusPlan utils', () => {
     const sessions = buildDefaultFocusSessions();
 
     expect(sessions).toHaveLength(28);
-    expect(sessions.filter((session) => session.day_of_week === 1)).toEqual([
+    expect(sessions.filter(session => session.day_of_week === 1)).toEqual([
       {
         day_of_week: 1,
         time_slot: 'morning',
@@ -48,20 +50,19 @@ describe('trainingFocusPlan utils', () => {
 
     expect(
       sessions.find(
-        (session) =>
-          session.day_of_week === 1 && session.time_slot === 'morning',
+        session => session.day_of_week === 1 && session.time_slot === 'morning',
       )?.is_primary,
     ).toBe(true);
   });
 
   it('requires a main session when a day has multiple training sessions', () => {
     const sessions = buildDefaultFocusSessions()
-      .map((session) =>
+      .map(session =>
         session.day_of_week === 1 && session.time_slot === 'morning'
           ? { ...session, training_focus: 'back' }
           : session,
       )
-      .map((session) =>
+      .map(session =>
         session.day_of_week === 1 && session.time_slot === 'noon'
           ? { ...session, training_focus: 'legs' }
           : session,
@@ -75,7 +76,12 @@ describe('trainingFocusPlan utils', () => {
 
   it('sets only one primary session per day', () => {
     const sessions = updateTrainingFocusSession(
-      updateTrainingFocusSession(buildDefaultFocusSessions(), 1, 'morning', 'back'),
+      updateTrainingFocusSession(
+        buildDefaultFocusSessions(),
+        1,
+        'morning',
+        'back',
+      ),
       1,
       'noon',
       'legs',
@@ -83,7 +89,9 @@ describe('trainingFocusPlan utils', () => {
     const updated = setPrimaryTrainingFocusSession(sessions, 1, 'noon');
 
     expect(
-      updated.filter((session) => session.day_of_week === 1 && session.is_primary),
+      updated.filter(
+        session => session.day_of_week === 1 && session.is_primary,
+      ),
     ).toEqual([
       {
         day_of_week: 1,
@@ -92,5 +100,37 @@ describe('trainingFocusPlan utils', () => {
         is_primary: true,
       },
     ]);
+  });
+
+  it('adds prior custom focus values to the option list without duplicating built-ins', () => {
+    const options = buildTrainingFocusOptions([
+      { training_focus: 'Core' },
+      { training_focus: ' legs ' },
+      { training_focus: 'Push Day' },
+      { training_focus: 'core' },
+      { training_focus: 'custom' },
+      { training_focus: 'rest' },
+    ]);
+
+    expect(options.map(option => option.value)).toEqual([
+      'rest',
+      'chest',
+      'back',
+      'legs',
+      'shoulders',
+      'arms',
+      'cardio',
+      'full_body',
+      'Core',
+      'Push Day',
+      'custom',
+    ]);
+  });
+
+  it('resolves custom input to the saved focus text and normalizes built-in labels', () => {
+    expect(resolveTrainingFocusValue('custom', ' Core ')).toBe('Core');
+    expect(resolveTrainingFocusValue('custom', 'Legs')).toBe('legs');
+    expect(resolveTrainingFocusValue('custom', '   ')).toBe('rest');
+    expect(resolveTrainingFocusValue('back', 'Core')).toBe('back');
   });
 });

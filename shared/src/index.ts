@@ -88,6 +88,7 @@ export * from "./constants/chatToolCategories.ts";
 export * from "./constants/exercise.ts";
 export * from "./constants/chatAskUser.ts";
 export * from "./utils/timezone.ts";
+export * from "./workout/trainingFocus.ts";
 export * from "./utils/calendar.ts";
 export * from "./utils/entryTime.ts";
 export * from "./utils/calorieCalculations.ts";

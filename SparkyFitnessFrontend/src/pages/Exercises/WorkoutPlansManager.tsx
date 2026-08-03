@@ -438,6 +438,7 @@ const WorkoutPlansManager = () => {
         onClose={() => setIsAddPlanDialogOpen(false)}
         onSave={handleCreatePlan}
         initialData={null}
+        existingPlans={plans ?? []}
       />
 
       <AddWorkoutPlanDialog
@@ -449,6 +450,7 @@ const WorkoutPlansManager = () => {
         }}
         onSave={handleCreatePlan}
         initialData={selectedPlan}
+        existingPlans={plans ?? []}
         onUpdate={handleUpdatePlan}
       />
     </div>

@@ -1,20 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
 import Button from '../components/ui/Button';
 import {
   buildDefaultFocusSessions,
+  buildTrainingFocusOptionsFromTemplates,
+  CUSTOM_TRAINING_FOCUS_VALUE,
   getDayName,
+  resolveTrainingFocusValue,
   setPrimaryTrainingFocusSession,
-  TRAINING_FOCUS_OPTIONS,
   TRAINING_FOCUS_TIME_SLOTS,
   updateTrainingFocusSession,
   validateTrainingFocusSessions,
@@ -22,6 +18,7 @@ import {
 import {
   useCreateWorkoutPlanTemplate,
   useUpdateWorkoutPlanTemplate,
+  useWorkoutPlanTemplates,
 } from '../hooks/useWorkoutPlanTemplates';
 import { usePreferences } from '../hooks/usePreferences';
 import { createMobileTranslator } from '../utils/mobileI18n';
@@ -60,8 +57,13 @@ function getSession(
   timeSlot: TrainingFocusTimeSlot,
 ) {
   return sessions.find(
-    (session) => session.day_of_week === dayOfWeek && session.time_slot === timeSlot,
+    session =>
+      session.day_of_week === dayOfWeek && session.time_slot === timeSlot,
   );
+}
+
+function focusSessionKey(dayOfWeek: number, timeSlot: TrainingFocusTimeSlot) {
+  return `${dayOfWeek}-${timeSlot}`;
 }
 
 function formatSessionCount(count: number) {
@@ -73,18 +75,17 @@ function formatSummaryLine(
   sessions: WorkoutPlanFocusSession[],
 ) {
   const activeSessions = sessions.filter(
-    (session) => session.training_focus !== 'rest',
+    session => session.training_focus !== 'rest',
   );
-  const primary = activeSessions.find((session) => session.is_primary);
+  const primary = activeSessions.find(session => session.is_primary);
   return `${dayLabel} · ${formatSessionCount(activeSessions.length)} · Main: ${
     primary?.time_slot ?? '—'
   }`;
 }
 
-const WorkoutPlanTemplateFormScreen: React.FC<WorkoutPlanTemplateFormScreenProps> = ({
-  navigation,
-  route,
-}) => {
+const WorkoutPlanTemplateFormScreen: React.FC<
+  WorkoutPlanTemplateFormScreenProps
+> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
   const activeWorkoutBarPadding = useActiveWorkoutBarPadding();
   const { preferences } = usePreferences();
@@ -103,31 +104,59 @@ const WorkoutPlanTemplateFormScreen: React.FC<WorkoutPlanTemplateFormScreenProps
   );
   const [isActive, setIsActive] = useState(template?.is_active ?? true);
   const [selectedDay, setSelectedDay] = useState(1);
-  const [selectedSlot, setSelectedSlot] = useState<TrainingFocusTimeSlot>('morning');
+  const [selectedSlot, setSelectedSlot] =
+    useState<TrainingFocusTimeSlot>('morning');
   const [focusSessions, setFocusSessions] = useState<WorkoutPlanFocusSession[]>(
     () => buildDefaultFocusSessions(template?.focus_sessions),
   );
+  const [customFocusDrafts, setCustomFocusDrafts] = useState<
+    Record<string, string>
+  >({});
 
-  const { createTemplate, isPending: isCreating } = useCreateWorkoutPlanTemplate({
-    onSuccess: () => navigation.goBack(),
-  });
-  const { updateTemplate, isPending: isUpdating } = useUpdateWorkoutPlanTemplate({
-    templateId: template?.id,
-    onSuccess: () => navigation.goBack(),
-  });
+  const { templates: workoutPlanTemplates } = useWorkoutPlanTemplates();
+  const { createTemplate, isPending: isCreating } =
+    useCreateWorkoutPlanTemplate({
+      onSuccess: () => navigation.goBack(),
+    });
+  const { updateTemplate, isPending: isUpdating } =
+    useUpdateWorkoutPlanTemplate({
+      templateId: template?.id,
+      onSuccess: () => navigation.goBack(),
+    });
   const isSaving = isCreating || isUpdating;
 
   const selectedSession = getSession(focusSessions, selectedDay, selectedSlot);
+  const selectedSessionKey = focusSessionKey(selectedDay, selectedSlot);
+  const trainingFocusOptions = useMemo(
+    () =>
+      buildTrainingFocusOptionsFromTemplates(
+        workoutPlanTemplates,
+        focusSessions,
+      ),
+    [workoutPlanTemplates, focusSessions],
+  );
 
   const updateSelectedFocus = (trainingFocus: string) => {
-    setFocusSessions((current) =>
-      updateTrainingFocusSession(current, selectedDay, selectedSlot, trainingFocus),
+    setFocusSessions(current =>
+      updateTrainingFocusSession(
+        current,
+        selectedDay,
+        selectedSlot,
+        trainingFocus,
+      ),
     );
+    if (trainingFocus !== CUSTOM_TRAINING_FOCUS_VALUE) {
+      setCustomFocusDrafts(current => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[selectedSessionKey];
+        return nextDrafts;
+      });
+    }
   };
 
   const setSelectedPrimary = () => {
     if (selectedSession?.training_focus === 'rest') return;
-    setFocusSessions((current) =>
+    setFocusSessions(current =>
       setPrimaryTrainingFocusSession(current, selectedDay, selectedSlot),
     );
   };
@@ -142,7 +171,21 @@ const WorkoutPlanTemplateFormScreen: React.FC<WorkoutPlanTemplateFormScreenProps
       return;
     }
 
-    const validation = validateTrainingFocusSessions(focusSessions);
+    const resolvedFocusSessions = focusSessions.map(session => {
+      const trainingFocus = resolveTrainingFocusValue(
+        session.training_focus,
+        customFocusDrafts[
+          focusSessionKey(session.day_of_week, session.time_slot)
+        ] ?? '',
+      );
+      return {
+        ...session,
+        training_focus: trainingFocus,
+        is_primary: trainingFocus !== 'rest' && session.is_primary,
+      };
+    });
+
+    const validation = validateTrainingFocusSessions(resolvedFocusSessions);
     if (!validation.valid) {
       Toast.show({
         type: 'error',
@@ -161,7 +204,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<WorkoutPlanTemplateFormScreenProps
       is_active: isActive,
       plan_mode: 'training_focus' as const,
       assignments: [],
-      focus_sessions: focusSessions,
+      focus_sessions: resolvedFocusSessions,
     };
 
     if (isEdit) {
@@ -172,7 +215,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<WorkoutPlanTemplateFormScreenProps
   };
 
   const activeSessionCount = focusSessions.filter(
-    (session) => session.training_focus !== 'rest',
+    session => session.training_focus !== 'rest',
   ).length;
 
   return (
@@ -236,13 +279,15 @@ const WorkoutPlanTemplateFormScreen: React.FC<WorkoutPlanTemplateFormScreenProps
         </View>
         <Pressable
           className="flex-row items-center mt-4"
-          onPress={() => setIsActive((current) => !current)}
+          onPress={() => setIsActive(current => !current)}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: isActive }}
         >
           <View
             className={`w-5 h-5 rounded-md mr-2 border ${
-              isActive ? 'bg-accent-primary border-accent-primary' : 'border-border-subtle'
+              isActive
+                ? 'bg-accent-primary border-accent-primary'
+                : 'border-border-subtle'
             }`}
           />
           <Text className="text-sm font-semibold text-text-primary">
@@ -255,15 +300,12 @@ const WorkoutPlanTemplateFormScreen: React.FC<WorkoutPlanTemplateFormScreenProps
         <Text className="text-lg font-semibold text-text-primary mb-3">
           {t('workoutPlan.weeklySummary')}
         </Text>
-        {DAYS.map((day) => {
+        {DAYS.map(day => {
           const sessions = focusSessions.filter(
-            (session) => session.day_of_week === day.id,
+            session => session.day_of_week === day.id,
           );
           return (
-            <Text
-              key={day.id}
-              className="text-sm text-text-secondary mt-1"
-            >
+            <Text key={day.id} className="text-sm text-text-secondary mt-1">
               {formatSummaryLine(day.label, sessions)}
             </Text>
           );
@@ -286,7 +328,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<WorkoutPlanTemplateFormScreenProps
           className="mb-4"
         >
           <View className="flex-row gap-2">
-            {DAYS.map((day) => (
+            {DAYS.map(day => (
               <Pressable
                 key={day.id}
                 className={`px-4 py-2 rounded-full ${
@@ -347,7 +389,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<WorkoutPlanTemplateFormScreenProps
           {t('workoutPlan.focus')}
         </Text>
         <View className="flex-row flex-wrap gap-2 mb-4">
-          {TRAINING_FOCUS_OPTIONS.map((option) => {
+          {trainingFocusOptions.map(option => {
             const isSelected = selectedSession?.training_focus === option.value;
             return (
               <Pressable
@@ -368,6 +410,21 @@ const WorkoutPlanTemplateFormScreen: React.FC<WorkoutPlanTemplateFormScreenProps
             );
           })}
         </View>
+
+        {selectedSession?.training_focus === CUSTOM_TRAINING_FOCUS_VALUE && (
+          <TextInput
+            className="bg-background border border-border-subtle rounded-xl px-4 py-3 text-text-primary mb-4"
+            value={customFocusDrafts[selectedSessionKey] ?? ''}
+            onChangeText={text =>
+              setCustomFocusDrafts(current => ({
+                ...current,
+                [selectedSessionKey]: text,
+              }))
+            }
+            placeholder="Custom focus"
+            placeholderTextColor="#8A8F98"
+          />
+        )}
 
         <Button
           variant={selectedSession?.is_primary ? 'primary' : 'secondary'}

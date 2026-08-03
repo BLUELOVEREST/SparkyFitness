@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
@@ -46,6 +46,10 @@ import { useWorkoutPlanAssignments } from '@/hooks/Exercises/useWorkoutPlanAssig
 import { SortableExerciseItem } from './SortableExerciseItem';
 import {
   orderItemsByFirstDay,
+  buildTrainingFocusOptionsFromTemplates,
+  CUSTOM_TRAINING_FOCUS_VALUE,
+  normalizeTrainingFocusValue,
+  resolveTrainingFocusValue,
   setPrimaryTrainingFocusSession,
   updateTrainingFocusSession,
 } from '@/utils/trainingFocusPlan';
@@ -60,18 +64,6 @@ const TRAINING_FOCUS_TIME_SLOTS: {
   { value: 'evening', label: 'Evening' },
 ];
 
-const TRAINING_FOCUS_OPTIONS = [
-  { value: 'rest', label: 'Rest' },
-  { value: 'chest', label: 'Chest' },
-  { value: 'back', label: 'Back' },
-  { value: 'legs', label: 'Legs' },
-  { value: 'shoulders', label: 'Shoulders' },
-  { value: 'arms', label: 'Arms' },
-  { value: 'cardio', label: 'Cardio' },
-  { value: 'full_body', label: 'Full Body' },
-  { value: 'custom', label: 'Custom' },
-];
-
 function buildDefaultFocusSessions(
   initialSessions?: WorkoutPlanFocusSession[]
 ): WorkoutPlanFocusSession[] {
@@ -81,12 +73,14 @@ function buildDefaultFocusSessions(
         (session) =>
           session.day_of_week === day.id && session.time_slot === value
       );
+      const trainingFocus = normalizeTrainingFocusValue(
+        existing?.training_focus ?? 'rest'
+      );
       return {
         day_of_week: day.id,
         time_slot: value,
-        training_focus: existing?.training_focus ?? 'rest',
-        is_primary:
-          existing?.training_focus !== 'rest' && Boolean(existing?.is_primary),
+        training_focus: trainingFocus,
+        is_primary: trainingFocus !== 'rest' && Boolean(existing?.is_primary),
       };
     })
   );
@@ -102,6 +96,7 @@ interface AddWorkoutPlanDialogProps {
     >
   ) => void;
   initialData?: WorkoutPlanTemplate | null;
+  existingPlans?: WorkoutPlanTemplate[];
   onUpdate?: (
     planId: string,
     updatedPlan: Partial<WorkoutPlanTemplate>
@@ -113,6 +108,7 @@ const AddWorkoutPlanDialog = ({
   onClose,
   onSave,
   initialData,
+  existingPlans = [],
   onUpdate,
 }: AddWorkoutPlanDialogProps) => {
   const {
@@ -165,6 +161,14 @@ const AddWorkoutPlanDialog = ({
   const [focusSessions, setFocusSessions] = useState<WorkoutPlanFocusSession[]>(
     () => buildDefaultFocusSessions(initialData?.focus_sessions)
   );
+  const [customFocusDrafts, setCustomFocusDrafts] = useState<
+    Record<string, string>
+  >({});
+
+  const trainingFocusOptions = useMemo(
+    () => buildTrainingFocusOptionsFromTemplates(existingPlans, focusSessions),
+    [existingPlans, focusSessions]
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -189,9 +193,26 @@ const AddWorkoutPlanDialog = ({
       return;
     }
 
+    const resolvedFocusSessions =
+      planMode === 'training_focus'
+        ? focusSessions.map((session) => {
+            const trainingFocus = resolveTrainingFocusValue(
+              session.training_focus,
+              customFocusDrafts[
+                `${session.day_of_week}-${session.time_slot}`
+              ] ?? ''
+            );
+            return {
+              ...session,
+              training_focus: trainingFocus,
+              is_primary: trainingFocus !== 'rest' && session.is_primary,
+            };
+          })
+        : [];
+
     if (planMode === 'training_focus') {
       for (const day of DAYS_OF_WEEK) {
-        const daySessions = focusSessions.filter(
+        const daySessions = resolvedFocusSessions.filter(
           (session) => session.day_of_week === day.id
         );
         const activeSessions = daySessions.filter(
@@ -222,7 +243,7 @@ const AddWorkoutPlanDialog = ({
       end_date: endDate || null,
       is_active: isActive,
       assignments: planMode === 'detailed' ? buildAssignmentsForSave() : [],
-      focus_sessions: planMode === 'training_focus' ? focusSessions : [],
+      focus_sessions: resolvedFocusSessions,
     };
 
     if (initialData && onUpdate) {
@@ -243,6 +264,10 @@ const AddWorkoutPlanDialog = ({
   };
 
   const displayDays = orderItemsByFirstDay(DAYS_OF_WEEK, firstDayOfWeek);
+  const focusSessionKey = (
+    dayOfWeek: number,
+    timeSlot: TrainingFocusTimeSlot
+  ) => `${dayOfWeek}-${timeSlot}`;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -392,6 +417,7 @@ const AddWorkoutPlanDialog = ({
                             const session = daySessions.find(
                               (item) => item.time_slot === value
                             )!;
+                            const sessionKey = focusSessionKey(day.id, value);
                             return (
                               <div
                                 key={value}
@@ -419,18 +445,28 @@ const AddWorkoutPlanDialog = ({
                                 <select
                                   className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                                   value={session.training_focus}
-                                  onChange={(event) =>
+                                  onChange={(event) => {
+                                    const nextValue = event.target.value;
                                     setFocusSessions((current) =>
                                       updateTrainingFocusSession(
                                         current,
                                         day.id,
                                         value,
-                                        event.target.value
+                                        nextValue
                                       )
-                                    )
-                                  }
+                                    );
+                                    if (
+                                      nextValue !== CUSTOM_TRAINING_FOCUS_VALUE
+                                    ) {
+                                      setCustomFocusDrafts((current) => {
+                                        const nextDrafts = { ...current };
+                                        delete nextDrafts[sessionKey];
+                                        return nextDrafts;
+                                      });
+                                    }
+                                  }}
                                 >
-                                  {TRAINING_FOCUS_OPTIONS.map((option) => (
+                                  {trainingFocusOptions.map((option) => (
                                     <option
                                       key={option.value}
                                       value={option.value}
@@ -439,6 +475,20 @@ const AddWorkoutPlanDialog = ({
                                     </option>
                                   ))}
                                 </select>
+                                {session.training_focus ===
+                                  CUSTOM_TRAINING_FOCUS_VALUE && (
+                                  <Input
+                                    value={customFocusDrafts[sessionKey] ?? ''}
+                                    onChange={(event) =>
+                                      setCustomFocusDrafts((current) => ({
+                                        ...current,
+                                        [sessionKey]: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="Custom focus"
+                                    className="h-9 text-sm"
+                                  />
+                                )}
                               </div>
                             );
                           })}

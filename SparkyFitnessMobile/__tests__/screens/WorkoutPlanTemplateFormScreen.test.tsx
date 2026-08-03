@@ -4,12 +4,14 @@ import WorkoutPlanTemplateFormScreen from '../../src/screens/WorkoutPlanTemplate
 import {
   useCreateWorkoutPlanTemplate,
   useUpdateWorkoutPlanTemplate,
+  useWorkoutPlanTemplates,
 } from '../../src/hooks/useWorkoutPlanTemplates';
 import { usePreferences } from '../../src/hooks/usePreferences';
 
 jest.mock('../../src/hooks/useWorkoutPlanTemplates', () => ({
   useCreateWorkoutPlanTemplate: jest.fn(),
   useUpdateWorkoutPlanTemplate: jest.fn(),
+  useWorkoutPlanTemplates: jest.fn(),
 }));
 
 jest.mock('../../src/hooks/usePreferences', () => ({
@@ -21,10 +23,20 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 const mockUseCreateWorkoutPlanTemplate =
-  useCreateWorkoutPlanTemplate as jest.MockedFunction<typeof useCreateWorkoutPlanTemplate>;
+  useCreateWorkoutPlanTemplate as jest.MockedFunction<
+    typeof useCreateWorkoutPlanTemplate
+  >;
 const mockUseUpdateWorkoutPlanTemplate =
-  useUpdateWorkoutPlanTemplate as jest.MockedFunction<typeof useUpdateWorkoutPlanTemplate>;
-const mockUsePreferences = usePreferences as jest.MockedFunction<typeof usePreferences>;
+  useUpdateWorkoutPlanTemplate as jest.MockedFunction<
+    typeof useUpdateWorkoutPlanTemplate
+  >;
+const mockUseWorkoutPlanTemplates =
+  useWorkoutPlanTemplates as jest.MockedFunction<
+    typeof useWorkoutPlanTemplates
+  >;
+const mockUsePreferences = usePreferences as jest.MockedFunction<
+  typeof usePreferences
+>;
 
 describe('WorkoutPlanTemplateFormScreen', () => {
   beforeEach(() => {
@@ -36,12 +48,18 @@ describe('WorkoutPlanTemplateFormScreen', () => {
       error: null,
       refetch: jest.fn(),
     });
+    mockUseWorkoutPlanTemplates.mockReturnValue({
+      templates: [],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    } as never);
   });
 
   it('creates a training focus plan with an automatically selected main session', async () => {
     const createTemplate = jest.fn();
-    mockUseCreateWorkoutPlanTemplate.mockImplementation((options) => ({
-      createTemplate: async (payload) => {
+    mockUseCreateWorkoutPlanTemplate.mockImplementation(options => ({
+      createTemplate: async payload => {
         createTemplate(payload);
         const template = { id: 'workout-plan-1', ...payload };
         options?.onSuccess?.(template);
@@ -64,8 +82,14 @@ describe('WorkoutPlanTemplateFormScreen', () => {
       />,
     );
 
-    fireEvent.changeText(screen.getByPlaceholderText('Training Focus Plan'), 'My Focus Plan');
-    fireEvent.changeText(screen.getByPlaceholderText('Optional'), 'Weekday split');
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Training Focus Plan'),
+      'My Focus Plan',
+    );
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Optional'),
+      'Weekday split',
+    );
     fireEvent.press(screen.getAllByText('Monday')[0]);
     fireEvent.press(screen.getByText('Morning'));
     fireEvent.press(screen.getByText('Back'));
@@ -125,6 +149,82 @@ describe('WorkoutPlanTemplateFormScreen', () => {
     expect(screen.getByText('保存训练计划')).toBeTruthy();
   });
 
+  it('saves typed custom focus text and exposes prior custom values as options', async () => {
+    const createTemplate = jest.fn();
+    mockUseWorkoutPlanTemplates.mockReturnValue({
+      templates: [
+        {
+          id: 'prior-plan',
+          plan_name: 'Prior Focus',
+          start_date: '2026-07-20',
+          end_date: null,
+          is_active: false,
+          plan_mode: 'training_focus',
+          assignments: [],
+          focus_sessions: [
+            {
+              day_of_week: 2,
+              time_slot: 'evening',
+              training_focus: 'Push Day',
+              is_primary: true,
+            },
+          ],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never);
+    mockUseCreateWorkoutPlanTemplate.mockImplementation(options => ({
+      createTemplate: async payload => {
+        createTemplate(payload);
+        const template = { id: 'workout-plan-1', ...payload };
+        options?.onSuccess?.(template);
+        return template;
+      },
+      createTemplateSync: jest.fn(),
+      isPending: false,
+    }));
+    mockUseUpdateWorkoutPlanTemplate.mockReturnValue({
+      updateTemplate: jest.fn(),
+      updateTemplateSync: jest.fn(),
+      isPending: false,
+    });
+
+    const screen = render(
+      <WorkoutPlanTemplateFormScreen
+        navigation={{ goBack: jest.fn() } as never}
+        route={{ params: { mode: 'create' } } as never}
+      />,
+    );
+
+    expect(screen.getByText('Push Day')).toBeTruthy();
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Training Focus Plan'),
+      'Custom Week',
+    );
+    fireEvent.press(screen.getAllByText('Monday')[0]);
+    fireEvent.press(screen.getByText('Morning'));
+    fireEvent.press(screen.getByText('Custom'));
+    fireEvent.changeText(screen.getByPlaceholderText('Custom focus'), ' Core ');
+    fireEvent.press(screen.getByText('Save Workout Plan'));
+
+    await waitFor(() => expect(createTemplate).toHaveBeenCalledTimes(1));
+    expect(createTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        focus_sessions: expect.arrayContaining([
+          expect.objectContaining({
+            day_of_week: 1,
+            time_slot: 'morning',
+            training_focus: 'Core',
+            is_primary: true,
+          }),
+        ]),
+      }),
+    );
+  });
+
   it('updates an existing training focus plan', async () => {
     const updateTemplate = jest.fn();
     mockUseCreateWorkoutPlanTemplate.mockReturnValue({
@@ -132,8 +232,8 @@ describe('WorkoutPlanTemplateFormScreen', () => {
       createTemplateSync: jest.fn(),
       isPending: false,
     });
-    mockUseUpdateWorkoutPlanTemplate.mockImplementation((options) => ({
-      updateTemplate: async (payload) => {
+    mockUseUpdateWorkoutPlanTemplate.mockImplementation(options => ({
+      updateTemplate: async payload => {
         updateTemplate(payload);
         const template = { id: 'workout-plan-1', ...payload };
         options?.onSuccess?.(template);
@@ -147,29 +247,31 @@ describe('WorkoutPlanTemplateFormScreen', () => {
     const screen = render(
       <WorkoutPlanTemplateFormScreen
         navigation={navigation as never}
-        route={{
-          params: {
-            mode: 'edit',
-            template: {
-              id: 'workout-plan-1',
-              plan_name: 'Existing Focus',
-              description: null,
-              start_date: '2026-07-13',
-              end_date: null,
-              is_active: true,
-              plan_mode: 'training_focus',
-              assignments: [],
-              focus_sessions: [
-                {
-                  day_of_week: 1,
-                  time_slot: 'morning',
-                  training_focus: 'back',
-                  is_primary: true,
-                },
-              ],
+        route={
+          {
+            params: {
+              mode: 'edit',
+              template: {
+                id: 'workout-plan-1',
+                plan_name: 'Existing Focus',
+                description: null,
+                start_date: '2026-07-13',
+                end_date: null,
+                is_active: true,
+                plan_mode: 'training_focus',
+                assignments: [],
+                focus_sessions: [
+                  {
+                    day_of_week: 1,
+                    time_slot: 'morning',
+                    training_focus: 'back',
+                    is_primary: true,
+                  },
+                ],
+              },
             },
-          },
-        } as never}
+          } as never
+        }
       />,
     );
 
