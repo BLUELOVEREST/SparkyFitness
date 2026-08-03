@@ -10,6 +10,9 @@ type MobileTranslationKey =
   | 'kitchen.activeMealPlan'
   | 'kitchen.ingredientSummary'
   | 'kitchen.ingredientSummarySubtitle'
+  | 'kitchen.weeklyPrep'
+  | 'kitchen.weeklyPrepSubtitle'
+  | 'kitchen.updating'
   | 'foodSummary.tapToAddFood'
   | 'foodSummary.target'
   | 'foodSummary.loggedFromPlan'
@@ -70,6 +73,9 @@ const ZH_CN: Partial<Record<MobileTranslationKey, string>> = {
   'kitchen.activeMealPlan': '当前饮食计划',
   'kitchen.ingredientSummary': '食材汇总',
   'kitchen.ingredientSummarySubtitle': '所选日期需要准备的总量。',
+  'kitchen.weeklyPrep': '本周备菜',
+  'kitchen.weeklyPrepSubtitle': '当前周需要准备的每种食材总量。',
+  'kitchen.updating': '更新中...',
   'foodSummary.tapToAddFood': '点击添加食物',
   'foodSummary.target': '目标',
   'foodSummary.loggedFromPlan': '已按计划记录',
@@ -131,6 +137,9 @@ const EN: Record<MobileTranslationKey, string> = {
   'kitchen.activeMealPlan': 'Active Meal Plan',
   'kitchen.ingredientSummary': 'Ingredient Summary',
   'kitchen.ingredientSummarySubtitle': 'Total amount needed for the selected day.',
+  'kitchen.weeklyPrep': 'Weekly Prep',
+  'kitchen.weeklyPrepSubtitle': 'Total amount needed for the current week.',
+  'kitchen.updating': 'Updating...',
   'foodSummary.tapToAddFood': 'Tap to add food',
   'foodSummary.target': 'Target',
   'foodSummary.loggedFromPlan': 'Logged from Plan',

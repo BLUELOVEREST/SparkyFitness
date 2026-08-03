@@ -14,10 +14,12 @@ import {
 import { useActiveUser } from '@/contexts/ActiveUserContext';
 import { useMealPlanTemplates } from '@/hooks/Foods/useMealplanTemplate';
 import {
+  buildKitchenIngredientSummary,
   buildKitchenWeek,
   getActiveKitchenTemplate,
   localDateString,
   type KitchenDayPreview,
+  type KitchenIngredientSummaryItem,
   type KitchenMealPreview,
   type KitchenPlanTemplate,
 } from '@/pages/Kitchen/kitchenPlanUtils';
@@ -74,7 +76,7 @@ const KitchenDayTab = ({
         day.isSelected
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-border bg-card hover:bg-accent'
-      } ${day.isToday && !day.isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+      } ${day.isToday && !day.isSelected ? 'ring-2 ring-inset ring-primary/70' : ''}`}
       onClick={() => onSelect(day.date)}
     >
       <span className="block text-sm font-medium">{day.weekdayLabel}</span>
@@ -144,6 +146,47 @@ const KitchenMealCard = ({ meal }: { meal: KitchenMealPreview }) => {
   );
 };
 
+const KitchenIngredientSummaryCard = ({
+  title,
+  description,
+  items,
+}: {
+  title: string;
+  description: string;
+  items: KitchenIngredientSummaryItem[];
+}) => {
+  if (items.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y rounded-lg border">
+          {items.map((item) => (
+            <li
+              key={item.key}
+              className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div>
+                <p className="font-medium">{item.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {item.sourceLabels.join(' · ')}
+                </p>
+              </div>
+              <span className="font-semibold tabular-nums">
+                {item.amountLabel}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+};
+
 export default function Kitchen({ todayOverride }: KitchenProps) {
   const { t } = useTranslation();
   const { activeUserId } = useActiveUser();
@@ -174,6 +217,14 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
   }, [activeTemplate, selectedDate, todayDate]);
 
   const selectedDay = week?.days.find((day) => day.isSelected) ?? week?.days[0];
+  const dailyIngredientSummary = useMemo(
+    () => (selectedDay ? buildKitchenIngredientSummary([selectedDay]) : []),
+    [selectedDay]
+  );
+  const weeklyIngredientSummary = useMemo(
+    () => (week ? buildKitchenIngredientSummary(week.days) : []),
+    [week]
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 sm:p-6">
@@ -313,6 +364,26 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
               </div>
             </CardContent>
           </Card>
+
+          <KitchenIngredientSummaryCard
+            title={t('kitchen.dailyPrep', 'Daily Prep')}
+            description={translateWithVars(
+              t,
+              'kitchen.dailyPrepDescription',
+              'Ingredients needed for {{day}}.',
+              { day: selectedDay.weekdayLabel }
+            )}
+            items={dailyIngredientSummary}
+          />
+
+          <KitchenIngredientSummaryCard
+            title={t('kitchen.weeklyPrep', 'Weekly Prep')}
+            description={t(
+              'kitchen.weeklyPrepDescription',
+              'Total ingredients for this week.'
+            )}
+            items={weeklyIngredientSummary}
+          />
 
           <section
             className="grid gap-4"

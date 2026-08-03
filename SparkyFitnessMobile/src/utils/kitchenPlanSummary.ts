@@ -1,4 +1,4 @@
-import type { ActiveMealPlanDayMeal } from '../types/mealPlan';
+import type { ActiveMealPlanDay, ActiveMealPlanDayMeal } from '../types/mealPlan';
 
 export interface KitchenIngredientSummaryItem {
   key: string;
@@ -11,9 +11,16 @@ function formatQuantity(value: number) {
   return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(1)));
 }
 
-export function buildKitchenIngredientSummary(
+const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function getDayLabel(date: string) {
+  return dayNames[new Date(`${date}T00:00:00.000Z`).getUTCDay()] ?? date;
+}
+
+function summarizeMealItems(
   meals: ActiveMealPlanDayMeal[],
-): KitchenIngredientSummaryItem[] {
+  formatMealLabel: (meal: ActiveMealPlanDayMeal) => string,
+) {
   const grouped = new Map<
     string,
     {
@@ -26,6 +33,7 @@ export function buildKitchenIngredientSummary(
   >();
 
   for (const meal of meals) {
+    const mealLabel = formatMealLabel(meal);
     for (const item of meal.items) {
       const hasStructuredAmount =
         typeof item.quantity === 'number' &&
@@ -40,8 +48,8 @@ export function buildKitchenIngredientSummary(
 
       if (existing) {
         existing.quantity += hasStructuredAmount ? item.quantity! : 0;
-        if (!existing.mealLabels.includes(meal.label)) {
-          existing.mealLabels.push(meal.label);
+        if (!existing.mealLabels.includes(mealLabel)) {
+          existing.mealLabels.push(mealLabel);
         }
         continue;
       }
@@ -51,7 +59,7 @@ export function buildKitchenIngredientSummary(
         unit,
         quantity: hasStructuredAmount ? item.quantity! : 0,
         amountLabel: hasStructuredAmount ? undefined : item.amountLabel,
-        mealLabels: [meal.label],
+        mealLabels: [mealLabel],
       });
     }
   }
@@ -64,4 +72,27 @@ export function buildKitchenIngredientSummary(
       : item.amountLabel ?? '',
     mealLabels: item.mealLabels,
   }));
+}
+
+export function buildKitchenIngredientSummary(
+  meals: ActiveMealPlanDayMeal[],
+): KitchenIngredientSummaryItem[] {
+  return summarizeMealItems(meals, (meal) => meal.label);
+}
+
+export function buildKitchenWeeklyIngredientSummary(
+  days: ActiveMealPlanDay[],
+): KitchenIngredientSummaryItem[] {
+  const meals = days.flatMap((day) =>
+    day.mode === 'carbCycle'
+      ? day.meals
+          .filter((meal) => meal.items.length > 0)
+          .map((meal) => ({
+            ...meal,
+            label: `${getDayLabel(day.date)} ${meal.label}`,
+          }))
+      : [],
+  );
+
+  return summarizeMealItems(meals, (meal) => meal.label);
 }

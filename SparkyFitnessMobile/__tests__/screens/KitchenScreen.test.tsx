@@ -2,10 +2,15 @@ import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import KitchenScreen from '../../src/screens/KitchenScreen';
 import { useActiveMealPlanDay } from '../../src/hooks/useActiveMealPlanDay';
+import { useActiveMealPlanWeek } from '../../src/hooks/useActiveMealPlanWeek';
 import { usePreferences } from '../../src/hooks/usePreferences';
 
 jest.mock('../../src/hooks/useActiveMealPlanDay', () => ({
   useActiveMealPlanDay: jest.fn(),
+}));
+
+jest.mock('../../src/hooks/useActiveMealPlanWeek', () => ({
+  useActiveMealPlanWeek: jest.fn(),
 }));
 
 jest.mock('../../src/hooks/usePreferences', () => ({
@@ -30,6 +35,8 @@ jest.mock('../../src/utils/dateUtils', () => {
 
 const mockUseActiveMealPlanDay =
   useActiveMealPlanDay as jest.MockedFunction<typeof useActiveMealPlanDay>;
+const mockUseActiveMealPlanWeek =
+  useActiveMealPlanWeek as jest.MockedFunction<typeof useActiveMealPlanWeek>;
 const mockUsePreferences = usePreferences as jest.MockedFunction<typeof usePreferences>;
 
 describe('KitchenScreen', () => {
@@ -41,6 +48,11 @@ describe('KitchenScreen', () => {
       isError: false,
       error: null,
       refetch: jest.fn(),
+    });
+    mockUseActiveMealPlanWeek.mockReturnValue({
+      activeMealPlanDays: [],
+      isLoading: false,
+      isError: false,
     });
   });
 
@@ -92,6 +104,96 @@ describe('KitchenScreen', () => {
     expect(screen.getAllByText('鸡蛋').length).toBeGreaterThan(0);
     expect(screen.getByText('150 g')).toBeTruthy();
     expect(screen.getByText('Breakfast · Lunch')).toBeTruthy();
+  });
+
+  it('renders a weekly ingredient summary from the active meal plan week', () => {
+    mockUseActiveMealPlanDay.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+      activeMealPlanDay: {
+        mode: 'carbCycle',
+        date: '2026-07-15',
+        planName: 'Weekly Carb Cycle',
+        meals: [],
+      },
+    });
+    mockUseActiveMealPlanWeek.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      activeMealPlanDays: [
+        {
+          mode: 'carbCycle',
+          date: '2026-07-15',
+          planName: 'Weekly Carb Cycle',
+          meals: [
+            {
+              key: 'breakfast',
+              mealTypeId: 'meal-type-1',
+              mealType: 'breakfast',
+              label: 'Breakfast',
+              logged: false,
+              target: { calories: 300, carbs: 30, protein: 25, fat: 8 },
+              items: [
+                { id: 'rice', type: 'food', name: '米饭', quantity: 150, unit: 'g', amountLabel: '150 g' },
+              ],
+            },
+          ],
+        },
+        {
+          mode: 'carbCycle',
+          date: '2026-07-16',
+          planName: 'Weekly Carb Cycle',
+          meals: [
+            {
+              key: 'dinner',
+              mealTypeId: 'meal-type-2',
+              mealType: 'dinner',
+              label: 'Dinner',
+              logged: false,
+              target: { calories: 400, carbs: 50, protein: 30, fat: 10 },
+              items: [
+                { id: 'rice', type: 'food', name: '米饭', quantity: 200, unit: 'g', amountLabel: '200 g' },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const screen = render(
+      <KitchenScreen navigation={{} as never} route={{} as never} />,
+    );
+
+    expect(screen.getByText('Weekly Prep')).toBeTruthy();
+    expect(screen.getByText('350 g')).toBeTruthy();
+    expect(screen.getByText('Wed Breakfast · Thu Dinner')).toBeTruthy();
+  });
+
+  it('does not keep the today accent border after another date is selected', () => {
+    mockUseActiveMealPlanDay.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+      activeMealPlanDay: {
+        mode: 'carbCycle',
+        date: '2026-07-15',
+        planName: 'Weekly Carb Cycle',
+        meals: [],
+      },
+    });
+
+    const screen = render(
+      <KitchenScreen navigation={{} as never} route={{} as never} />,
+    );
+
+    fireEvent.press(screen.getByTestId('kitchen-week-day-2026-07-16'));
+
+    expect(screen.getByTestId('kitchen-week-day-2026-07-15').props.className).not.toContain(
+      'border-accent-primary',
+    );
   });
 
   it('lets the user switch to another day in the current week', () => {

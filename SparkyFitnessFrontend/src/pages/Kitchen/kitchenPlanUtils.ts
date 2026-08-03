@@ -48,6 +48,13 @@ export interface KitchenWeekPreview {
   days: KitchenDayPreview[];
 }
 
+export interface KitchenIngredientSummaryItem {
+  key: string;
+  name: string;
+  amountLabel: string;
+  sourceLabels: string[];
+}
+
 const WEEKDAY_LABELS = [
   'Sunday',
   'Monday',
@@ -312,4 +319,51 @@ export const buildKitchenWeek = (
     todayDate,
     days,
   };
+};
+
+export const buildKitchenIngredientSummary = (
+  days: KitchenDayPreview[]
+): KitchenIngredientSummaryItem[] => {
+  const grouped = new Map<
+    string,
+    {
+      name: string;
+      quantity: number;
+      unit: string;
+      sourceLabels: string[];
+    }
+  >();
+
+  for (const day of days) {
+    for (const meal of day.meals) {
+      const sourceLabel = `${day.weekdayLabel} ${meal.label}`;
+      for (const item of meal.items) {
+        const unit = item.unit.trim();
+        const key = `${item.name}|${unit}`;
+        const existing = grouped.get(key);
+
+        if (existing) {
+          existing.quantity += item.quantity;
+          if (!existing.sourceLabels.includes(sourceLabel)) {
+            existing.sourceLabels.push(sourceLabel);
+          }
+          continue;
+        }
+
+        grouped.set(key, {
+          name: item.name,
+          quantity: item.quantity,
+          unit,
+          sourceLabels: [sourceLabel],
+        });
+      }
+    }
+  }
+
+  return Array.from(grouped.entries()).map(([key, item]) => ({
+    key,
+    name: item.name,
+    amountLabel: formatAmount(item.quantity, item.unit),
+    sourceLabels: item.sourceLabels,
+  }));
 };

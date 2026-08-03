@@ -109,16 +109,103 @@ describe('Kitchen', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Tuesday/i }));
 
+    const todayTab = screen.getByRole('tab', { name: /Wednesday/i });
+    expect(todayTab).toHaveAttribute('aria-current', 'date');
+    expect(todayTab.className).toContain('ring-inset');
+    expect(todayTab.className).not.toContain('ring-offset-2');
+
     expect(screen.getByText('Low Carb')).toBeInTheDocument();
     expect(screen.getAllByText('277 kcal').length).toBeGreaterThan(0);
     expect(screen.getByText('39.2g carbs')).toBeInTheDocument();
     expect(screen.getByText('30g protein')).toBeInTheDocument();
     expect(screen.getByText('0g fat')).toBeInTheDocument();
     expect(screen.getByText('Pre-Workout')).toBeInTheDocument();
-    expect(screen.getByText('米饭')).toBeInTheDocument();
-    expect(screen.getByText('150g')).toBeInTheDocument();
+    expect(screen.getAllByText('米饭').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('150g').length).toBeGreaterThan(0);
     expect(
       screen.getByText('Target C 39.2g / P 30g / F 0g / 277 kcal')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Daily Prep' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Ingredients needed for Tuesday.')
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Tuesday Pre-Workout').length).toBeGreaterThan(
+      0
+    );
+    expect(
+      screen.getByRole('heading', { name: 'Weekly Prep' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Total ingredients for this week.')
+    ).toBeInTheDocument();
+  });
+
+  it('summarizes weekly ingredients across the active meal plan week', async () => {
+    mockGetMealPlanTemplates.mockResolvedValue([
+      {
+        id: 'plan-1',
+        plan_name: 'Eric carb cycle',
+        start_date: '2026-07-14',
+        end_date: null,
+        is_active: true,
+        macro_targets: {
+          1: [
+            {
+              slotKey: 'morning',
+              label: 'Breakfast',
+              carbs: 28,
+              protein: 40,
+              fat: 30,
+              calories: 542,
+            },
+          ],
+          2: [
+            {
+              slotKey: 'evening',
+              label: 'Dinner',
+              carbs: 39.2,
+              protein: 30,
+              fat: 0,
+              calories: 277,
+            },
+          ],
+        },
+        assignments: [
+          {
+            item_type: 'food',
+            day_of_week: 1,
+            meal_type: 'Breakfast',
+            food_id: 'rice',
+            food_name: '米饭',
+            quantity: 150,
+            unit: 'g',
+            macro_role: 'carb',
+          },
+          {
+            item_type: 'food',
+            day_of_week: 2,
+            meal_type: 'Dinner',
+            food_id: 'rice',
+            food_name: '米饭',
+            quantity: 200,
+            unit: 'g',
+            macro_role: 'carb',
+          },
+        ],
+      },
+    ]);
+
+    renderKitchen();
+
+    expect(await screen.findByText('Eric carb cycle')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Weekly Prep' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('350g')).toBeInTheDocument();
+    expect(
+      screen.getByText('Monday Breakfast · Tuesday Dinner')
     ).toBeInTheDocument();
   });
 
@@ -166,7 +253,7 @@ describe('Kitchen', () => {
     );
     expect(screen.getByText('2026-07-20')).toBeInTheDocument();
     expect(screen.getByText('Future Breakfast')).toBeInTheDocument();
-    expect(screen.getByText('Oats')).toBeInTheDocument();
-    expect(screen.getByText('80g')).toBeInTheDocument();
+    expect(screen.getAllByText('Oats').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('80g').length).toBeGreaterThan(0);
   });
 });

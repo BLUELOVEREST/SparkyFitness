@@ -63,6 +63,7 @@ export { useServerConfigs } from './useServerConfigs';
 export { useSyncHealthData } from './useSyncHealthData';
 export { useDailySummary } from './useDailySummary';
 export { useActiveMealPlanDay, useLogActiveMealPlanMeal } from './useActiveMealPlanDay';
+export { useActiveMealPlanWeek } from './useActiveMealPlanWeek';
 export { useMeasurements } from './useMeasurements';
 export { useUpsertCheckIn } from './useUpsertCheckIn';
 export { usePreferences } from './usePreferences';

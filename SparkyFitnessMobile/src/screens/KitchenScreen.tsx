@@ -4,9 +4,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateNavigator from '../components/DateNavigator';
 import StatusView from '../components/StatusView';
 import { useActiveMealPlanDay } from '../hooks/useActiveMealPlanDay';
+import { useActiveMealPlanWeek } from '../hooks/useActiveMealPlanWeek';
 import { usePreferences } from '../hooks/usePreferences';
 import { addDays, getTodayDate } from '../utils/dateUtils';
-import { buildKitchenIngredientSummary } from '../utils/kitchenPlanSummary';
+import {
+  buildKitchenIngredientSummary,
+  buildKitchenWeeklyIngredientSummary,
+} from '../utils/kitchenPlanSummary';
 import { createMobileTranslator } from '../utils/mobileI18n';
 import type { RootStackScreenProps } from '../types/navigation';
 
@@ -51,10 +55,23 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
   });
 
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
+  const weekDates = useMemo(() => weekDays.map((day) => day.date), [weekDays]);
+  const {
+    activeMealPlanDays: activeMealPlanWeekDays,
+    isLoading: isWeekLoading,
+  } = useActiveMealPlanWeek({
+    dates: weekDates,
+    enabled: weekDates.length > 0,
+  });
 
-  const meals = activeMealPlanDay?.mode === 'carbCycle'
-    ? activeMealPlanDay.meals.filter((meal) => meal.items.length > 0)
-    : [];
+  const meals = useMemo(
+    () => (
+      activeMealPlanDay?.mode === 'carbCycle'
+        ? activeMealPlanDay.meals.filter((meal) => meal.items.length > 0)
+        : []
+    ),
+    [activeMealPlanDay],
+  );
 
   const totals = useMemo(() => (
     meals.reduce(
@@ -70,6 +87,10 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
   const ingredientSummary = useMemo(
     () => buildKitchenIngredientSummary(meals),
     [meals],
+  );
+  const weeklyIngredientSummary = useMemo(
+    () => buildKitchenWeeklyIngredientSummary(activeMealPlanWeekDays),
+    [activeMealPlanWeekDays],
   );
 
   if (isLoading) {
@@ -117,15 +138,15 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
             return (
               <Pressable
                 key={day.date}
+                testID={`kitchen-week-day-${day.date}`}
                 onPress={() => setSelectedDate(day.date)}
                 accessibilityRole="button"
                 accessibilityLabel={`Select ${day.label}, ${day.date}`}
+                accessibilityState={{ selected: isSelected }}
                 className={`min-w-14 rounded-2xl px-3 py-2 border ${
                   isSelected
                     ? 'bg-accent-primary border-accent-primary'
-                    : isToday
-                      ? 'bg-surface border-accent-primary'
-                      : 'bg-surface border-border'
+                    : 'bg-surface border-border'
                 }`}
               >
                 <Text
@@ -137,7 +158,11 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
                 </Text>
                 <Text
                   className={`text-base text-center font-bold ${
-                    isSelected ? 'text-white' : 'text-text-primary'
+                    isSelected
+                      ? 'text-white'
+                      : isToday
+                        ? 'text-accent-primary'
+                        : 'text-text-primary'
                   }`}
                 >
                   {day.dayOfMonth}
@@ -153,76 +178,117 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
       >
-        {meals.length === 0 ? (
-          <View className="bg-surface rounded-xl p-4 shadow-sm">
-            <Text className="text-text-primary font-bold">
-              {t('kitchen.noPlannedMeals')}
-            </Text>
-            <Text className="text-text-muted mt-1">
-              {t('kitchen.noPlannedMealsSubtitle')}
-            </Text>
-          </View>
-        ) : (
-          <>
+        <>
+          {meals.length === 0 ? (
             <View className="bg-surface rounded-xl p-4 shadow-sm">
               <Text className="text-text-primary font-bold">
-                {activeMealPlanDay?.planName ?? t('kitchen.activeMealPlan')}
+                {t('kitchen.noPlannedMeals')}
               </Text>
               <Text className="text-text-muted mt-1">
-                {Math.round(totals.calories)} Cal · C {formatMacro(totals.carbs)} · P {formatMacro(totals.protein)} · F {formatMacro(totals.fat)}
+                {t('kitchen.noPlannedMealsSubtitle')}
               </Text>
             </View>
-            {ingredientSummary.length > 0 ? (
+          ) : (
+            <>
               <View className="bg-surface rounded-xl p-4 shadow-sm">
-                <Text className="text-text-primary font-bold mb-1">
-                  {t('kitchen.ingredientSummary')}
+                <Text className="text-text-primary font-bold">
+                  {activeMealPlanDay?.planName ?? t('kitchen.activeMealPlan')}
                 </Text>
-                <Text className="text-text-muted text-xs mb-2">
-                  {t('kitchen.ingredientSummarySubtitle')}
+                <Text className="text-text-muted mt-1">
+                  {Math.round(totals.calories)} Cal · C {formatMacro(totals.carbs)} · P {formatMacro(totals.protein)} · F {formatMacro(totals.fat)}
                 </Text>
-                {ingredientSummary.map((item) => (
-                  <View
-                    key={item.key}
-                    className="flex-row items-start justify-between mt-2"
-                  >
-                    <View className="flex-1 pr-3">
+              </View>
+              {ingredientSummary.length > 0 ? (
+                <View className="bg-surface rounded-xl p-4 shadow-sm">
+                  <Text className="text-text-primary font-bold mb-1">
+                    {t('kitchen.ingredientSummary')}
+                  </Text>
+                  <Text className="text-text-muted text-xs mb-2">
+                    {t('kitchen.ingredientSummarySubtitle')}
+                  </Text>
+                  {ingredientSummary.map((item) => (
+                    <View
+                      key={item.key}
+                      className="flex-row items-start justify-between mt-2"
+                    >
+                      <View className="flex-1 pr-3">
+                        <Text className="text-text-primary font-semibold">
+                          {item.name}
+                        </Text>
+                        <Text className="text-text-muted text-xs mt-0.5">
+                          {item.mealLabels.join(' · ')}
+                        </Text>
+                      </View>
                       <Text className="text-text-primary font-semibold">
-                        {item.name}
-                      </Text>
-                      <Text className="text-text-muted text-xs mt-0.5">
-                        {item.mealLabels.join(' · ')}
+                        {item.amountLabel}
                       </Text>
                     </View>
+                  ))}
+                </View>
+              ) : null}
+            </>
+          )}
+          {weeklyIngredientSummary.length > 0 ? (
+            <View className="bg-surface rounded-xl p-4 shadow-sm">
+              <View className="flex-row items-center justify-between mb-1">
+                <Text className="text-text-primary font-bold">
+                  {t('kitchen.weeklyPrep')}
+                </Text>
+                {isWeekLoading ? (
+                  <Text className="text-text-muted text-xs">
+                    {t('kitchen.updating')}
+                  </Text>
+                ) : null}
+              </View>
+              <Text className="text-text-muted text-xs mb-2">
+                {t('kitchen.weeklyPrepSubtitle')}
+              </Text>
+              {weeklyIngredientSummary.map((item) => (
+                <View
+                  key={item.key}
+                  className="flex-row items-start justify-between mt-2"
+                >
+                  <View className="flex-1 pr-3">
                     <Text className="text-text-primary font-semibold">
-                      {item.amountLabel}
+                      {item.name}
+                    </Text>
+                    <Text className="text-text-muted text-xs mt-0.5">
+                      {item.mealLabels.join(' · ')}
                     </Text>
                   </View>
-                ))}
-              </View>
-            ) : null}
-            {meals.map((meal) => (
-              <View key={meal.key} className="bg-surface rounded-xl p-4 shadow-sm">
-                <View className="flex-row items-center mb-1">
-                  <Text className="text-text-primary font-bold flex-1">
-                    {meal.label}
-                  </Text>
-                  <Text className="text-xs text-accent-primary font-semibold">
-                    {Math.round(meal.target.calories)} Cal
+                  <Text className="text-text-primary font-semibold">
+                    {item.amountLabel}
                   </Text>
                 </View>
-                <Text className="text-text-muted text-xs mb-2">
-                  C {formatMacro(meal.target.carbs)} · P {formatMacro(meal.target.protein)} · F {formatMacro(meal.target.fat)}
-                </Text>
-                {meal.items.map((item) => (
-                  <View key={`${item.type}-${item.id}`} className="flex-row justify-between mt-2">
-                    <Text className="text-text-primary flex-1">{item.name}</Text>
-                    <Text className="text-text-muted">{item.amountLabel}</Text>
+              ))}
+            </View>
+          ) : null}
+          {meals.length > 0 ? (
+            <>
+              {meals.map((meal) => (
+                <View key={meal.key} className="bg-surface rounded-xl p-4 shadow-sm">
+                  <View className="flex-row items-center mb-1">
+                    <Text className="text-text-primary font-bold flex-1">
+                      {meal.label}
+                    </Text>
+                    <Text className="text-xs text-accent-primary font-semibold">
+                      {Math.round(meal.target.calories)} Cal
+                    </Text>
                   </View>
-                ))}
-              </View>
-            ))}
-          </>
-        )}
+                  <Text className="text-text-muted text-xs mb-2">
+                    C {formatMacro(meal.target.carbs)} · P {formatMacro(meal.target.protein)} · F {formatMacro(meal.target.fat)}
+                  </Text>
+                  {meal.items.map((item) => (
+                    <View key={`${item.type}-${item.id}`} className="flex-row justify-between mt-2">
+                      <Text className="text-text-primary flex-1">{item.name}</Text>
+                      <Text className="text-text-muted">{item.amountLabel}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </>
+          ) : null}
+        </>
       </ScrollView>
     </View>
   );

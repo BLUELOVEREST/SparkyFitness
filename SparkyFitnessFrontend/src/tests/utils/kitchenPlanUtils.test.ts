@@ -1,4 +1,5 @@
 import {
+  buildKitchenIngredientSummary,
   buildKitchenWeek,
   getActiveKitchenTemplate,
   localDateString,
@@ -189,5 +190,97 @@ describe('kitchenPlanUtils', () => {
     expect(toISOStringSpy).not.toHaveBeenCalled();
 
     toISOStringSpy.mockRestore();
+  });
+
+  it('summarizes planned ingredients by day and week', () => {
+    const week = buildKitchenWeek(
+      template({
+        macro_targets: {
+          1: [
+            {
+              slotKey: 'morning',
+              label: 'Breakfast',
+              carbs: 30,
+              protein: 30,
+              fat: 10,
+              calories: 330,
+            },
+          ],
+          2: [
+            {
+              slotKey: 'evening',
+              label: 'Dinner',
+              carbs: 50,
+              protein: 40,
+              fat: 15,
+              calories: 495,
+            },
+          ],
+        },
+        assignments: [
+          {
+            item_type: 'food',
+            day_of_week: 1,
+            meal_type: 'Breakfast',
+            food_id: 'rice',
+            food_name: '米饭',
+            quantity: 150,
+            unit: 'g',
+            macro_role: 'carb',
+          },
+          {
+            item_type: 'food',
+            day_of_week: 2,
+            meal_type: 'Dinner',
+            food_id: 'rice',
+            food_name: '米饭',
+            quantity: 200,
+            unit: 'g',
+            macro_role: 'carb',
+          },
+          {
+            item_type: 'food',
+            day_of_week: 2,
+            meal_type: 'Dinner',
+            food_id: 'almond',
+            food_name: '杏仁',
+            quantity: 25,
+            unit: 'g',
+            macro_role: 'fat',
+          },
+        ],
+      }),
+      '2026-07-14',
+      '2026-07-15'
+    );
+
+    expect(buildKitchenIngredientSummary([week.days[1]!])).toEqual([
+      {
+        key: '米饭|g',
+        name: '米饭',
+        amountLabel: '200g',
+        sourceLabels: ['Tuesday Dinner'],
+      },
+      {
+        key: '杏仁|g',
+        name: '杏仁',
+        amountLabel: '25g',
+        sourceLabels: ['Tuesday Dinner'],
+      },
+    ]);
+    expect(buildKitchenIngredientSummary(week.days)).toEqual([
+      {
+        key: '米饭|g',
+        name: '米饭',
+        amountLabel: '350g',
+        sourceLabels: ['Monday Breakfast', 'Tuesday Dinner'],
+      },
+      {
+        key: '杏仁|g',
+        name: '杏仁',
+        amountLabel: '25g',
+        sourceLabels: ['Tuesday Dinner'],
+      },
+    ]);
   });
 });
