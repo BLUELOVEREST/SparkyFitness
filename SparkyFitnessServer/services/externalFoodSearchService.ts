@@ -149,6 +149,47 @@ export async function resolveProviderCredentials(
   };
 }
 
+export async function resolveGrocyProviderCredentials(
+  credentialUserId: string,
+  providerId: string | undefined
+): Promise<ProviderCredentials | null> {
+  if (providerId) {
+    const credentials = await resolveProviderCredentials(
+      credentialUserId,
+      providerId,
+      'grocy'
+    );
+    return credentials.base_url && credentials.app_key ? credentials : null;
+  }
+
+  const providers =
+    await externalProviderService.getExternalDataProvidersForUser(
+      credentialUserId,
+      credentialUserId
+    );
+  const grocyProvider = providers.find(
+    (provider: {
+      provider_type: string;
+      is_active: boolean;
+      base_url?: string | null;
+      app_key?: string | null;
+    }) =>
+      provider.provider_type === 'grocy' &&
+      provider.is_active &&
+      provider.base_url &&
+      provider.app_key
+  );
+
+  if (!grocyProvider) {
+    return null;
+  }
+
+  return {
+    base_url: grocyProvider.base_url ?? undefined,
+    app_key: grocyProvider.app_key ?? undefined,
+  };
+}
+
 export interface ProviderSearchPagination {
   page: number;
   pageSize: number;

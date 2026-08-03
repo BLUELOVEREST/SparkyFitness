@@ -35,6 +35,15 @@ type GrocyFood = {
   unit_conversions?: GrocyConversion[];
 };
 
+type ImportableFood = Pick<
+  NormalizedFood,
+  | 'name'
+  | 'brand'
+  | 'provider_external_id'
+  | 'provider_type'
+  | 'default_variant'
+>;
+
 function requireConfig(
   baseUrl: string | undefined,
   appKey: string | undefined
@@ -76,6 +85,37 @@ async function getGrocyJson(
       Accept: 'application/json',
       'GROCY-API-KEY': config.appKey,
     },
+  });
+
+  if (!response.ok) {
+    throw Object.assign(
+      new Error(`Grocy API returned status ${response.status}`),
+      {
+        status: response.status >= 400 && response.status < 500 ? 400 : 502,
+      }
+    );
+  }
+
+  return response.json() as Promise<unknown>;
+}
+
+async function postGrocyJson(
+  baseUrl: string | undefined,
+  appKey: string | undefined,
+  path: string,
+  body: unknown
+) {
+  const config = requireConfig(baseUrl, appKey);
+  const url = new URL(`${normalizeBaseUrl(config.baseUrl)}${path}`);
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'GROCY-API-KEY': config.appKey,
+    },
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -298,4 +338,31 @@ export async function getGrocyFoodDetails(
     });
   }
   return food;
+}
+
+export async function importFoodToGrocy(
+  food: ImportableFood,
+  baseUrl: string | undefined,
+  appKey: string | undefined
+) {
+  const variant = food.default_variant;
+  if (!food.provider_type || !food.provider_external_id) {
+    throw Object.assign(new Error('Food provider identity is required'), {
+      status: 400,
+    });
+  }
+
+  return postGrocyJson(baseUrl, appKey, '/api/eric/foods/import', {
+    provider: food.provider_type,
+    external_id: food.provider_external_id,
+    name: food.name,
+    brand: food.brand,
+    stock_unit: variant.serving_unit,
+    basis_amount: variant.serving_size,
+    basis_unit: variant.serving_unit,
+    calories: variant.calories,
+    protein: variant.protein,
+    fat: variant.fat,
+    carbohydrates: variant.carbs,
+  });
 }

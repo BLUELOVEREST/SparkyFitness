@@ -4,7 +4,10 @@ import express from 'express';
 import request from 'supertest';
 import foodCoreService from '../services/foodCoreService.js';
 import customNutrientService from '../services/customNutrientService.js';
+import externalProviderService from '../services/externalProviderService.js';
 import { searchProviderFoods } from '../services/externalFoodSearchService.js';
+import { getBooheeFoodDetails } from '../integrations/boohee/booheeService.js';
+import { importFoodToGrocy } from '../integrations/grocy/grocyFoodService.js';
 // @ts-expect-error TS(2691): An import path cannot end with a '.ts' extension. ... Remove this comment to see the full error message
 import foodRoutesV2 from '../routes/v2/foodRoutes.js';
 vi.mock('../middleware/checkPermissionMiddleware.js', () => ({
@@ -38,6 +41,7 @@ vi.mock('../services/customNutrientService.js', () => ({
 vi.mock('../services/externalProviderService.js', () => ({
   default: {
     getExternalDataProviderDetails: vi.fn(),
+    getExternalDataProvidersForUser: vi.fn(),
   },
 }));
 
@@ -85,6 +89,21 @@ vi.mock('../services/foodIntegrationService.js', () => ({
     getTandoorFoodDetails: vi.fn(),
   },
 }));
+
+vi.mock('../integrations/boohee/booheeService.js', () => ({
+  getBooheeFoodDetails: vi.fn(),
+}));
+
+vi.mock('../integrations/grocy/grocyFoodService.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('../integrations/grocy/grocyFoodService.js')
+    >();
+  return {
+    ...actual,
+    importFoodToGrocy: vi.fn(),
+  };
+});
 const app = express();
 app.use(express.json());
 app.use((req, res, next) => {
@@ -321,5 +340,101 @@ describe('GET /v2/foods/search/:providerType', () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ error: 'Missing providerId query parameter' });
+  });
+});
+
+describe('GET /v2/foods/details/:providerType/:externalId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('imports selected Boohee food into the configured Grocy food library', async () => {
+    vi.mocked(externalProviderService.getExternalDataProviderDetails)
+      .mockResolvedValueOnce({
+        id: 'boohee-provider',
+        provider_name: 'Boohee',
+        provider_type: 'boohee',
+        user_id: 'user-123',
+        is_public: false,
+        is_active: true,
+        base_url: null,
+        sync_frequency: 'manual',
+        app_id: null,
+        app_key: 'boohee-secret',
+        token_expires_at: null,
+        external_user_id: null,
+        garth_dump: null,
+        is_strictly_private: false,
+        categories: null,
+        required_fields: null,
+        field_labels: null,
+        supports_barcode: false,
+      })
+      .mockResolvedValueOnce({
+        id: 'grocy-provider',
+        provider_name: 'Grocy',
+        provider_type: 'grocy',
+        user_id: 'user-123',
+        is_public: false,
+        is_active: true,
+        base_url: 'https://grocy.example.test',
+        sync_frequency: 'manual',
+        app_id: null,
+        app_key: 'grocy-secret',
+        token_expires_at: null,
+        external_user_id: null,
+        garth_dump: null,
+        is_strictly_private: false,
+        categories: null,
+        required_fields: null,
+        field_labels: null,
+        supports_barcode: false,
+      });
+    vi.mocked(getBooheeFoodDetails).mockResolvedValue({
+      name: '鸡蛋',
+      brand: '薄荷',
+      provider_external_id: 'egg-1',
+      provider_type: 'boohee',
+      macro_role: 'protein',
+      is_custom: false,
+      default_variant: {
+        serving_size: 100,
+        serving_unit: 'g',
+        calories: 143,
+        protein: 12.6,
+        carbs: 1.1,
+        fat: 9.5,
+        is_default: true,
+      },
+      variants: [
+        {
+          serving_size: 100,
+          serving_unit: 'g',
+          calories: 143,
+          protein: 12.6,
+          carbs: 1.1,
+          fat: 9.5,
+          is_default: true,
+        },
+      ],
+    });
+    vi.mocked(importFoodToGrocy).mockResolvedValue({ id: 42 });
+
+    const res = await request(app).get(
+      '/v2/foods/details/boohee/egg-1?providerId=boohee-provider&grocyProviderId=grocy-provider'
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(getBooheeFoodDetails).toHaveBeenCalledWith('egg-1', 'boohee-secret');
+    expect(importFoodToGrocy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: '鸡蛋',
+        provider_external_id: 'egg-1',
+        provider_type: 'boohee',
+      }),
+      'https://grocy.example.test',
+      'grocy-secret'
+    );
+    expect(res.body.provider_type).toBe('boohee');
   });
 });

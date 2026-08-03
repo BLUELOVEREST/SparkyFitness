@@ -18,6 +18,7 @@ import preferenceService from '../../services/preferenceService.js';
 import {
   isValidProviderType,
   resolveOpenFoodFactsProviderId,
+  resolveGrocyProviderCredentials,
   resolveProviderCredentials,
   searchProviderFoods,
 } from '../../services/externalFoodSearchService.js';
@@ -34,7 +35,10 @@ import { getYazioFoodDetails } from '../../integrations/yazio/yazioService.js';
 import { getSwissFoodDetails } from '../../integrations/swissfood/swissFoodService.js';
 import { getChinaFoodCompositionDetails } from '../../integrations/chinafood/chinaFoodCompositionService.js';
 import { getBooheeFoodDetails } from '../../integrations/boohee/booheeService.js';
-import { getGrocyFoodDetails } from '../../integrations/grocy/grocyFoodService.js';
+import {
+  getGrocyFoodDetails,
+  importFoodToGrocy,
+} from '../../integrations/grocy/grocyFoodService.js';
 import {
   getFatSecretNutrients,
   getMealieFoodDetails,
@@ -126,6 +130,35 @@ function normalizeFoodForResponse(food: unknown): unknown {
         )
       : nullToUndefined(record.variants as unknown[] | null | undefined),
   };
+}
+
+async function importBooheeFoodToGrocyIfConfigured(
+  authenticatedUserId: string,
+  grocyProviderId: string | undefined,
+  food: unknown
+) {
+  if (!food || typeof food !== 'object' || Array.isArray(food)) {
+    return;
+  }
+
+  try {
+    const credentials = await resolveGrocyProviderCredentials(
+      authenticatedUserId,
+      grocyProviderId
+    );
+    if (!credentials) {
+      log('warn', 'Skipping Boohee to Grocy import: no active Grocy provider');
+      return;
+    }
+
+    await importFoodToGrocy(
+      food as Parameters<typeof importFoodToGrocy>[0],
+      credentials.base_url,
+      credentials.app_key
+    );
+  } catch (error) {
+    log('warn', 'Boohee to Grocy import failed:', error);
+  }
 }
 
 // Match the user's custom nutrients (by name/alias) against the extra nutrient
@@ -427,6 +460,11 @@ const detailHandler: RequestHandler<{
 
       case 'boohee': {
         food = await getBooheeFoodDetails(externalId, credentials.app_key);
+        await importBooheeFoodToGrocyIfConfigured(
+          req.authenticatedUserId,
+          req.query.grocyProviderId as string | undefined,
+          food
+        );
         break;
       }
 
