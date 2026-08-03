@@ -1,7 +1,7 @@
 import "tsx/cjs";
 import { ExpoConfig, ConfigContext } from 'expo/config';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { getIosAppGroup } = require('./app.identifiers.js');
+const { getIosAppGroup, DEV_BUNDLE_IDENTIFIER } = require('./app.identifiers.js');
 
 const APP_NAME = 'SparkyFitness';
 const APP_SLUG = 'sparkyfitnessmobile';
@@ -9,7 +9,6 @@ const ANDROID_PROD_BUNDLE_IDENTIFIER = 'com.SparkyApps.SparkyFitnessMobile';
 const IOS_PROD_BUNDLE_IDENTIFIER = 'com.SparkyApps.SparkyFitnessMobile';
 const DEV_APPLE_TEAM_ID = process.env.EXPO_DEV_APPLE_TEAM_ID || '';
 const PROD_APPLE_TEAM_ID = process.env.EXPO_PROD_APPLE_TEAM_ID || '';
-const DEV_BUNDLE_IDENTIFIER = process.env.EXPO_DEV_BUNDLE_IDENTIFIER || 'org.SparkyApps.SparkyFitnessMobile1.dev';
 
 const DEV_PACKAGE = DEV_BUNDLE_IDENTIFIER;
 const PROD_PACKAGE = ANDROID_PROD_BUNDLE_IDENTIFIER;
@@ -128,6 +127,8 @@ export default ({ config }: ConfigContext): Partial<ExpoConfig> => {
       appleTeamId: isDev ? DEV_APPLE_TEAM_ID : PROD_APPLE_TEAM_ID,
       supportsTablet: false,
       infoPlist: {
+        NSLocalNetworkUsageDescription:
+          'SparkyFitness connects to self-hosted servers on your local network.',
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: false,
         },
@@ -150,6 +151,17 @@ export default ({ config }: ConfigContext): Partial<ExpoConfig> => {
     },
     plugins: [
       ...(config.plugins ?? []),
+      'expo-image',
+      [
+        // Foreground playback only (rest-timer chime): no mic permission, no
+        // background-audio mode, no Android record/foreground-service perms.
+        'expo-audio',
+        {
+          microphonePermission: false,
+          recordAudioAndroid: false,
+          enableBackgroundPlayback: false,
+        },
+      ],
       './plugins/withGlanceAndroidSupport',
       './plugins/withCalorieWidget',
       './plugins/withExactAlarmModule',

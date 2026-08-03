@@ -1,9 +1,10 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import { render, fireEvent } from '@testing-library/react-native';
+import { Platform, StyleSheet } from 'react-native';
+import { act, render, fireEvent } from '@testing-library/react-native';
 import { useCSSVariable } from 'uniwind';
 import type {
   ExerciseEntrySetResponse,
+  ExerciseModality,
   ExerciseRecentSessionSet,
 } from '@workspace/shared';
 import ActiveWorkoutSetRow, {
@@ -11,7 +12,7 @@ import ActiveWorkoutSetRow, {
   type SetRowMode,
   type SetRowState,
 } from '../../src/components/ActiveWorkoutSetRow';
-import type { WorkoutCardSet } from '../../src/utils/workoutSession';
+import type { AssumedSetValues, WorkoutCardSet } from '../../src/utils/workoutSession';
 import type { ActiveWorkoutMetricColumn } from '../../src/stores/appPreferencesStore';
 
 jest.mock('../../src/components/Icon', () => {
@@ -55,19 +56,22 @@ function makeSet(overrides?: Partial<ExerciseEntrySetResponse>): ExerciseEntrySe
 
 interface RenderOverrides {
   set?: Partial<WorkoutCardSet>;
+  modality?: ExerciseModality;
   state?: SetRowState;
   metricColumn?: ActiveWorkoutMetricColumn;
   weightUnit?: 'kg' | 'lbs';
+  distanceUnit?: 'km' | 'miles';
   displayNumber?: number;
   readOnly?: boolean;
   mode?: SetRowMode;
-  activeField?: 'weight' | 'reps';
+  activeField?: 'weight' | 'reps' | 'duration' | 'rpe';
   isFocused?: boolean;
   nextSetId?: string | null;
   entryId?: string;
   rpeEditable?: boolean;
   completedBadge?: boolean;
   previousSet?: ExerciseRecentSessionSet | null;
+  assumed?: AssumedSetValues | null;
   /** Wire the edit-mode completion toggle (otherwise the check is static). */
   enableToggle?: boolean;
   /** Wire the set-type handler (makes the set number a menu trigger). */
@@ -84,10 +88,10 @@ function renderRow(overrides?: RenderOverrides) {
     onActivateSet: jest.fn(),
     onActivateRpe: jest.fn(),
     onToggleComplete: jest.fn(),
-    onDeactivate: jest.fn(),
     onEditFieldChange: jest.fn(),
     onAddSet: jest.fn(),
     onPressSetType: jest.fn(),
+    onRegisterAccessoryHandle: jest.fn(),
   };
   // onToggleComplete and onPressSetType are opt-in (via enableToggle /
   // enableSetType) so most tests exercise the static-check + onLongPress
@@ -96,10 +100,12 @@ function renderRow(overrides?: RenderOverrides) {
   const buildElement = (current?: RenderOverrides) => (
     <ActiveWorkoutSetRow
       set={makeSet(current?.set as Partial<ExerciseEntrySetResponse>)}
+      modality={current?.modality}
       displayNumber={current?.displayNumber ?? 1}
       state={current?.state ?? 'current'}
       metricColumn={current?.metricColumn ?? 'rpe'}
       weightUnit={current?.weightUnit ?? 'kg'}
+      distanceUnit={current?.distanceUnit}
       mode={current?.mode ?? (current?.readOnly ? 'view' : undefined)}
       activeField={current?.activeField}
       isFocused={current?.isFocused}
@@ -108,6 +114,7 @@ function renderRow(overrides?: RenderOverrides) {
       rpeEditable={current?.rpeEditable}
       completedBadge={current?.completedBadge}
       previousSet={current?.previousSet}
+      assumed={current?.assumed}
       {...spreadCallbacks}
       onToggleComplete={current?.enableToggle ? onToggleComplete : undefined}
       onPressSetType={current?.enableSetType ? onPressSetType : undefined}
@@ -191,27 +198,46 @@ describe('ActiveWorkoutSetRow', () => {
       expect(callbacks.onComplete).toHaveBeenCalledWith('101');
     });
 
-    it('activates the tapped cell instead of showing inputs inline', () => {
-      const { getByLabelText, queryByLabelText, callbacks } = renderRow({ state: 'current' });
-      expect(queryByLabelText('Weight')).toBeNull();
-      fireEvent.press(getByLabelText('Edit weight for set 1'));
+    it('keeps inputs mounted while unfocused and reports focus up', () => {
+      // Always-mounted inputs are what keep the keyboard from dipping when
+      // the user taps between rows: focus lands natively and only the report
+      // goes through screen state.
+      const { getByLabelText, callbacks } = renderRow({ state: 'current' });
+      const weight = getByLabelText('Weight');
+      expect(weight.props.value).toBe('60');
+      fireEvent(weight, 'focus');
       expect(callbacks.onActivateSet).toHaveBeenCalledWith('101', 'weight');
-      fireEvent.press(getByLabelText('Edit reps for set 1'));
+      fireEvent(getByLabelText('Reps'), 'focus');
       expect(callbacks.onActivateSet).toHaveBeenCalledWith('101', 'reps');
     });
 
-    it('activates RPE when the RPE column cell is tapped', () => {
+    it('renders cells as plain text until focused — no chip chrome on the resting grid', () => {
+      const { getByLabelText } = renderRow({ state: 'current' });
+      const input = getByLabelText('Weight');
+      expect(StyleSheet.flatten(input.props.style).backgroundColor).toBe('transparent');
+      expect(StyleSheet.flatten(input.props.style).borderColor).toBe('transparent');
+
+      // The chip + ring come back on the focused cell to mark the keyboard target.
+      fireEvent(input, 'focus');
+      expect(StyleSheet.flatten(input.props.style).backgroundColor).not.toBe('transparent');
+    });
+
+    it('reports RPE focus when the RPE column input is focused', () => {
       const { getByLabelText, callbacks } = renderRow({
         state: 'current',
         metricColumn: 'rpe',
       });
-      fireEvent.press(getByLabelText('Edit RPE for set 1'));
+      fireEvent(getByLabelText('RPE'), 'focus');
       expect(callbacks.onActivateRpe).toHaveBeenCalledWith('101');
     });
 
-    it('does not make a non-RPE metric column tappable', () => {
-      const { queryByLabelText } = renderRow({ state: 'current', metricColumn: 'volume' });
-      expect(queryByLabelText('Edit RPE for set 1')).toBeNull();
+    it('renders no RPE input for a non-RPE metric column', () => {
+      const { queryByLabelText, getByText } = renderRow({
+        state: 'current',
+        metricColumn: 'volume',
+      });
+      expect(queryByLabelText('RPE')).toBeNull();
+      expect(getByText('600')).toBeTruthy();
     });
   });
 
@@ -358,47 +384,39 @@ describe('ActiveWorkoutSetRow', () => {
       expect(getByText('600')).toBeTruthy();
     });
 
-    it('does not wrap the actively-edited row in a swipeable', () => {
-      const { queryByTestId } = renderRow({ state: 'current', isFocused: true });
-      expect(queryByTestId('reanimated-swipeable')).toBeNull();
+    it('keeps swipe-delete on the focused row (inputs never unmount)', () => {
+      const { getByTestId } = renderRow({ state: 'current', isFocused: true });
+      expect(getByTestId('reanimated-swipeable')).toBeTruthy();
     });
 
-    it('gives each input a distinct accessory id so the keyboard bar shows on all three', () => {
-      // iOS attaches a shared InputAccessoryView to only the first input, so a
-      // single id would leave reps/RPE with a bare keyboard.
+    it('attaches no per-input accessory ids — the live bar is screen-owned', () => {
       const { getByLabelText } = renderRow({
         state: 'current',
         isFocused: true,
         metricColumn: 'rpe',
       });
-      const ids = [
-        getByLabelText('Weight').props.inputAccessoryViewID,
-        getByLabelText('Reps').props.inputAccessoryViewID,
-        getByLabelText('RPE').props.inputAccessoryViewID,
-      ];
-      expect(ids.every(Boolean)).toBe(true);
-      expect(new Set(ids).size).toBe(3);
+      expect(getByLabelText('Weight').props.inputAccessoryViewID).toBeUndefined();
+      expect(getByLabelText('Reps').props.inputAccessoryViewID).toBeUndefined();
+      expect(getByLabelText('RPE').props.inputAccessoryViewID).toBeUndefined();
     });
 
-    it('issues a fresh accessory id on each activation but holds it while active', () => {
-      // Fabric recycles native TextInputs with their last props retained, so a
-      // remount that reuses a prior activation's exact id string is treated as
-      // unchanged and the accessory bar never reattaches (bare keyboard on the
-      // second edit of the same cell). Re-renders during one activation must
-      // NOT change the id, or the live attachment breaks under the open
-      // keyboard (e.g. autosave churn).
-      const base = { state: 'current' as const, metricColumn: 'rpe' as const };
-      const { getByLabelText, rerenderRow } = renderRow({ ...base, isFocused: true });
-      const firstId = getByLabelText('Weight').props.inputAccessoryViewID;
+    it('registers a sticky-bar handle whose log flushes drafts, then completes', () => {
+      const { getByLabelText, callbacks } = renderRow({ state: 'current', isFocused: true });
+      const [key, handle] = callbacks.onRegisterAccessoryHandle.mock.calls[0];
+      expect(key).toBe('101');
+      expect(handle).not.toBeNull();
 
-      rerenderRow({ ...base, isFocused: true, weightUnit: 'lbs' });
-      expect(getByLabelText('Weight').props.inputAccessoryViewID).toBe(firstId);
+      fireEvent.changeText(getByLabelText('Weight'), '80');
+      act(() => handle.log());
 
-      rerenderRow({ ...base, isFocused: false });
-      rerenderRow({ ...base, isFocused: true });
-      const secondId = getByLabelText('Weight').props.inputAccessoryViewID;
-      expect(secondId).toBeTruthy();
-      expect(secondId).not.toBe(firstId);
+      expect(callbacks.onCommitField).toHaveBeenCalledWith('101', { weight: 80 });
+      expect(callbacks.onComplete).toHaveBeenCalledWith('101');
+    });
+
+    it('unregisters the sticky-bar handle on unmount', () => {
+      const { unmount, callbacks } = renderRow({ state: 'current' });
+      unmount();
+      expect(callbacks.onRegisterAccessoryHandle).toHaveBeenLastCalledWith('101', null);
     });
   });
 
@@ -413,28 +431,19 @@ describe('ActiveWorkoutSetRow', () => {
       expect(callbacks.onComplete).toHaveBeenCalledWith('101');
     });
 
-    it('still lets an upcoming cell be tapped to edit (pre-fill)', () => {
+    it('keeps its inputs mounted for direct editing (pre-fill by typing)', () => {
       const { getByLabelText, callbacks } = renderRow({ state: 'upcoming' });
-      fireEvent.press(getByLabelText('Edit weight for set 1'));
+      fireEvent(getByLabelText('Weight'), 'focus');
       expect(callbacks.onActivateSet).toHaveBeenCalledWith('101', 'weight');
     });
 
-    it('offers Log in the keyboard accessory while uncompleted', () => {
-      // Out-of-order logging: a focused upcoming row must be loggable from the
-      // accessory too, or the RPE field (last in the Next chain) dead-ends on
-      // Done. One bar per input, so the button appears once per accessory.
-      const { getAllByText, callbacks } = renderRow({
-        state: 'upcoming',
-        isFocused: true,
-        metricColumn: 'rpe',
-      });
-      fireEvent.press(getAllByText('Log')[0]);
+    it('logs out of order through the registered sticky-bar handle', () => {
+      // Out-of-order logging: any uncompleted row is loggable from the
+      // screen's accessory bar, or the last field dead-ends on Done.
+      const { callbacks } = renderRow({ state: 'upcoming', isFocused: true });
+      const [, handle] = callbacks.onRegisterAccessoryHandle.mock.calls[0];
+      act(() => handle.log());
       expect(callbacks.onComplete).toHaveBeenCalledWith('101');
-    });
-
-    it('omits Log from the accessory once the set is completed', () => {
-      const { queryByText } = renderRow({ state: 'done', isFocused: true });
-      expect(queryByText('Log')).toBeNull();
     });
 
     it('is not dimmed', () => {
@@ -444,6 +453,11 @@ describe('ActiveWorkoutSetRow', () => {
   });
 
   describe('readOnly', () => {
+    it('registers no sticky-bar handle (nothing to dispatch to)', () => {
+      const { callbacks } = renderRow({ state: 'done', readOnly: true });
+      expect(callbacks.onRegisterAccessoryHandle).not.toHaveBeenCalled();
+    });
+
     it('renders a static checkmark on done rows with no un-complete control', () => {
       const { getByTestId, queryByLabelText } = renderRow({ state: 'done', readOnly: true });
       expect(getByTestId('icon-checkmark')).toBeTruthy();
@@ -525,13 +539,204 @@ describe('ActiveWorkoutSetRow', () => {
       expect(getByTestId('set-row')).toBeTruthy();
     });
 
-    it('shows the duration in the weight cell for time-based sets', () => {
-      const { getByText } = renderRow({
+    it('shows dashes for a weight_reps set that only stored a duration', () => {
+      // Time-based sets are duration-modality now; a stray duration on a
+      // weight_reps set is invisible structure, not a weight-cell fallback.
+      const { getAllByText } = renderRow({
         state: 'upcoming',
         readOnly: true,
         set: { weight: null, reps: null, duration: 90 },
       });
-      expect(getByText('1:30')).toBeTruthy();
+      expect(getAllByText('–').length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe('modality matrix', () => {
+    describe('reps_only', () => {
+      it('drops the weight cell in live mode but keeps reps', () => {
+        const { queryByLabelText, getByLabelText } = renderRow({
+          modality: 'reps_only',
+          state: 'current',
+          set: { weight: null, reps: 12 },
+        });
+        expect(queryByLabelText('Weight')).toBeNull();
+        expect(getByLabelText('Reps').props.value).toBe('12');
+      });
+
+      it('drops the weight cell in view mode', () => {
+        const { queryByText, getByText } = renderRow({
+          modality: 'reps_only',
+          state: 'done',
+          readOnly: true,
+          set: { weight: 60, reps: 12 },
+        });
+        expect(getByText('12')).toBeTruthy();
+        expect(queryByText('60')).toBeNull();
+      });
+    });
+
+    describe.each(['duration', 'duration_distance'] as const)('%s', (modality) => {
+      it('renders a single seconds input in live mode', () => {
+        const { queryByLabelText, getByLabelText } = renderRow({
+          modality,
+          state: 'current',
+          set: { weight: null, reps: null, duration: 45 },
+        });
+        expect(queryByLabelText('Weight')).toBeNull();
+        expect(queryByLabelText('Reps')).toBeNull();
+        expect(getByLabelText('Duration').props.value).toBe('45');
+      });
+
+      it('renders flat seconds text in view mode', () => {
+        const { getByText } = renderRow({
+          modality,
+          state: 'done',
+          readOnly: true,
+          set: { weight: null, reps: null, duration: 90 },
+        });
+        expect(getByText('90')).toBeTruthy();
+      });
+
+      it('commits an edited duration on blur', () => {
+        const { getByLabelText, callbacks } = renderRow({
+          modality,
+          state: 'current',
+          set: { weight: null, reps: null, duration: null },
+        });
+        const input = getByLabelText('Duration');
+        fireEvent.changeText(input, '75');
+        fireEvent(input, 'blur');
+        expect(callbacks.onCommitField).toHaveBeenCalledWith('101', { duration: 75 });
+      });
+
+      it('shows the assumed duration as the gray placeholder', () => {
+        const { getByLabelText } = renderRow({
+          modality,
+          state: 'current',
+          set: { weight: null, reps: null, duration: null },
+          assumed: { weight: null, reps: null, duration: 60 },
+        });
+        expect(getByLabelText('Duration').props.placeholder).toBe('60');
+      });
+
+      it('fills the duration from the previous set on PREV tap', () => {
+        const { getByLabelText, callbacks } = renderRow({
+          modality,
+          state: 'current',
+          set: { weight: null, reps: null, duration: null },
+          previousSet: { setNumber: 1, setType: 'normal', weight: null, reps: null, duration: 45 },
+        });
+        fireEvent.press(getByLabelText('Fill set 1 from previous'));
+        expect(callbacks.onCommitField).toHaveBeenCalledWith('101', { duration: 45 });
+      });
+    });
+
+    describe('duration_distance view-mode distance cell', () => {
+      it('renders the distance next to the seconds', () => {
+        const { getByText } = renderRow({
+          modality: 'duration_distance',
+          state: 'done',
+          readOnly: true,
+          set: { weight: null, reps: null, duration: 300, distance: 1.25 },
+        });
+        expect(getByText('300')).toBeTruthy();
+        expect(getByText('1.25')).toBeTruthy();
+      });
+
+      it('converts the distance into miles for a miles user', () => {
+        const { getByText } = renderRow({
+          modality: 'duration_distance',
+          state: 'done',
+          readOnly: true,
+          distanceUnit: 'miles',
+          set: { weight: null, reps: null, duration: 300, distance: 3.218688 },
+        });
+        expect(getByText('2')).toBeTruthy();
+      });
+
+      it('shows a dash when the set has no distance', () => {
+        const { getByText } = renderRow({
+          modality: 'duration_distance',
+          state: 'done',
+          readOnly: true,
+          set: { weight: null, reps: null, duration: 300, distance: null, rpe: 5 },
+        });
+        expect(getByText('–')).toBeTruthy();
+      });
+
+      it('renders no distance cell on plain duration rows', () => {
+        const { queryByText } = renderRow({
+          modality: 'duration',
+          state: 'done',
+          readOnly: true,
+          set: { weight: null, reps: null, duration: 300, distance: 1.25 },
+        });
+        expect(queryByText('1.25')).toBeNull();
+      });
+
+      it('keeps the single seconds input in live mode', () => {
+        const { getByLabelText, queryByText } = renderRow({
+          modality: 'duration_distance',
+          state: 'current',
+          set: { weight: null, reps: null, duration: 300, distance: 1.25 },
+        });
+        expect(getByLabelText('Duration')).toBeTruthy();
+        expect(queryByText('1.25')).toBeNull();
+      });
+    });
+
+    describe('legacy reps-as-seconds fallback (duration modality only)', () => {
+      it('seeds the live cell from legacy reps and commits nothing untouched', () => {
+        const { getByLabelText, callbacks, rerenderRow } = renderRow({
+          modality: 'duration',
+          state: 'current',
+          isFocused: true,
+          activeField: 'duration',
+          set: { weight: null, reps: 45, duration: null },
+        });
+        expect(getByLabelText('Duration').props.value).toBe('45');
+
+        // Deactivating without edits flushes the drafts; the seeded legacy
+        // text must not write a duration (no silent reps → duration migration).
+        rerenderRow({
+          modality: 'duration',
+          state: 'current',
+          isFocused: false,
+          set: { weight: null, reps: 45, duration: null },
+        });
+        expect(callbacks.onCommitField).not.toHaveBeenCalled();
+      });
+
+      it('writes duration (reps untouched) once the user edits the legacy value', () => {
+        const { getByLabelText, callbacks } = renderRow({
+          modality: 'duration',
+          state: 'current',
+          set: { weight: null, reps: 45, duration: null },
+        });
+        const input = getByLabelText('Duration');
+        fireEvent.changeText(input, '50');
+        fireEvent(input, 'blur');
+        expect(callbacks.onCommitField).toHaveBeenCalledWith('101', { duration: 50 });
+      });
+
+      it('never applies the fallback on duration_distance (seeded cardio reps)', () => {
+        const { getByLabelText } = renderRow({
+          modality: 'duration_distance',
+          state: 'current',
+          set: { weight: null, reps: 10, duration: null },
+        });
+        expect(getByLabelText('Duration').props.value).toBe('');
+      });
+
+      it('shows legacy seconds in the PREV column', () => {
+        const { getByText } = renderRow({
+          modality: 'duration',
+          state: 'current',
+          set: { weight: null, reps: null, duration: null },
+          previousSet: { setNumber: 1, setType: 'normal', weight: null, reps: 45 },
+        });
+        expect(getByText('45s')).toBeTruthy();
+      });
     });
   });
 
@@ -561,15 +766,15 @@ describe('ActiveWorkoutSetRow', () => {
         expect(callbacks.onEditFieldChange).toHaveBeenCalledWith('101', 'reps', '6');
       });
 
-      it('shows no log ring and no delete button (delete is swipe / long-press)', () => {
-        const { queryByLabelText } = renderRow({
+      it('shows no log ring; delete stays on the swipe action, active row included', () => {
+        const { queryByLabelText, getByLabelText, callbacks } = renderRow({
           mode: 'edit',
           state: 'current',
           set: editSet(),
         });
         expect(queryByLabelText('Log set 1')).toBeNull();
-        // The last column no longer hosts a delete button on the active row.
-        expect(queryByLabelText('Delete set 1')).toBeNull();
+        fireEvent.press(getByLabelText('Delete set 1'));
+        expect(callbacks.onDelete).toHaveBeenCalledWith('101');
       });
 
       it('toggles completion from the last-column check when enabled', () => {
@@ -583,11 +788,12 @@ describe('ActiveWorkoutSetRow', () => {
         expect(callbacks.onToggleComplete).toHaveBeenCalledWith('101');
       });
 
-      // Each input has its own InputAccessoryView (unique nativeID; iOS won't
-      // share one across inputs), so the bar's buttons appear once per input —
-      // all wired to the same handler, so pressing the first is equivalent.
-      it('Next on the weight field keeps focus in-row; on reps it activates the next set', () => {
-        const withNext = renderRow({
+      // The Done/Next accessory is the screen-owned sticky bar (both
+      // platforms); it dispatches to the handle the focused row registers.
+      // In-row hops (weight → reps → RPE) go through the handle's focusField;
+      // advance is the row-crossing hop.
+      it('registers a sticky-bar handle whose advance activates the next set', () => {
+        const { callbacks } = renderRow({
           mode: 'edit',
           state: 'current',
           activeField: 'reps',
@@ -595,13 +801,15 @@ describe('ActiveWorkoutSetRow', () => {
           entryId: 'entry-1',
           set: editSet(),
         });
-        fireEvent.press(withNext.getAllByText('Next Set')[0]);
-        expect(withNext.callbacks.onActivateSet).toHaveBeenCalledWith('202', 'weight');
-        expect(withNext.callbacks.onAddSet).not.toHaveBeenCalled();
+        const [key, handle] = callbacks.onRegisterAccessoryHandle.mock.calls[0];
+        expect(key).toBe('101');
+        act(() => handle.advance());
+        expect(callbacks.onActivateSet).toHaveBeenCalledWith('202', 'weight');
+        expect(callbacks.onAddSet).not.toHaveBeenCalled();
       });
 
-      it('Next on the last set adds a set to the owning exercise', () => {
-        const { getAllByText, callbacks } = renderRow({
+      it('advance on the last set adds a set to the owning exercise', () => {
+        const { callbacks } = renderRow({
           mode: 'edit',
           state: 'current',
           activeField: 'reps',
@@ -609,18 +817,9 @@ describe('ActiveWorkoutSetRow', () => {
           entryId: 'entry-1',
           set: editSet(),
         });
-        fireEvent.press(getAllByText('Next Set')[0]);
+        const [, handle] = callbacks.onRegisterAccessoryHandle.mock.calls[0];
+        act(() => handle.advance());
         expect(callbacks.onAddSet).toHaveBeenCalledWith('entry-1');
-      });
-
-      it('Done deactivates the set', () => {
-        const { getAllByText, callbacks } = renderRow({
-          mode: 'edit',
-          state: 'current',
-          set: editSet(),
-        });
-        fireEvent.press(getAllByText('Done')[0]);
-        expect(callbacks.onDeactivate).toHaveBeenCalledTimes(1);
       });
 
       // The header Save path reads the reducer synchronously, so edit-mode RPE
@@ -693,23 +892,76 @@ describe('ActiveWorkoutSetRow', () => {
         });
         expect(queryByLabelText('RPE')).toBeNull();
       });
+
+      it('gives Android cells the StepperInput shape so focus cannot clip them', () => {
+        // Android EditText mislays its text on the first focus — half-clipped
+        // digits, persisting after blur — unless the input is bone-stock:
+        // explicit height, zero vertical padding, lineHeight = fontSize + 2,
+        // and NO border or background (the chip chrome lives on a wrapper
+        // View instead, the shape StepperInput has proven on-device; borders,
+        // vertical padding, includeFontPadding: false, textAlignVertical, and
+        // a forced 18px line box each broke it).
+        const osSpy = jest.replaceProperty(Platform, 'OS', 'android');
+        try {
+          const { getByLabelText } = renderRow({
+            mode: 'edit',
+            state: 'current',
+            set: editSet(),
+          });
+          const style = StyleSheet.flatten(getByLabelText('Weight').props.style);
+          expect(style.height).toBe(32);
+          expect(style.paddingTop).toBe(0);
+          expect(style.paddingBottom).toBe(0);
+          expect(style.borderWidth).toBe(0);
+          expect(style.backgroundColor).toBe('transparent');
+          expect(style.fontSize).toBe(14);
+          expect(style.lineHeight).toBe(16);
+          expect(style.includeFontPadding).toBeUndefined();
+          expect(style.textAlignVertical).toBeUndefined();
+        } finally {
+          osSpy.restore();
+        }
+      });
+
+      it('attaches no per-input accessory ids — the edit bar is screen-owned too', () => {
+        const { getByLabelText } = renderRow({
+          mode: 'edit',
+          state: 'current',
+          metricColumn: 'rpe',
+          set: editSet(),
+        });
+        expect(getByLabelText('Weight').props.inputAccessoryViewID).toBeUndefined();
+        expect(getByLabelText('Reps').props.inputAccessoryViewID).toBeUndefined();
+        expect(getByLabelText('RPE').props.inputAccessoryViewID).toBeUndefined();
+      });
+
+      it('unregisters the sticky-bar handle on unmount', () => {
+        const { unmount, callbacks } = renderRow({
+          mode: 'edit',
+          state: 'current',
+          set: editSet(),
+        });
+        unmount();
+        expect(callbacks.onRegisterAccessoryHandle).toHaveBeenLastCalledWith('101', null);
+      });
     });
 
     describe('inactive rows', () => {
-      it('shows the draft strings and activates the tapped field', () => {
-        const { getByLabelText, getByText, callbacks } = renderRow({
+      it('keeps inputs mounted with the draft strings; focus reports activation', () => {
+        const { getByLabelText, callbacks } = renderRow({
           mode: 'edit',
           state: 'upcoming',
           set: editSet({ editWeightText: '102.55', editRepsText: '8' }),
         });
-        expect(getByText('102.55')).toBeTruthy();
-        fireEvent.press(getByLabelText('Edit weight for set 1'));
+        expect(getByLabelText('Weight').props.value).toBe('102.55');
+        expect(getByLabelText('Reps').props.value).toBe('8');
+        fireEvent(getByLabelText('Weight'), 'focus');
         expect(callbacks.onActivateSet).toHaveBeenCalledWith('101', 'weight');
-        fireEvent.press(getByLabelText('Edit reps for set 1'));
+        fireEvent(getByLabelText('Reps'), 'focus');
         expect(callbacks.onActivateSet).toHaveBeenCalledWith('101', 'reps');
       });
 
-      it('activates RPE when the RPE column cell is tapped (rpeEditable)', () => {
+      it('activates RPE when the RPE input takes focus (rpeEditable)', () => {
         const { getByLabelText, callbacks } = renderRow({
           mode: 'edit',
           state: 'upcoming',
@@ -717,11 +969,11 @@ describe('ActiveWorkoutSetRow', () => {
           rpeEditable: true,
           set: editSet(),
         });
-        fireEvent.press(getByLabelText('Edit RPE for set 1'));
+        fireEvent(getByLabelText('RPE'), 'focus');
         expect(callbacks.onActivateRpe).toHaveBeenCalledWith('101');
       });
 
-      it('does not make the RPE column tappable when RPE is not editable (preset)', () => {
+      it('renders no RPE input when RPE is not editable (preset)', () => {
         const { queryByLabelText } = renderRow({
           mode: 'edit',
           state: 'upcoming',
@@ -729,7 +981,7 @@ describe('ActiveWorkoutSetRow', () => {
           rpeEditable: false,
           set: editSet(),
         });
-        expect(queryByLabelText('Edit RPE for set 1')).toBeNull();
+        expect(queryByLabelText('RPE')).toBeNull();
       });
 
       it('renders a static completed badge when the toggle is disabled', () => {
@@ -769,29 +1021,41 @@ describe('ActiveWorkoutSetRow', () => {
         expect(callbacks.onDelete).toHaveBeenCalledWith('101');
       });
 
-      it('long-presses the cells through onLongPress', () => {
-        const { getByLabelText, callbacks } = renderRow({
+      it('long-presses the row through onLongPress', () => {
+        const { getByTestId, callbacks } = renderRow({
           mode: 'edit',
           state: 'upcoming',
           set: editSet(),
         });
-        fireEvent(getByLabelText('Edit weight for set 1'), 'longPress');
+        fireEvent(getByTestId('set-row'), 'longPress');
         expect(callbacks.onLongPress).toHaveBeenCalledWith('101');
       });
 
-      it('shows the duration in the weight cell for time-based sets', () => {
-        const { getByText } = renderRow({
+      it('renders a reducer-controlled duration cell on duration-modality rows', () => {
+        const { getByLabelText, queryByLabelText, callbacks } = renderRow({
           mode: 'edit',
           state: 'upcoming',
-          set: {
-            weight: null,
-            reps: null,
-            duration: 45,
-            editWeightText: '',
-            editRepsText: '',
-          },
+          modality: 'duration',
+          set: { weight: null, reps: null, duration: 45 },
         });
-        expect(getByText('45s')).toBeTruthy();
+        expect(queryByLabelText('Weight')).toBeNull();
+        expect(queryByLabelText('Reps')).toBeNull();
+        const input = getByLabelText('Duration');
+        expect(input.props.value).toBe('45');
+        fireEvent.changeText(input, '50');
+        expect(callbacks.onEditFieldChange).toHaveBeenCalledWith('101', 'duration', '50');
+      });
+
+      it('surfaces the legacy reps-as-seconds value as the duration placeholder', () => {
+        const { getByLabelText } = renderRow({
+          mode: 'edit',
+          state: 'upcoming',
+          modality: 'duration',
+          set: { weight: null, reps: 45, duration: null },
+        });
+        const input = getByLabelText('Duration');
+        expect(input.props.value).toBe('');
+        expect(input.props.placeholder).toBe('45');
       });
     });
   });
@@ -862,9 +1126,11 @@ describe('ActiveWorkoutSetRow', () => {
   });
 
   describe('metric column display', () => {
-    it('shows an en-dash when RPE is missing', () => {
-      const { getByText } = renderRow({ state: 'upcoming', metricColumn: 'rpe' });
-      expect(getByText('–')).toBeTruthy();
+    it('shows an en-dash placeholder when RPE is missing', () => {
+      const { getByLabelText } = renderRow({ state: 'upcoming', metricColumn: 'rpe' });
+      const input = getByLabelText('RPE');
+      expect(input.props.value).toBe('');
+      expect(input.props.placeholder).toBe('–');
     });
 
     it.each([
@@ -873,14 +1139,15 @@ describe('ActiveWorkoutSetRow', () => {
       [9.5, COLORS['--color-cat-orange']],
       [10, COLORS['--color-icon-danger']],
     ])('tints RPE %s with its effort tone', (rpe, expectedColor) => {
-      const { getByText } = renderRow({
+      const { getByLabelText } = renderRow({
         state: 'upcoming',
         metricColumn: 'rpe',
-        // reps 3 so the reps cell can't collide with any RPE label.
         set: { rpe: rpe as number, reps: 3 },
       });
+      const input = getByLabelText('RPE');
       const label = Number.isInteger(rpe) ? String(rpe) : (rpe as number).toFixed(1);
-      expect(textColor(getByText(label))).toBe(expectedColor);
+      expect(input.props.value).toBe(label);
+      expect(textColor(input)).toBe(expectedColor);
     });
 
     it('formats volume per weight unit', () => {
@@ -957,7 +1224,6 @@ describe('ActiveWorkoutSetRow', () => {
       const { queryByText } = renderRow({ state: 'upcoming' });
       expect(queryByText('-')).toBeNull();
     });
-
     describe('tap-to-fill', () => {
       it('replaces already-entered values with the previous ones', () => {
         const { getByLabelText, callbacks } = renderRow({
@@ -1026,6 +1292,68 @@ describe('ActiveWorkoutSetRow', () => {
         });
         expect(queryByLabelText('Fill set 1 from previous')).toBeNull();
       });
+    });
+  });
+
+  describe('assumed placeholders (live)', () => {
+    const assumed: AssumedSetValues = { weight: 100, reps: 8 };
+
+    it('renders assumed values as input placeholders, converting for the display unit', () => {
+      const kg = renderRow({
+        state: 'upcoming',
+        set: { weight: null, reps: null },
+        assumed,
+      });
+      expect(kg.getByLabelText('Weight').props.placeholder).toBe('100');
+      expect(kg.getByLabelText('Reps').props.placeholder).toBe('8');
+
+      const lbs = renderRow({
+        state: 'upcoming',
+        set: { weight: null, reps: null },
+        assumed,
+        weightUnit: 'lbs',
+      });
+      expect(lbs.getByLabelText('Weight').props.placeholder).toBe('220.5');
+    });
+
+    it('never covers an entered value, per field', () => {
+      const { getByLabelText } = renderRow({
+        state: 'upcoming',
+        set: { weight: 105, reps: null },
+        assumed,
+      });
+      expect(getByLabelText('Weight').props.value).toBe('105');
+      expect(getByLabelText('Weight').props.placeholder).toBe('–');
+      expect(getByLabelText('Reps').props.placeholder).toBe('8'); // reps still assumed
+    });
+
+    it('uses the assumed values as input placeholders on the focused row', () => {
+      const { getByLabelText } = renderRow({
+        state: 'current',
+        isFocused: true,
+        set: { weight: null, reps: null },
+        assumed,
+      });
+      expect(getByLabelText('Weight').props.placeholder).toBe('100');
+      expect(getByLabelText('Reps').props.placeholder).toBe('8');
+    });
+
+    it('falls back to dash placeholders when nothing resolves, and is inert outside live mode', () => {
+      const empty = renderRow({
+        state: 'upcoming',
+        set: { weight: null, reps: null },
+        assumed: { weight: null, reps: null },
+      });
+      expect(empty.getByLabelText('Weight').props.placeholder).toBe('–');
+      expect(empty.getByLabelText('Reps').props.placeholder).toBe('–');
+
+      const view = renderRow({
+        state: 'upcoming',
+        mode: 'view',
+        set: { weight: null, reps: null },
+        assumed,
+      });
+      expect(view.queryByText('100')).toBeNull();
     });
   });
 

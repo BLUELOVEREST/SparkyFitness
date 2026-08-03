@@ -1,6 +1,6 @@
 # AGENTS.md
 
-*Last updated: 2026-07-13*
+*Last updated: 2026-08-02*
 
 SparkyFitness Mobile is a React Native 0.85 + Expo SDK 56 app for syncing Apple Health / Health Connect data with the SparkyFitness backend, tracking nutrition, hydration, fasting, measurements, exercise, saved foods, meal templates, custom exercises, workout presets, iOS / Android widgets, the active workout HUD, and the Sparky AI chat.
 
@@ -22,6 +22,7 @@ This is the package guide for `SparkyFitnessMobile/`. Work from this directory f
 - `@/*` maps to this package and `@workspace/shared` maps to `../shared/src/index.ts`.
 - Prefer `@workspace/shared` schemas, constants, date/timezone helpers, and types over local duplicates.
 - The app talks to the backend under `/api`; health uploads go to `POST /api/health-data`.
+- Global `fetch` is Expo's WinterCG `expo/fetch`, so React Native's `{uri, name, type}` FormData file parts throw "Unsupported FormDataPart implementation". Append an `expo-file-system` `File` (it implements Blob) for multipart uploads; see `pregnancyPhotosApi.ts`.
 - Server-stored distance/weight units are metric. UI conversion belongs in mobile helpers such as `unitConversions.ts`.
 
 ## Commands
@@ -33,7 +34,7 @@ pnpm run android
 pnpm run lint
 pnpm run typecheck
 pnpm run validate
-pnpm run test:run -- --watchman=false --runInBand
+pnpm exec jest --watchman=false --runInBand
 pnpm exec jest --watchman=false --runInBand <test-path>
 pnpm run test:coverage -- --watchman=false --runInBand
 npx expo prebuild --clean
@@ -103,7 +104,7 @@ npx expo prebuild --clean
 - `useWaterIntakeMutation` fetches `waterContainersQueryKey`, persists the selected container, and optimistically updates `dailySummaryQueryKey(date)`.
 - Active-server switches clear React Query state before refetching connection state.
 - Error-boundary retry flows call `queryClient.resetQueries()`.
-- App-local toggles live in `stores/appPreferencesStore.ts` (Zustand `persist`, single AsyncStorage key `@SparkyFitness/app-preferences`): haptics, sounds, notifications, hydration/fasting card visibility, Ask Sparky card visibility, and the Liquid Glass tab bar opt-in. Consume via selectors (`useAppPreferencesStore((s) => s.hapticsEnabled)`) plus generated setters. A legacy-aware storage adapter migrates the old per-key `@HealthConnect:*` values once. These preferences never sync to the server.
+- App-local toggles live in `stores/appPreferencesStore.ts` (Zustand `persist`, single AsyncStorage key `@SparkyFitness/app-preferences`): haptics, sounds, notifications, hydration/fasting card visibility, Ask Sparky card visibility, the Liquid Glass tab bar opt-in, the active-workout metric column, and the default rest period (`defaultRestSec`, edited in `WorkoutSettingsScreen`). Consume via selectors (`useAppPreferencesStore((s) => s.hapticsEnabled)`) plus generated setters; non-React code reads current values through helpers like `getDefaultRestSec()`. A legacy-aware storage adapter migrates the old per-key `@HealthConnect:*` values once. These preferences never sync to the server.
 
 ## Health Sync
 
@@ -140,7 +141,7 @@ npx expo prebuild --clean
 - `react-native-health-connect` is declared as `^3.5.3`; the installed 3.5.3 build is patched from the repo root via `pnpm.patchedDependencies`.
 - Patch file: `../patches/react-native-health-connect@3.5.3.patch`.
 - The patch changes Android `getAggregateGroupByPeriodRequest` implementations from instant-based `getTimeRangeFilter` to local-date-time `getTimeRangeFilterLocal` for non-Steps record types. This protects per-day grouping around DST and local-day boundaries.
-- `@bacons/apple-targets@4.0.6` is patched via `../patches/@bacons__apple-targets@4.0.6.patch`: its xcode pass matched "its" extension target by type with a fall-back to any same-type target, which adopted and corrupted the expo-widgets `ExpoWidgetsTarget` on a clean prebuild. The patch scopes the match to an exact product-name hit.
+- `@bacons/apple-targets@4.0.6` is patched via `../patches/@bacons__apple-targets@4.0.6.patch`, fixing two upstream bugs. First, its xcode pass matched "its" extension target by type with a fall-back to any same-type target, which adopted and corrupted the expo-widgets `ExpoWidgetsTarget` on a clean prebuild; the patch scopes the match to an exact product-name hit. Second, the existing-target update path crashed every non-clean prebuild (EvanBacon/expo-apple-targets#201): removing the old build configuration list's referrers cleared `target.props.buildConfigurationList`, which the next line then dereferenced; the patch holds the list in a local and iterates a copy of its configurations so none are skipped mid-removal.
 - After changing a patch or upgrading a patched package, run `pnpm install` from the repo root and then `npx expo prebuild --clean` from mobile before native validation.
 
 ## Food, Meals, Units, And Photo Estimates
@@ -170,7 +171,7 @@ npx expo prebuild --clean
 - Exercise selection returns via `CommonActions.setParams` and a nonce pattern through `useSelectedExercise`.
 - Rest timer state lives in `stores/activeWorkoutStore.ts`; notifications are scheduled through `services/notifications.ts`. The rest-complete ping carries a background "Complete Set" action (`rest-complete` category): responses are routed to `completeActiveSetIfReady` by `initWorkoutNotificationActions` (exported from the store, wired in App startup — the response listener cannot live in `notifications.ts` without a store↔service import cycle), and stale delivered pings are swept when the next rest is scheduled.
 - Set IDs are preserved server-side across workout edits so the active workout cursor stays attached to the right row.
-- Rest duration is configurable per exercise via `RestPeriodChip` / `RestPeriodSheet` and is forwarded through `buildExercisesPayload`.
+- Rest duration is configurable per exercise via `RestPeriodChip` / `RestPeriodSheet` and is forwarded through `buildExercisesPayload`. New exercises/sets and null `rest_time` fallbacks seed from the `defaultRestSec` app preference via `getDefaultRestSec()` (Settings → Workout Settings), not a hardcoded constant.
 - Fasting uses `FastingDetailScreen`, `FastingCard`, `FastingProtocolSheet`, `useFasting`, `useFastingTimer`, `utils/fasting.ts`, and `services/api/fastingApi.ts`.
 - `FastingGoalReconciler` is mounted headlessly on `DashboardScreen`; it owns goal-notification reconciliation and app-resume refetch even when the visible fasting card is hidden.
 - Fasting goal notifications are gated by the app notifications toggle; ending/canceling a fast clears scheduled notifications.

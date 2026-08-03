@@ -9,16 +9,21 @@ import {
   addNotificationResponseListener,
   cancelScheduledNotification,
   dismissDeliveredNotification,
-  fireRestCompleteHaptic,
+  fireRestCompleteCue,
   scheduleRestNotification,
 } from '../../src/services/notifications';
 import { fireSelectionHaptic, fireSuccessHaptic } from '../../src/services/haptics';
 import { newUuid } from '../../src/utils/ids';
+import {
+  useAppPreferencesStore,
+  __resetAppPreferencesStoreForTests,
+} from '../../src/stores/appPreferencesStore';
+import type { Exercise } from '../../src/types/exercise';
 
 jest.mock('../../src/services/notifications', () => ({
   scheduleRestNotification: jest.fn(async () => 'notif-abc'),
   cancelScheduledNotification: jest.fn(async () => undefined),
-  fireRestCompleteHaptic: jest.fn(),
+  fireRestCompleteCue: jest.fn(),
   COMPLETE_SET_ACTION: 'complete-set',
   addNotificationResponseListener: jest.fn(() => ({ remove: jest.fn() })),
   dismissDeliveredNotification: jest.fn(async () => undefined),
@@ -46,8 +51,8 @@ const mockSchedule = scheduleRestNotification as jest.MockedFunction<
 const mockCancel = cancelScheduledNotification as jest.MockedFunction<
   typeof cancelScheduledNotification
 >;
-const mockHaptic = fireRestCompleteHaptic as jest.MockedFunction<
-  typeof fireRestCompleteHaptic
+const mockHaptic = fireRestCompleteCue as jest.MockedFunction<
+  typeof fireRestCompleteCue
 >;
 const mockSuccessHaptic = fireSuccessHaptic as jest.MockedFunction<
   typeof fireSuccessHaptic
@@ -344,6 +349,55 @@ describe('activeWorkoutStore', () => {
       useActiveWorkoutStore.setState({ createdByLiveStart: true });
       useActiveWorkoutStore.getState().startWorkoutAtSet(makeSession(), '102');
       expect(useActiveWorkoutStore.getState().createdByLiveStart).toBe(false);
+    });
+
+    it('records the source preset link when passed', () => {
+      useActiveWorkoutStore.getState().startWorkout(makeSession(), {
+        createdByLiveStart: true,
+        sourcePresetId: 42,
+        sourceServerConfigId: 'config-1',
+      });
+      const state = useActiveWorkoutStore.getState();
+      expect(state.sourcePresetId).toBe(42);
+      expect(state.sourceServerConfigId).toBe('config-1');
+    });
+
+    it('defaults the source preset link to null', () => {
+      useActiveWorkoutStore.getState().startWorkout(makeSession(), { createdByLiveStart: true });
+      const state = useActiveWorkoutStore.getState();
+      expect(state.sourcePresetId).toBeNull();
+      expect(state.sourceServerConfigId).toBeNull();
+    });
+
+    it('clearWorkout resets the source preset link', () => {
+      useActiveWorkoutStore.getState().startWorkout(makeSession(), {
+        sourcePresetId: 42,
+        sourceServerConfigId: 'config-1',
+      });
+      useActiveWorkoutStore.getState().clearWorkout();
+      const state = useActiveWorkoutStore.getState();
+      expect(state.sourcePresetId).toBeNull();
+      expect(state.sourceServerConfigId).toBeNull();
+    });
+
+    it('startWorkoutAtSet clears any source preset link', () => {
+      useActiveWorkoutStore.setState({ sourcePresetId: 42, sourceServerConfigId: 'config-1' });
+      useActiveWorkoutStore.getState().startWorkoutAtSet(makeSession(), '102');
+      const state = useActiveWorkoutStore.getState();
+      expect(state.sourcePresetId).toBeNull();
+      expect(state.sourceServerConfigId).toBeNull();
+    });
+
+    it('persists the source preset link via partialize', () => {
+      useActiveWorkoutStore.getState().startWorkout(makeSession(), {
+        sourcePresetId: 42,
+        sourceServerConfigId: 'config-1',
+      });
+      const persisted = useActiveWorkoutStore.persist
+        .getOptions()
+        .partialize!(useActiveWorkoutStore.getState()) as Record<string, unknown>;
+      expect(persisted.sourcePresetId).toBe(42);
+      expect(persisted.sourceServerConfigId).toBe('config-1');
     });
   });
 
@@ -872,6 +926,313 @@ describe('activeWorkoutStore', () => {
     });
   });
 
+  describe('assumed-value adoption (placeholders)', () => {
+    /** The base session with every set's weight/reps emptied — a Hevy-style live start. */
+    function makeEmptySession(): PresetSessionResponse {
+      const session = makeSession();
+      return {
+        ...session,
+        exercises: session.exercises.map((e) => ({
+          ...e,
+          sets: e.sets.map((s) => ({ ...s, weight: null, reps: null })),
+        })),
+      };
+    }
+
+    const PREVIOUS_EX1 = [
+      { setNumber: 1, setType: 'working', weight: 100, reps: 8 },
+      { setNumber: 2, setType: 'working', weight: 95, reps: 6 },
+    ];
+
+    describe('startWorkout plan mapping', () => {
+      it('keys planned values to the created session set ids positionally, skipping empty entries', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession(), {
+          createdByLiveStart: true,
+          plannedSetValues: [
+            [
+              { weight: 80, reps: 5 },
+              { weight: null, reps: null },
+            ],
+            [{ weight: 120, reps: 3 }],
+          ],
+        });
+        expect(useActiveWorkoutStore.getState().plannedSetValues).toEqual({
+          '101': { weight: 80, reps: 5 },
+          '201': { weight: 120, reps: 3 },
+        });
+      });
+
+      it('clears the plan and captured history when a workout starts without them', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession(), {
+          createdByLiveStart: true,
+          plannedSetValues: [[{ weight: 80, reps: 5 }]],
+        });
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', PREVIOUS_EX1);
+
+        useActiveWorkoutStore.getState().startWorkout(makeSession());
+        expect(useActiveWorkoutStore.getState().plannedSetValues).toEqual({});
+        expect(useActiveWorkoutStore.getState().previousSessionSets).toEqual({});
+      });
+    });
+
+    describe('capturePreviousSessionSets', () => {
+      it('captures once per exercise and only while a workout is live', () => {
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', PREVIOUS_EX1);
+        expect(useActiveWorkoutStore.getState().previousSessionSets).toEqual({});
+
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession());
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', PREVIOUS_EX1);
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', []);
+        expect(useActiveWorkoutStore.getState().previousSessionSets).toEqual({
+          'ex-1': PREVIOUS_EX1,
+        });
+      });
+    });
+
+    describe('completeSet adoption', () => {
+      it('adopts the previous-session values into an empty set on completion', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession());
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', PREVIOUS_EX1);
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        const set0 = useActiveWorkoutStore.getState().session!.exercises[0].sets[0];
+        expect(set0.weight).toBe(100);
+        expect(set0.reps).toBe(8);
+        expect(useActiveWorkoutStore.getState().hasUnsavedChanges).toBe(true);
+      });
+
+      it('adopts per field — a typed value is never overwritten', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession());
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', PREVIOUS_EX1);
+        useActiveWorkoutStore.getState().updateSetField('101', { weight: 105 });
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        const set0 = useActiveWorkoutStore.getState().session!.exercises[0].sets[0];
+        expect(set0.weight).toBe(105);
+        expect(set0.reps).toBe(8);
+      });
+
+      it('keeps a set with history pinned to its own previous values, whatever was typed above', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession());
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', PREVIOUS_EX1);
+        useActiveWorkoutStore.getState().updateSetField('101', { weight: 105, reps: 5 });
+
+        useActiveWorkoutStore.getState().completeSet('102');
+
+        const set1 = useActiveWorkoutStore.getState().session!.exercises[0].sets[1];
+        expect(set1.weight).toBe(95);
+        expect(set1.reps).toBe(6);
+      });
+
+      it('adopts the row above\'s entered values for a set with no history of its own', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession());
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', []);
+        useActiveWorkoutStore.getState().updateSetField('101', { weight: 105, reps: 5 });
+
+        useActiveWorkoutStore.getState().completeSet('102');
+
+        const set1 = useActiveWorkoutStore.getState().session!.exercises[0].sets[1];
+        expect(set1.weight).toBe(105);
+        expect(set1.reps).toBe(5);
+      });
+
+      it('falls back to the live-start plan when the exercise has no history', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession(), {
+          createdByLiveStart: true,
+          plannedSetValues: [
+            [
+              { weight: 80, reps: 5 },
+              { weight: 80, reps: 5 },
+            ],
+            [{ weight: 120, reps: 3 }],
+          ],
+        });
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', []);
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        const set0 = useActiveWorkoutStore.getState().session!.exercises[0].sets[0];
+        expect(set0.weight).toBe(80);
+        expect(set0.reps).toBe(5);
+      });
+
+      it('completes with nothing to adopt when no source resolves', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession());
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        const set0 = useActiveWorkoutStore.getState().session!.exercises[0].sets[0];
+        expect(set0.weight).toBeNull();
+        expect(set0.reps).toBeNull();
+        expect(useActiveWorkoutStore.getState().completedSetIds['101']).toBe(FIXED_NOW);
+      });
+
+      it('keeps adopted values when the set is un-completed', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession());
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', PREVIOUS_EX1);
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        useActiveWorkoutStore.getState().uncompleteSet('101');
+
+        const set0 = useActiveWorkoutStore.getState().session!.exercises[0].sets[0];
+        expect(set0.weight).toBe(100);
+        expect(set0.reps).toBe(8);
+      });
+
+      it('announces the next set\'s assumed rep target in the rest notification', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeEmptySession());
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', PREVIOUS_EX1);
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        expect(mockSchedule).toHaveBeenCalledWith(
+          'Bench Press',
+          60,
+          expect.objectContaining({ body: expect.stringContaining('6 reps target') }),
+        );
+      });
+    });
+
+    describe('cardio-modality adoption', () => {
+      /** The base empty session with ex-1 flipped to a cardio exercise. */
+      function makeCardioSession(): PresetSessionResponse {
+        const session = makeEmptySession();
+        return {
+          ...session,
+          exercises: session.exercises.map((e, i) =>
+            i === 0
+              ? {
+                  ...e,
+                  exercise_snapshot: {
+                    ...e.exercise_snapshot,
+                    modality: 'duration_distance',
+                  } as never,
+                  sets: e.sets.map((s) => ({ ...s, duration: null, distance: null })),
+                }
+              : e,
+          ),
+        };
+      }
+
+      it('adopts planned duration AND distance into an untouched cardio set on completion', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeCardioSession(), {
+          createdByLiveStart: true,
+          plannedSetValues: [
+            [
+              { weight: null, reps: null, duration: 1500, distance: 5 },
+              { weight: null, reps: null, duration: 1500, distance: 5 },
+            ],
+          ],
+        });
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        const set0 = useActiveWorkoutStore.getState().session!.exercises[0].sets[0];
+        expect(set0.duration).toBe(1500);
+        expect(set0.distance).toBe(5);
+      });
+
+      it('fills only the empty cardio cell — a typed duration is kept, distance still adopts', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeCardioSession(), {
+          createdByLiveStart: true,
+          plannedSetValues: [[{ weight: null, reps: null, duration: 1500, distance: 5 }]],
+        });
+        useActiveWorkoutStore.getState().updateSetField('101', { duration: 1800 });
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        const set0 = useActiveWorkoutStore.getState().session!.exercises[0].sets[0];
+        expect(set0.duration).toBe(1800);
+        expect(set0.distance).toBe(5);
+      });
+    });
+
+    describe('duration-modality adoption', () => {
+      /** The base empty session with ex-1 flipped to a duration exercise. */
+      function makeDurationSession(): PresetSessionResponse {
+        const session = makeEmptySession();
+        return {
+          ...session,
+          exercises: session.exercises.map((e, i) =>
+            i === 0
+              ? {
+                  ...e,
+                  exercise_snapshot: {
+                    ...e.exercise_snapshot,
+                    modality: 'duration',
+                  } as never,
+                  sets: e.sets.map((s) => ({ ...s, duration: null })),
+                }
+              : e,
+          ),
+        };
+      }
+
+      it('adopts the previous-session duration into an empty set on completion', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeDurationSession());
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', [
+          { setNumber: 1, setType: 'working', weight: null, reps: null, duration: 45 },
+          { setNumber: 2, setType: 'working', weight: null, reps: null, duration: 45 },
+        ]);
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        const set0 = useActiveWorkoutStore.getState().session!.exercises[0].sets[0];
+        expect(set0.duration).toBe(45);
+        expect(set0.weight).toBeNull();
+        expect(set0.reps).toBeNull();
+      });
+
+      it('never stamps legacy isometric reps onto a duration set at completion', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeDurationSession());
+        // Legacy history: seconds recorded in reps, no duration column.
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', [
+          { setNumber: 1, setType: 'working', weight: null, reps: 45 },
+        ]);
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        const set0 = useActiveWorkoutStore.getState().session!.exercises[0].sets[0];
+        expect(set0.reps).toBeNull();
+        expect(set0.weight).toBeNull();
+        expect(set0.duration).toBeNull();
+        expect(useActiveWorkoutStore.getState().completedSetIds['101']).toBe(FIXED_NOW);
+      });
+
+      it('leaves a typed duration alone on completion', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeDurationSession());
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', [
+          { setNumber: 1, setType: 'working', weight: null, reps: null, duration: 45 },
+        ]);
+        useActiveWorkoutStore.getState().updateSetField('101', { duration: 75 });
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        expect(
+          useActiveWorkoutStore.getState().session!.exercises[0].sets[0].duration,
+        ).toBe(75);
+      });
+
+      it('announces the next set\'s assumed duration target in the rest notification', () => {
+        useActiveWorkoutStore.getState().startWorkout(makeDurationSession());
+        useActiveWorkoutStore.getState().capturePreviousSessionSets('ex-1', [
+          { setNumber: 1, setType: 'working', weight: null, reps: null, duration: 45 },
+          { setNumber: 2, setType: 'working', weight: null, reps: null, duration: 45 },
+        ]);
+
+        useActiveWorkoutStore.getState().completeSet('101');
+
+        expect(mockSchedule).toHaveBeenCalledWith(
+          'Bench Press',
+          60,
+          expect.objectContaining({ body: expect.stringContaining('45s target') }),
+        );
+      });
+    });
+  });
+
   describe('completeSet rest (supersets)', () => {
     // Steps: 301(90), 401(0), 302(90), 402(0).
     beforeEach(() => {
@@ -916,6 +1277,31 @@ describe('activeWorkoutStore', () => {
       const state = useActiveWorkoutStore.getState();
       expect(state.activeSetId).toBe('402');
       expect(state.rest.state).toBe('ready');
+    });
+  });
+
+  describe('completeSet rest (cardio zero-rest sets)', () => {
+    /** makeSession with the first exercise as cardio: zero-rest duration sets. */
+    function makeCardioSession(): PresetSessionResponse {
+      const session = makeSession();
+      const cardio = session.exercises[0];
+      (cardio.exercise_snapshot as { modality?: string }).modality = 'duration_distance';
+      for (const set of cardio.sets) {
+        set.rest_time = 0;
+        set.reps = null;
+        set.weight = null;
+        set.duration = 1800;
+      }
+      return session;
+    }
+
+    it('schedules no rest after a zero-rest cardio set', () => {
+      useActiveWorkoutStore.getState().startWorkout(makeCardioSession());
+      useActiveWorkoutStore.getState().completeSet('101');
+      const state = useActiveWorkoutStore.getState();
+      expect(state.activeSetId).toBe('102');
+      expect(state.rest.state).toBe('ready');
+      expect(mockSchedule).not.toHaveBeenCalled();
     });
   });
 
@@ -976,6 +1362,53 @@ describe('activeWorkoutStore', () => {
       useActiveWorkoutStore.getState().startWorkout(makeSession());
       useActiveWorkoutStore.getState().clearWorkout();
       expect(useActiveWorkoutStore.getState().startedAt).toBeNull();
+    });
+  });
+
+  describe('setWorkoutDurationMinutes', () => {
+    it('rebases startedAt so the span to the last completion equals the given minutes', () => {
+      useActiveWorkoutStore.getState().startWorkout(makeSession());
+      jest.setSystemTime(new Date(FIXED_NOW + 5 * 60_000));
+      useActiveWorkoutStore.getState().completeSet('101');
+      const lastCompletedAt = FIXED_NOW + 12 * 60 * 60_000;
+      jest.setSystemTime(new Date(lastCompletedAt));
+      useActiveWorkoutStore.getState().completeSet('102');
+      const revisionBefore = useActiveWorkoutStore.getState().sessionRevision;
+
+      useActiveWorkoutStore.getState().setWorkoutDurationMinutes(10);
+
+      const state = useActiveWorkoutStore.getState();
+      expect(state.startedAt).toBe(lastCompletedAt - 10 * 60_000);
+      expect(state.sessionRevision).toBe(revisionBefore + 1);
+      expect(state.hasUnsavedChanges).toBe(true);
+    });
+
+    it('is a no-op without a completed set', () => {
+      useActiveWorkoutStore.getState().startWorkout(makeSession());
+      const revisionBefore = useActiveWorkoutStore.getState().sessionRevision;
+
+      useActiveWorkoutStore.getState().setWorkoutDurationMinutes(10);
+
+      const state = useActiveWorkoutStore.getState();
+      expect(state.startedAt).toBe(FIXED_NOW);
+      expect(state.sessionRevision).toBe(revisionBefore);
+    });
+
+    it('is a no-op without a live session', () => {
+      useActiveWorkoutStore.getState().setWorkoutDurationMinutes(10);
+      expect(useActiveWorkoutStore.getState().startedAt).toBeNull();
+    });
+
+    it('never rebases to less than one minute', () => {
+      useActiveWorkoutStore.getState().startWorkout(makeSession());
+      jest.setSystemTime(new Date(FIXED_NOW + 60 * 60_000));
+      useActiveWorkoutStore.getState().completeSet('101');
+
+      useActiveWorkoutStore.getState().setWorkoutDurationMinutes(0);
+
+      expect(useActiveWorkoutStore.getState().startedAt).toBe(
+        FIXED_NOW + 60 * 60_000 - 60_000,
+      );
     });
   });
 
@@ -1491,10 +1924,22 @@ describe('activeWorkoutStore', () => {
         expect(set0.notes).toBe('felt heavy');
         expect(useActiveWorkoutStore.getState().hasUnsavedChanges).toBe(true);
       });
+
+      it('patches per-set duration, including clearing to null', () => {
+        useActiveWorkoutStore.getState().updateSetField('101', { duration: 45 });
+        expect(
+          useActiveWorkoutStore.getState().session!.exercises[0].sets[0].duration,
+        ).toBe(45);
+
+        useActiveWorkoutStore.getState().updateSetField('101', { duration: null });
+        expect(
+          useActiveWorkoutStore.getState().session!.exercises[0].sets[0].duration,
+        ).toBeNull();
+      });
     });
 
     describe('addSetToExercise', () => {
-      it('appends a clone of the last set with a negative temp id, without its outcomes', () => {
+      it('appends an empty set with a negative temp id, cloning structure but not values or outcomes', () => {
         useActiveWorkoutStore.getState().updateSetField('102', { rpe: 9 });
         useActiveWorkoutStore.getState().addSetToExercise('ex-uuid-1');
         const state = useActiveWorkoutStore.getState();
@@ -1502,8 +1947,9 @@ describe('activeWorkoutStore', () => {
         expect(sets).toHaveLength(3);
         expect(sets[2].id).toBe(-1);
         expect(sets[2].set_number).toBe(3);
-        expect(sets[2].weight).toBe(70); // plan cloned from set 102
-        expect(sets[2].reps).toBe(8);
+        expect(sets[2].rest_time).toBe(sets[1].rest_time); // structure cloned from set 102
+        expect(sets[2].weight).toBeNull(); // values start empty (placeholder shows the row above)
+        expect(sets[2].reps).toBeNull();
         expect(sets[2].rpe).toBeNull(); // outcomes not cloned
         expect(sets[2].notes).toBeNull();
         expect(state.steps.map((s) => s.setId)).toEqual(['101', '102', '-1', '201']);
@@ -1534,6 +1980,111 @@ describe('activeWorkoutStore', () => {
       it('is a no-op for an unknown exercise entry id', () => {
         useActiveWorkoutStore.getState().addSetToExercise('nope');
         expect(useActiveWorkoutStore.getState().sessionRevision).toBe(0);
+      });
+
+      it('clones a stored duration on non-duration exercises', () => {
+        useActiveWorkoutStore.getState().updateSetField('102', { duration: 90 });
+        useActiveWorkoutStore.getState().addSetToExercise('ex-uuid-1');
+        expect(
+          useActiveWorkoutStore.getState().session!.exercises[0].sets[2].duration,
+        ).toBe(90);
+      });
+
+      it('empties the cloned duration on duration-modality exercises', () => {
+        const session = makeSession();
+        const durationSession = {
+          ...session,
+          exercises: session.exercises.map((e, i) =>
+            i === 0
+              ? {
+                  ...e,
+                  exercise_snapshot: {
+                    ...e.exercise_snapshot,
+                    modality: 'duration',
+                  } as never,
+                }
+              : e,
+          ),
+        };
+        useActiveWorkoutStore.getState().startWorkout(durationSession);
+        useActiveWorkoutStore.getState().updateSetField('102', { duration: 90 });
+        useActiveWorkoutStore.getState().addSetToExercise('ex-uuid-1');
+        expect(
+          useActiveWorkoutStore.getState().session!.exercises[0].sets[2].duration,
+        ).toBeNull();
+      });
+
+      it('empties the cloned distance and duration on cardio exercises', () => {
+        const session = makeSession();
+        const cardioSession = {
+          ...session,
+          exercises: session.exercises.map((e, i) =>
+            i === 0
+              ? {
+                  ...e,
+                  exercise_snapshot: {
+                    ...e.exercise_snapshot,
+                    modality: 'duration_distance',
+                  } as never,
+                }
+              : e,
+          ),
+        };
+        useActiveWorkoutStore.getState().startWorkout(cardioSession);
+        useActiveWorkoutStore
+          .getState()
+          .updateSetField('102', { duration: 1800, distance: 5.2 });
+        useActiveWorkoutStore.getState().addSetToExercise('ex-uuid-1');
+        const added = useActiveWorkoutStore.getState().session!.exercises[0].sets[2];
+        expect(added.duration).toBeNull();
+        expect(added.distance).toBeNull();
+      });
+    });
+
+    describe('addExercise', () => {
+      const rowExercise: Exercise = {
+        id: 'ex-3',
+        name: 'Row',
+        category: 'strength',
+        equipment: [],
+        primary_muscles: [],
+        secondary_muscles: [],
+        calories_per_hour: 0,
+        source: 'custom',
+        images: [],
+        tags: [],
+      };
+
+      it('seeds the new entry with one empty set using the configured default rest', () => {
+        useAppPreferencesStore.getState().setDefaultRestSec(150);
+        try {
+          useActiveWorkoutStore.getState().addExercise(rowExercise);
+          const entries = useActiveWorkoutStore.getState().session!.exercises;
+          const added = entries[entries.length - 1];
+          expect(added.exercise_id).toBe('ex-3');
+          expect(added.sets).toHaveLength(1);
+          expect(added.sets[0].rest_time).toBe(150);
+          expect(added.sets[0].weight).toBeNull();
+          expect(added.sets[0].reps).toBeNull();
+          expect(added.sets[0].distance).toBeNull();
+        } finally {
+          __resetAppPreferencesStoreForTests();
+        }
+      });
+
+      it('seeds a cardio exercise with zero rest instead of the default', () => {
+        useAppPreferencesStore.getState().setDefaultRestSec(150);
+        try {
+          useActiveWorkoutStore
+            .getState()
+            .addExercise({ ...rowExercise, id: 'ex-run', name: 'Run', modality: 'duration_distance' });
+          const entries = useActiveWorkoutStore.getState().session!.exercises;
+          const added = entries[entries.length - 1];
+          expect(added.sets[0].rest_time).toBe(0);
+          expect(added.sets[0].distance).toBeNull();
+        } finally {
+          __resetAppPreferencesStoreForTests();
+        }
       });
     });
 
@@ -2656,6 +3207,33 @@ describe('activeWorkoutStore', () => {
         expect(state.completedSetIds).toEqual({ '101': 1_699_999_000_000 });
         expect(state.activeSetId).toBe('102');
       });
+
+      it('keeps a pre-modality v5 payload (no duration keys) without discard', async () => {
+        // The modality upgrade deliberately did NOT bump the persist version:
+        // every added field is optional-tolerant, so an in-flight workout
+        // persisted before the upgrade must survive rehydration intact.
+        jest.useRealTimers();
+        const persisted = {
+          state: {
+            ...buildLegacyPayload(5).state,
+            completedSetIds: { '101': 1_699_999_000_000 },
+            plannedSetValues: { '102': { weight: 80, reps: 5 } },
+            previousSessionSets: {
+              'ex-1': [{ setNumber: 1, setType: 'working', weight: 100, reps: 8 }],
+            },
+          },
+          version: 5,
+        };
+        await AsyncStorage.setItem(
+          '@SparkyFitness/active-workout',
+          JSON.stringify(persisted),
+        );
+        await useActiveWorkoutStore.persist.rehydrate();
+        const state = useActiveWorkoutStore.getState();
+        expect(state.sessionId).toBe('session-1');
+        expect(state.plannedSetValues).toEqual({ '102': { weight: 80, reps: 5 } });
+        expect(state.previousSessionSets['ex-1']).toHaveLength(1);
+      });
     });
 
     it('rehydration with paused state is left alone', async () => {
@@ -2739,13 +3317,6 @@ describe('activeWorkoutStore', () => {
       expect(mockSuccessHaptic).toHaveBeenCalledTimes(1);
       // The PR fires only the success buzz — the two stay mutually exclusive.
       expect(mockSelectionHaptic).toHaveBeenCalledTimes(1);
-      expect(st.lastPrEvent).toMatchObject({
-        setId: '102',
-        exerciseName: 'Bench Press',
-        weightKg: 70,
-        reps: 8,
-      });
-      expect(st.lastPrEvent!.seq).toBeGreaterThan(0);
     });
 
     it('stamps a rep-PR at the same top weight', () => {
@@ -2907,7 +3478,6 @@ describe('activeWorkoutStore', () => {
       const st = useActiveWorkoutStore.getState();
       expect(st.prSetIds).toEqual({});
       expect(st.prBaseline).toEqual({});
-      expect(st.lastPrEvent).toBeNull();
     });
   });
 });

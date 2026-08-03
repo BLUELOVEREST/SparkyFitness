@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, View, Text, ScrollView } from 'react-native';
+import Animated, { LinearTransition } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Button from '../components/ui/Button';
@@ -46,6 +47,7 @@ const WorkoutPresetDetailScreen: React.FC<WorkoutPresetDetailScreenProps> = ({
   // we never quietly hand an unsupported unit to weightFromKg.
   const weightUnit: 'kg' | 'lbs' =
     preferences?.default_weight_unit === 'kg' ? 'kg' : 'lbs';
+  const distanceUnit = (preferences?.default_distance_unit as 'km' | 'miles') ?? 'km';
   const exerciseCount = preset.exercises?.length ?? 0;
 
   const { getImageSource } = useExerciseImageSource();
@@ -80,12 +82,21 @@ const WorkoutPresetDetailScreen: React.FC<WorkoutPresetDetailScreenProps> = ({
     [cardExercises, navigation],
   );
 
-  // Metric column is shared with the workout screens (intended).
+  // Metric column is shared with the workout screens (intended). Preset sets
+  // store no RPE, so an 'rpe' selection falls back to volume for display and
+  // the picker hides the RPE option — same as the preset form.
   const metricColumn = useAppPreferencesStore(s => s.activeWorkoutMetricColumn);
-  const [metricMenuAnchor, setMetricMenuAnchor] = useState<AnchorRect | null>(null);
-  const handlePressMetricHeader = useCallback((anchor: AnchorRect) => {
-    setMetricMenuAnchor(anchor);
-  }, []);
+  const effectiveMetricColumn = metricColumn === 'rpe' ? 'volume' : metricColumn;
+  const [metricMenu, setMetricMenu] = useState<{
+    anchor: AnchorRect;
+    clampedToRpe: boolean;
+  } | null>(null);
+  const handlePressMetricHeader = useCallback(
+    (anchor: AnchorRect, clampedToRpe: boolean) => {
+      setMetricMenu({ anchor, clampedToRpe });
+    },
+    [],
+  );
 
   // Superset rails, matching the workout detail presentation.
   const { borders: supersetBorders } = useSupersetBorders(cardExercises);
@@ -148,6 +159,7 @@ const WorkoutPresetDetailScreen: React.FC<WorkoutPresetDetailScreenProps> = ({
     void startLiveWorkout({
       name: preset.name,
       exercises: buildPresetStartExercisesPayload(preset),
+      sourcePresetId: preset.id,
     });
   }, [startLiveWorkout, preset]);
 
@@ -252,17 +264,18 @@ const WorkoutPresetDetailScreen: React.FC<WorkoutPresetDetailScreenProps> = ({
           {exerciseCount} {exerciseCount === 1 ? 'exercise' : 'exercises'}
         </Text>
 
-        {/* Full-bleed: cancel the scroll container's 16px inset so the card
-            separators reach the screen edges. */}
-        <View className="-mx-4">
+        {/* Pull back part of the scroll container's 16px inset so the cards
+            sit at the same 12px inset as the active workout screen (px-3). */}
+        <View className="-mx-1">
           {cardExercises.map(cardExercise => {
             const isExpanded = !collapsedIds[cardExercise.id];
             const supersetBorder = supersetBorders.get(cardExercise.id) ?? null;
             return (
               // Grouped members carry a flat 3px left rail; interior rails run
               // to the wrapper's bottom so consecutive members read as one line.
-              <View
+              <Animated.View
                 key={cardExercise.id}
+                layout={LinearTransition.duration(300)}
                 style={supersetBorder ? { paddingLeft: 10 } : undefined}
               >
                 {supersetBorder && (
@@ -285,15 +298,16 @@ const WorkoutPresetDetailScreen: React.FC<WorkoutPresetDetailScreenProps> = ({
                   expanded={isExpanded}
                   completedSetIds={{}}
                   activeSetId={null}
-                  metricColumn={metricColumn}
+                  metricColumn={effectiveMetricColumn}
                   weightUnit={weightUnit}
+                  distanceUnit={distanceUnit}
                   getImageSource={getImageSource}
                   showRestChip={cardExercise.sets.length > 0}
                   onPressThumb={handleViewExercise}
                   onToggleExpanded={toggleExpanded}
                   onPressMetricHeader={handlePressMetricHeader}
                 />
-              </View>
+              </Animated.View>
             );
           })}
         </View>
@@ -333,8 +347,10 @@ const WorkoutPresetDetailScreen: React.FC<WorkoutPresetDetailScreenProps> = ({
       </ScrollView>
 
       <MetricColumnMenu
-        anchor={metricMenuAnchor}
-        onClose={() => setMetricMenuAnchor(null)}
+        anchor={metricMenu?.anchor ?? null}
+        onClose={() => setMetricMenu(null)}
+        includeRpe={false}
+        includeWeightMetrics={!metricMenu?.clampedToRpe}
       />
     </View>
   );

@@ -38,6 +38,7 @@ const ICON_MAP = {
   'bookmark-filled': { sf: 'bookmark.fill', ion: 'bookmark' },
   'star': { sf: 'star.fill', ion: 'star' },
   'link': { sf: 'link', ion: 'link-outline' },
+  'list': { sf: 'list.bullet', ion: 'list-outline' },
   'checkmark-circle': { sf: 'checkmark.circle', ion: 'checkmark-circle-outline' },
   'checkmark-circle-filled': { sf: 'checkmark.circle.fill', ion: 'checkmark-circle' },
   'radio-button-on': { sf: 'circle.inset.filled', ion: 'radio-button-on' },
@@ -84,6 +85,7 @@ const ICON_MAP = {
   'history': { sf: 'clock.arrow.circlepath', ion: 'time-outline' },
   'calendar': { sf: 'calendar', ion: 'calendar-outline' },
   'trophy': { sf: 'trophy.fill', ion: 'trophy' },
+  'trophy-outline': { sf: 'trophy', ion: 'trophy-outline' },
   'exercise': { sf: 'flame.fill', ion: 'flame' },
   'exercise-running': { sf: 'figure.run', ion: 'walk-outline' },
   'exercise-running-filled': { sf: 'figure.run', ion: 'walk' },
@@ -125,6 +127,7 @@ const ICON_MAP = {
   'food-search-settings': { sf: 'magnifyingglass', ion: 'search-outline' },
   'dashboard-settings': { sf: 'square.grid.2x2', ion: 'grid-outline' },
   'diary-settings': { sf: 'book', ion: 'book-outline' },
+  'workout-settings': { sf: 'dumbbell', ion: 'barbell-outline' },
   'app-settings': { sf: 'slider.horizontal.3', ion: 'options-outline' },
   'logs': { sf: 'doc.plaintext', ion: 'document-text-outline' },
   'about': { sf: 'info.circle', ion: 'information-circle-outline' },
@@ -139,7 +142,13 @@ const ICON_MAP = {
   'share-public': { sf: 'square.and.arrow.up', ion: 'share-social-outline', useIoniconOnIOS: true },
 
   // Wellness / Cycle
-  'wellness': { sf: 'heart.circle', ion: 'heart-circle-outline' },
+  // Must stay neutral in every tint: this fronts cycle tracking, which renders
+  // under a "Wellness" label when discreet mode is on. A moon or calendar-heart
+  // would give the feature away, and a droplet reads as a blood drop when a
+  // caller tints it red or pink.
+  'wellness': { sf: 'leaf', ion: 'leaf-outline' },
+  'wellness-filled': { sf: 'leaf.fill', ion: 'leaf' },
+  'medication': { sf: 'pills', ion: 'medkit-outline' },
 } as const;
 
 export type IconName = keyof typeof ICON_MAP;

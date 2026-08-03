@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   KeyboardAwareScrollView,
   KeyboardProvider,
+  KeyboardStickyView,
   type KeyboardAwareScrollViewRef,
 } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,7 +28,14 @@ import ActiveWorkoutHeader, {
 } from '../components/ActiveWorkoutHeader';
 import ActiveWorkoutRail, { useSupersetBorders } from '../components/ActiveWorkoutRail';
 import ActiveWorkoutExerciseCard from '../components/ActiveWorkoutExerciseCard';
+import type { SetRowAccessoryHandle } from '../components/ActiveWorkoutSetRow';
 import KeyboardCollapsible from '../components/KeyboardCollapsible';
+import {
+  SetInputAccessoryBar,
+  useDeactivateOnKeyboardDismiss,
+  type SetAccessoryAction,
+  type SetInputField,
+} from '../components/SetRowChrome';
 import { MetricColumnMenu, SetTypeMenu } from '../components/WorkoutMenus';
 import ActiveWorkoutRestBar, {
   REST_BAR_GLASS_CLEARANCE,
@@ -38,6 +46,9 @@ import ActionSheet, {
 } from '../components/ActionSheet';
 import { type AnchorRect } from '../components/AnchoredMenu';
 import RestPeriodSheet, { type RestPeriodSheetRef } from '../components/RestPeriodSheet';
+import WorkoutDurationSheet, {
+  type WorkoutDurationSheetRef,
+} from '../components/WorkoutDurationSheet';
 import WorkoutReorderList from '../components/WorkoutReorderList';
 import Button from '../components/ui/Button';
 import FormInput from '../components/FormInput';
@@ -58,7 +69,10 @@ import {
   buildExerciseReorderItems,
   describeActiveSet,
   exerciseFromSnapshot,
+  formatDuration,
   formatSetLoad,
+  rendersCardioEffortForm,
+  summarizeWorkoutSpan,
 } from '../utils/workoutSession';
 import { useAppPreferencesStore } from '../stores/appPreferencesStore';
 import type { RootStackScreenProps } from '../types/navigation';
@@ -164,6 +178,7 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
 
   const { preferences } = usePreferences();
   const weightUnit = (preferences?.default_weight_unit ?? 'kg') as 'kg' | 'lbs';
+  const distanceUnit = (preferences?.default_distance_unit as 'km' | 'miles') ?? 'km';
   const { getImageSource } = useExerciseImageSource();
   const { flush } = useActiveWorkoutAutosave();
   const { runNavigationAction } = useNavigationActionGuard(navigation);
@@ -238,6 +253,11 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
     Keyboard.dismiss();
     setReorderVisible(true);
   }, []);
+
+  const handleOpenWorkoutSettings = useCallback(() => {
+    Keyboard.dismiss();
+    navigation.navigate('WorkoutSettings');
+  }, [navigation]);
 
   // Superset display: adjacent 2+ runs get a flat left rail (log cards) and a
   // bottom bar (rail thumbs) in a per-group palette color.
@@ -473,10 +493,16 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
   }, []);
 
   // Metric column picker.
-  const [metricMenuAnchor, setMetricMenuAnchor] = useState<AnchorRect | null>(null);
-  const handlePressMetricHeader = useCallback((anchor: AnchorRect) => {
-    setMetricMenuAnchor(anchor);
-  }, []);
+  const [metricMenu, setMetricMenu] = useState<{
+    anchor: AnchorRect;
+    clampedToRpe: boolean;
+  } | null>(null);
+  const handlePressMetricHeader = useCallback(
+    (anchor: AnchorRect, clampedToRpe: boolean) => {
+      setMetricMenu({ anchor, clampedToRpe });
+    },
+    [],
+  );
 
   // Rename dialog.
   const [renameVisible, setRenameVisible] = useState(false);
@@ -560,6 +586,11 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
     const entry = session.exercises.find((e) => e.id === entryId);
     const entryHasCompleted =
       entry?.sets.some((s) => completedSetIds[String(s.id)] != null) ?? false;
+    // The cardio effort form owns completion inline (tap the check to un-log),
+    // so the set-table Clear action would be redundant set-speak there.
+    const entryIsCardioForm =
+      entry != null &&
+      rendersCardioEffortForm(entry.exercise_snapshot, entry.sets.length);
 
     const items: ActionSheetItem[] = [];
     items.push({
@@ -601,7 +632,7 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
       label: 'Replace exercise',
       onPress: () => handleReplaceExercise(entryId),
     });
-    if (entryHasCompleted) {
+    if (entryHasCompleted && !entryIsCardioForm) {
       items.push({
         key: 'clear',
         label: 'Clear logged sets',
@@ -633,19 +664,40 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
   // autosave id churn. Distinct from activeSetId (the cursor / log ring), so
   // tapping an earlier set to fix a value doesn't move the cursor.
   const [focusedSetKey, setFocusedSetKey] = useState<string | null>(null);
-  const [focusedField, setFocusedField] = useState<'weight' | 'reps' | 'rpe'>('weight');
-  const handleActivateSet = useCallback((setKey: string, field: 'weight' | 'reps') => {
-    setFocusedField(field);
-    setFocusedSetKey(setKey);
-  }, []);
+  const [focusedField, setFocusedField] = useState<SetInputField>('weight');
+  const handleActivateSet = useCallback(
+    (setKey: string, field: Exclude<SetInputField, 'rpe'>) => {
+      setFocusedField(field);
+      setFocusedSetKey(setKey);
+    },
+    [],
+  );
   // Tapping the RPE column focuses that row's RPE input directly (the row's
   // focus effect reads `focusedField`).
   const handleActivateRpe = useCallback((setKey: string) => {
     setFocusedField('rpe');
     setFocusedSetKey(setKey);
   }, []);
-  const handleDeactivateSet = useCallback(() => {
+
+  // Live rows register their sticky-bar handles here, keyed by render key;
+  // the accessory bar dispatches to the focused row's handle at press time.
+  const accessoryHandlesRef = useRef<Record<string, SetRowAccessoryHandle>>({});
+  const handleRegisterAccessoryHandle = useCallback(
+    (key: string, handle: SetRowAccessoryHandle | null) => {
+      if (handle == null) delete accessoryHandlesRef.current[key];
+      else accessoryHandlesRef.current[key] = handle;
+    },
+    [],
+  );
+
+  // The keyboard leaving — accessory Done, a tap outside the grid, the
+  // Android back gesture — always ends the cell edit: clearing the focus
+  // state flushes the row's drafts (deactivation commit) and hides the bar.
+  useDeactivateOnKeyboardDismiss(useCallback(() => setFocusedSetKey(null), []));
+
+  const handleAccessoryDone = useCallback(() => {
     setFocusedSetKey(null);
+    Keyboard.dismiss();
   }, []);
 
   const handleCompleteSet = useCallback((setId: string) => {
@@ -827,11 +879,77 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
         );
         return;
       }
+      // The celebration screen renders entirely from this snapshot, so it must
+      // be taken before clearWorkout. With zero completed sets there is
+      // nothing to celebrate — finish exits straight back to the diary.
+      const state = useActiveWorkoutStore.getState();
+      const celebration =
+        state.session != null && Object.keys(state.completedSetIds).length > 0
+          ? {
+              session: state.session,
+              completedSetIds: state.completedSetIds,
+              prSetIds: state.prSetIds,
+              startedAt: state.startedAt,
+              finishedAt: Date.now(),
+              sourcePresetId: state.sourcePresetId,
+              sourceServerConfigId: state.sourceServerConfigId,
+              plannedSetValues: state.plannedSetValues,
+            }
+          : null;
       useActiveWorkoutStore.getState().clearWorkout();
-      navigation.goBack();
+      if (celebration != null) {
+        navigation.replace('WorkoutComplete', celebration);
+      } else {
+        navigation.goBack();
+      }
     }
     await attempt();
   }, [flush, navigation]);
+
+  // Long-gap guard on the way out: a workout left open across a long break
+  // (forgotten overnight, one straggler set the next morning) would stamp the
+  // whole wall-clock span as exercise duration — and the server derives
+  // calories from duration. Offer the gap-clamped active time before finishing.
+  const durationSheetRef = useRef<WorkoutDurationSheetRef>(null);
+  const maybeAdjustDurationThenFinish = useCallback(() => {
+    const { completedSetIds: completed, startedAt } = useActiveWorkoutStore.getState();
+    const span = summarizeWorkoutSpan(completed, startedAt);
+    if (span == null || !span.hasLongGap) {
+      void handleFinish();
+      return;
+    }
+    const activeLabel = formatDuration(span.activeMinutes);
+    Alert.alert(
+      'Adjust workout duration?',
+      `This workout spans ${formatDuration(span.totalMinutes)}, including a long break. Log ${activeLabel} of active time instead?`,
+      [
+        {
+          text: `Log ${activeLabel}`,
+          onPress: () => {
+            useActiveWorkoutStore.getState().setWorkoutDurationMinutes(span.activeMinutes);
+            void handleFinish();
+          },
+        },
+        {
+          text: `Keep ${formatDuration(span.totalMinutes)}`,
+          onPress: () => void handleFinish(),
+        },
+        {
+          text: 'Custom…',
+          onPress: () =>
+            durationSheetRef.current?.present(span.activeMinutes, Math.floor(span.totalMinutes)),
+        },
+      ],
+    );
+  }, [handleFinish]);
+
+  const handleDurationSave = useCallback(
+    (minutes: number) => {
+      useActiveWorkoutStore.getState().setWorkoutDurationMinutes(minutes);
+      void handleFinish();
+    },
+    [handleFinish],
+  );
 
   const handleConfirmEnd = useCallback(() => {
     // Commit any focused-but-unblurred input (a set value or a note) into the
@@ -854,9 +972,9 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
         : `All ${totalSets} sets logged. Nice work!`;
     Alert.alert('End workout?', message, [
       { text: 'Keep going', style: 'cancel' },
-      { text: 'End Workout', style: 'default', onPress: () => void handleFinish() },
+      { text: 'End Workout', style: 'default', onPress: maybeAdjustDurationThenFinish },
     ]);
-  }, [session, completedSetIds, handleFinish]);
+  }, [session, completedSetIds, maybeAdjustDurationThenFinish]);
 
   if (session == null || sessionId == null) {
     return (
@@ -891,6 +1009,83 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
   const restNextSetText =
     activeSetDescription == null ? null : formatSetLoad(activeSetDescription, weightUnit);
 
+  // Sticky accessory bar (both platforms) for the focused set cell. The
+  // focused row registered its handle by render key; its set id — needed for
+  // completion state — reverses through setRenderKeys (identity when the id
+  // never churned).
+  const focusedSetId =
+    focusedSetKey == null
+      ? null
+      : (Object.keys(setRenderKeys).find((id) => setRenderKeys[id] === focusedSetKey) ??
+        focusedSetKey);
+  // The cardio effort form has its own two-field walk (duration → distance)
+  // and no RPE cell, so the bar's Next must not aim at inputs it lacks.
+  const focusedEntryIsCardioForm =
+    focusedSetId != null &&
+    session.exercises.some(
+      (e) =>
+        e.sets.some((s) => String(s.id) === focusedSetId) &&
+        rendersCardioEffortForm(e.exercise_snapshot, e.sets.length),
+    );
+  // The keyboard walk: weight → reps → RPE (when that column is shown); a
+  // duration cell is its row's only value input, so it walks straight to RPE.
+  // The last field's bar drops Next and leads with Log.
+  const accessoryNextField = focusedEntryIsCardioForm
+    ? focusedField === 'duration'
+      ? ('distance' as const)
+      : null
+    : focusedField === 'weight'
+      ? ('reps' as const)
+      : (focusedField === 'reps' || focusedField === 'duration') && metricColumn === 'rpe'
+        ? ('rpe' as const)
+        : null;
+  const focusedSetCompleted = focusedSetId != null && completedSetIds[focusedSetId] != null;
+  const accessoryActions: SetAccessoryAction[] = [
+    ...(accessoryNextField != null
+      ? [
+          {
+            key: 'next',
+            label: 'Next',
+            onPress: () => {
+              if (focusedSetKey == null) return;
+              accessoryHandlesRef.current[focusedSetKey]?.focusField(accessoryNextField);
+            },
+          },
+        ]
+      : []),
+    // A completed set has no Log, so its last field would dead-end with only
+    // Done — Next Set moves on to the following row (or adds one on the last
+    // set), matching the edit forms' bar. The cardio form is its exercise's
+    // whole log, so there is no set to move on to and its bar ends at Done.
+    ...(accessoryNextField == null && focusedSetCompleted && !focusedEntryIsCardioForm
+      ? [
+          {
+            key: 'next-set',
+            label: 'Next Set',
+            onPress: () => {
+              if (focusedSetKey == null) return;
+              accessoryHandlesRef.current[focusedSetKey]?.advance();
+            },
+          },
+        ]
+      : []),
+    // Any uncompleted set is loggable (matching its ring), so a focused row
+    // doesn't dead-end on the last field with only Done.
+    ...(focusedSetId != null && !focusedSetCompleted
+      ? [
+          {
+            key: 'log',
+            label: 'Log',
+            bold: true,
+            onPress: () => {
+              if (focusedSetKey == null) return;
+              accessoryHandlesRef.current[focusedSetKey]?.log();
+            },
+          },
+        ]
+      : []),
+  ];
+
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
       <ActiveWorkoutHeader
@@ -904,6 +1099,7 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
         onRename={() => setRenameVisible(true)}
         onAddExercise={handleAddExercise}
         onReorder={reorderItemCount >= 2 ? handleOpenReorder : undefined}
+        onOpenSettings={handleOpenWorkoutSettings}
         onClearAllSets={hasAnyCompletedSets ? handleClearAllSets : undefined}
       />
 
@@ -934,11 +1130,12 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
           viewportHeightRef.current = e.nativeEvent.layout.height;
         }}
         keyboardShouldPersistTaps="handled"
+        // Clearance above the keyboard for the focused input: the sticky
+        // accessory bar occupies the first ~48px, the rest keeps the row
+        // readable above it.
         bottomOffset={80}
-        // Tapping a cell in another row remounts the focused TextInput
-        // (unmount-blur → keyboard hide → refocus). Without this, the hide leg
-        // scrolls back to a stale pre-keyboard position and the refocus then
-        // measures against it, landing the tapped input off-screen.
+        // A real dismissal (Done, tap outside) shouldn't scroll the log back
+        // to its pre-keyboard position — the user is usually mid-list.
         disableScrollOnKeyboardHide
       >
         {session.exercises.map((exercise) => {
@@ -958,6 +1155,7 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
               activeField={focusedField}
               metricColumn={metricColumn}
               weightUnit={weightUnit}
+              distanceUnit={distanceUnit}
               getImageSource={getImageSource}
               onPressThumb={handlePressThumb}
               onToggleExpanded={handleToggleExpanded}
@@ -976,7 +1174,7 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
               onCommitExerciseNote={handleCommitExerciseNote}
               onActivateSet={handleActivateSet}
               onActivateRpe={handleActivateRpe}
-              onDeactivateSet={handleDeactivateSet}
+              onRegisterAccessoryHandle={handleRegisterAccessoryHandle}
             />
           );
 
@@ -1049,7 +1247,19 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
         />
       )}
 
+      {/* Keyboard accessory bar for the focused set cell, on both platforms
+          (per-input InputAccessoryViews are iOS-only and edit-form-only now).
+          It rides the keyboard via KeyboardStickyView and unmounts when the
+          keyboard-hide listener clears the focus state. */}
+      {focusedSetKey != null && (
+        <KeyboardStickyView style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+          <SetInputAccessoryBar onDone={handleAccessoryDone} actions={accessoryActions} />
+        </KeyboardStickyView>
+      )}
+
       <RestPeriodSheet ref={restSheetRef} onChange={handleRestChanged} />
+
+      <WorkoutDurationSheet ref={durationSheetRef} onSave={handleDurationSave} />
 
       <RenameWorkoutDialog
         visible={renameVisible}
@@ -1059,8 +1269,9 @@ function ActiveWorkoutScreen({ navigation, route }: Props) {
       />
 
       <MetricColumnMenu
-        anchor={metricMenuAnchor}
-        onClose={() => setMetricMenuAnchor(null)}
+        anchor={metricMenu?.anchor ?? null}
+        onClose={() => setMetricMenu(null)}
+        includeWeightMetrics={!metricMenu?.clampedToRpe}
       />
 
       <ActionSheet

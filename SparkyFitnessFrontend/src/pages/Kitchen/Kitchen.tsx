@@ -21,6 +21,7 @@ import {
   type KitchenMealPreview,
   type KitchenPlanTemplate,
 } from '@/pages/Kitchen/kitchenPlanUtils';
+import { translateWithVars } from '@/utils/i18n';
 
 interface KitchenProps {
   todayOverride?: string;
@@ -97,14 +98,17 @@ const KitchenMealCard = ({ meal }: { meal: KitchenMealPreview }) => {
           <div>
             <CardTitle className="text-xl">{meal.label}</CardTitle>
             <CardDescription>
-              {t('kitchen.targetSummary', {
-                defaultValue:
-                  'Target C {{carbs}}g / P {{protein}}g / F {{fat}}g / {{calories}} kcal',
-                carbs: formatMacro(meal.target.carbs),
-                protein: formatMacro(meal.target.protein),
-                fat: formatMacro(meal.target.fat),
-                calories: formatMacro(meal.target.calories),
-              })}
+              {translateWithVars(
+                t,
+                'kitchen.targetSummary',
+                'Target C {{carbs}}g / P {{protein}}g / F {{fat}}g / {{calories}} kcal',
+                {
+                  carbs: formatMacro(meal.target.carbs),
+                  protein: formatMacro(meal.target.protein),
+                  fat: formatMacro(meal.target.fat),
+                  calories: formatMacro(meal.target.calories),
+                }
+              )}
             </CardDescription>
           </div>
           <Badge variant="secondary">

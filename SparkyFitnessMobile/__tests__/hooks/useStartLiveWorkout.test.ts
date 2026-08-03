@@ -11,6 +11,7 @@ import { createWorkout } from '../../src/services/api/exerciseApi';
 import { invalidateExerciseCache } from '../../src/hooks/invalidateExerciseCache';
 import { ensureNotificationPermission } from '../../src/services/notifications';
 import { flushActiveWorkoutBeforeClear } from '../../src/hooks/useActiveWorkoutAutosave';
+import { getActiveServerConfig } from '../../src/services/storage';
 import { serverConnectionQueryKey } from '../../src/hooks/queryKeys';
 import { defaultWorkoutName } from '../../src/hooks/useWorkoutForm';
 import { getTodayDate } from '../../src/utils/dateUtils';
@@ -30,11 +31,16 @@ jest.mock('../../src/services/notifications', () => ({
   maybePromptForExactAlarmPermission: jest.fn(async () => undefined),
   scheduleRestNotification: jest.fn(async () => 'notif-abc'),
   cancelScheduledNotification: jest.fn(async () => undefined),
-  fireRestCompleteHaptic: jest.fn(),
+  fireRestCompleteCue: jest.fn(),
 }));
 
 jest.mock('../../src/hooks/useActiveWorkoutAutosave', () => ({
   flushActiveWorkoutBeforeClear: jest.fn(async () => true),
+}));
+
+jest.mock('../../src/services/storage', () => ({
+  ...jest.requireActual('../../src/services/storage'),
+  getActiveServerConfig: jest.fn(),
 }));
 
 const mockCreateWorkout = createWorkout as jest.MockedFunction<typeof createWorkout>;
@@ -48,8 +54,15 @@ const mockToastShow = Toast.show as jest.MockedFunction<typeof Toast.show>;
 const mockFlushBeforeClear = flushActiveWorkoutBeforeClear as jest.MockedFunction<
   typeof flushActiveWorkoutBeforeClear
 >;
+const mockGetActiveServerConfig = getActiveServerConfig as jest.MockedFunction<
+  typeof getActiveServerConfig
+>;
 
-const EXERCISES = buildSingleExerciseStartPayload({ id: 'ex-1' });
+const EXERCISES = buildSingleExerciseStartPayload({
+  id: 'ex-1',
+  modality: null,
+  category: null,
+});
 
 function makeSession(): PresetSessionResponse {
   return {
@@ -103,7 +116,11 @@ function makeSession(): PresetSessionResponse {
 function setup({ connected = true, focused = true } = {}) {
   const queryClient = createTestQueryClient();
   if (connected) queryClient.setQueryData(serverConnectionQueryKey, true);
-  const navigation = { replace: jest.fn(), isFocused: jest.fn(() => focused) };
+  const navigation = {
+    replace: jest.fn(),
+    navigate: jest.fn(),
+    isFocused: jest.fn(() => focused),
+  };
   const { result } = renderHook(() => useStartLiveWorkout(navigation), {
     wrapper: createQueryWrapper(queryClient),
   });
@@ -144,6 +161,78 @@ describe('useStartLiveWorkout', () => {
     expect(store.sessionId).toBe('session-1');
     expect(store.createdByLiveStart).toBe(true);
     expect(navigation.replace).toHaveBeenCalledWith('ActiveWorkout');
+  });
+
+  it('strips planned weight/reps/duration from the create payload and seeds them as the store plan', async () => {
+    const { result } = setup();
+    const plannedExercises = [
+      {
+        ...EXERCISES[0],
+        sets: [{ ...EXERCISES[0].sets[0], weight: 80, reps: 5, duration: 90 }],
+      },
+    ];
+
+    await act(async () => {
+      await result.current.startLiveWorkout({
+        name: 'Push Day',
+        exercises: plannedExercises,
+      });
+    });
+
+    // Sets are created empty — the plan is an assumption, not a result.
+    expect(mockCreateWorkout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exercises: [
+          expect.objectContaining({
+            sets: [
+              expect.objectContaining({
+                weight: null,
+                reps: null,
+                duration: null,
+                distance: null,
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    // The plan lands keyed to the created session's set ids for placeholders.
+    expect(useActiveWorkoutStore.getState().plannedSetValues).toEqual({
+      '101': { weight: 80, reps: 5, duration: 90, distance: null },
+    });
+  });
+
+  it('forwards the source preset link with the active server config id into the store', async () => {
+    const { result } = setup();
+    mockGetActiveServerConfig.mockResolvedValue({
+      id: 'config-1',
+      url: 'https://example.com',
+      apiKey: 'key',
+    });
+
+    await act(async () => {
+      await result.current.startLiveWorkout({
+        name: 'Push Day',
+        exercises: EXERCISES,
+        sourcePresetId: 42,
+      });
+    });
+
+    const store = useActiveWorkoutStore.getState();
+    expect(store.sourcePresetId).toBe(42);
+    expect(store.sourceServerConfigId).toBe('config-1');
+  });
+
+  it('leaves the source preset link null for starts without a preset', async () => {
+    const { result } = setup();
+
+    await act(async () => {
+      await result.current.startLiveWorkout({ exercises: EXERCISES });
+    });
+
+    expect(mockGetActiveServerConfig).not.toHaveBeenCalled();
+    expect(useActiveWorkoutStore.getState().sourcePresetId).toBeNull();
+    expect(useActiveWorkoutStore.getState().sourceServerConfigId).toBeNull();
   });
 
   it('defaults the name to the dated workout name when omitted', async () => {
@@ -195,14 +284,40 @@ describe('useStartLiveWorkout', () => {
     });
 
     expect(alertSpy).toHaveBeenCalledWith(
-      'Replace current workout?',
+      'Workout in progress',
       expect.stringContaining('workout in progress'),
       expect.arrayContaining([
+        expect.objectContaining({ text: 'Go to Workout' }),
         expect.objectContaining({ text: 'Clear & Start' }),
       ]),
     );
     // Without confirming the prompt, nothing is created.
     expect(mockCreateWorkout).not.toHaveBeenCalled();
+  });
+
+  it('navigates to the active workout without creating or clearing when "Go to Workout" is chosen', async () => {
+    const { result, navigation } = setup();
+    act(() => {
+      useActiveWorkoutStore.getState().startWorkout(makeSession());
+    });
+
+    alertSpy.mockImplementation((_title, _message, buttons) => {
+      const goTo = (buttons as { text: string; onPress?: () => void }[] | undefined)?.find(
+        (b) => b.text === 'Go to Workout',
+      );
+      goTo?.onPress?.();
+      return undefined as never;
+    });
+
+    await act(async () => {
+      await result.current.startLiveWorkout({ exercises: EXERCISES });
+    });
+
+    expect(navigation.navigate).toHaveBeenCalledWith('ActiveWorkout');
+    expect(mockCreateWorkout).not.toHaveBeenCalled();
+    expect(mockFlushBeforeClear).not.toHaveBeenCalled();
+    // The in-progress session survives untouched.
+    expect(useActiveWorkoutStore.getState().sessionId).toBe('session-1');
   });
 
   it('clears the in-progress workout and starts the new one when replace is confirmed', async () => {

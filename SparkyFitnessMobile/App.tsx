@@ -20,10 +20,8 @@ import { Uniwind, useUniwind, useCSSVariable } from 'uniwind';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { queryClient, serverConnectionQueryKey, serverConfigsQueryKey, useSyncHealthData, useCycleMode } from './src/hooks';
-import {
-  initWorkoutNotificationActions,
-  useActiveWorkoutStore,
-} from './src/stores/activeWorkoutStore';
+import { initWorkoutNotificationActions } from './src/stores/activeWorkoutStore';
+import { promptForActiveWorkoutConflict } from './src/hooks/useStartLiveWorkout';
 
 import { createNativeStackNavigator, type NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import SyncScreen from './src/screens/SyncScreen';
@@ -58,6 +56,7 @@ import WorkoutAddScreen from './src/screens/WorkoutAddScreen';
 import ActivityAddScreen from './src/screens/ActivityAddScreen';
 import WorkoutDetailScreen from './src/screens/WorkoutDetailScreen';
 import ActiveWorkoutScreen from './src/screens/ActiveWorkoutScreen';
+import WorkoutCompleteScreen from './src/screens/WorkoutCompleteScreen';
 import ActivityDetailScreen from './src/screens/ActivityDetailScreen';
 import FastingDetailScreen from './src/screens/FastingDetailScreen';
 import ExerciseSearchScreen from './src/screens/ExerciseSearchScreen';
@@ -66,9 +65,11 @@ import CalorieSettingsScreen from './src/screens/CalorieSettingsScreen';
 import FoodSettingsScreen from './src/screens/FoodSettingsScreen';
 import DashboardSettingsScreen from './src/screens/DashboardSettingsScreen';
 import DiarySettingsScreen from './src/screens/DiarySettingsScreen';
+import WorkoutSettingsScreen from './src/screens/WorkoutSettingsScreen';
 import ServerSettingsScreen from './src/screens/ServerSettingsScreen';
 import PasskeySettingsScreen from './src/screens/PasskeySettingsScreen';
 import AppSettingsScreen from './src/screens/AppSettingsScreen';
+import NotificationSettingsScreen from './src/screens/NotificationSettingsScreen';
 import AboutScreen from './src/screens/AboutScreen';
 import WhatsNewScreen from './src/screens/WhatsNewScreen';
 import MeasurementsAddScreen from './src/screens/MeasurementsAddScreen';
@@ -77,7 +78,12 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import CycleSettingsScreen from './src/screens/CycleSettingsScreen';
 import CycleOnboardingScreen from './src/screens/CycleOnboardingScreen';
 import CycleHubScreen from './src/screens/CycleHubScreen';
+import CycleLogModalScreen from './src/screens/CycleLogModalScreen';
 import PregnancySetupScreen from './src/screens/PregnancySetupScreen';
+import MedicationsListScreen from './src/screens/MedicationsListScreen';
+import MedicationDetailScreen from './src/screens/MedicationDetailScreen';
+import MedicationFormScreen from './src/screens/MedicationFormScreen';
+import MedicationScheduleFormScreen from './src/screens/MedicationScheduleFormScreen';
 import DailyNutritionDetailsScreen from './src/screens/DailyNutritionDetailsScreen';
 import NutrientTrendsScreen from './src/screens/NutrientTrendsScreen';
 import ReauthModal from './src/components/ReauthModal';
@@ -109,6 +115,7 @@ import { initializeTheme } from './src/services/themeService';
 import { loadActiveDraft, clearDraft } from './src/services/workoutDraftService';
 import { addLog, initLogService } from './src/services/LogService';
 import { initNotifications } from './src/services/notifications';
+import { initMedicationNotificationActions } from './src/services/medicationNotificationHandler';
 import { initWorkoutLiveActivity } from './src/services/workoutLiveActivity';
 import { ensureTimezoneBootstrapped } from './src/services/api/preferencesApi';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -117,7 +124,6 @@ import { FullWindowOverlay } from 'react-native-screens';
 import type { RootStackParamList, TabParamList } from './src/types/navigation';
 import AddSheet, { addSheetRef } from './src/components/AddSheet';
 import { toastConfig } from './src/components/ui/toastConfig';
-import PrCelebrationToast from './src/components/PrCelebrationToast';
 import { NON_ADD_TABS, TabsLayout, type NonAddTabName } from './src/components/TabsLayout';
 import { createIOSSmallNativeHeaderOptions } from './src/utils/nativeHeaderItems';
 import { useHeaderActionColors } from './src/hooks/useHeaderActionColors';
@@ -127,6 +133,8 @@ import ActiveWorkoutBar, {
   notifyActiveWorkoutBarSwipeProgress,
 } from './src/components/ActiveWorkoutBar';
 import { ActiveWorkoutTransitionScreenLayout } from './src/components/ActiveWorkoutTransitionProbe';
+import ActiveWorkoutKeepAwake from './src/components/ActiveWorkoutKeepAwake';
+import MedicationReminderReconciler from './src/components/MedicationReminderReconciler';
 import { withErrorBoundary } from './src/components/ScreenErrorBoundary';
 import { useNativeIOSTabsActive, useNativeIOSHeadersActive } from './src/services/nativeTabBarPreference';
 
@@ -224,6 +232,7 @@ const SafeWorkoutAdd = withErrorBoundary(WorkoutAddScreen, 'WorkoutAdd', { canGo
 const SafeActivityAdd = withErrorBoundary(ActivityAddScreen, 'ActivityAdd', { canGoBack: true });
 const SafeWorkoutDetail = withErrorBoundary(WorkoutDetailScreen, 'WorkoutDetail', { canGoBack: true });
 const SafeActiveWorkout = withErrorBoundary(ActiveWorkoutScreen, 'ActiveWorkout', { canGoBack: true });
+const SafeWorkoutComplete = withErrorBoundary(WorkoutCompleteScreen, 'WorkoutComplete', { canGoBack: true });
 const SafeActivityDetail = withErrorBoundary(ActivityDetailScreen, 'ActivityDetail', { canGoBack: true });
 const SafeFastingDetail = withErrorBoundary(FastingDetailScreen, 'FastingDetail', { canGoBack: true });
 const SafeLogs = withErrorBoundary(LogScreen, 'Logs', { canGoBack: true });
@@ -234,9 +243,11 @@ const SafeCalorieSettings = withErrorBoundary(CalorieSettingsScreen, 'CalorieSet
 const SafeFoodSettings = withErrorBoundary(FoodSettingsScreen, 'FoodSettings', { canGoBack: true });
 const SafeDashboardSettings = withErrorBoundary(DashboardSettingsScreen, 'DashboardSettings', { canGoBack: true });
 const SafeDiarySettings = withErrorBoundary(DiarySettingsScreen, 'DiarySettings', { canGoBack: true });
+const SafeWorkoutSettings = withErrorBoundary(WorkoutSettingsScreen, 'WorkoutSettings', { canGoBack: true });
 const SafeServerSettings = withErrorBoundary(ServerSettingsScreen, 'ServerSettings', { canGoBack: true });
 const SafePasskeySettings = withErrorBoundary(PasskeySettingsScreen, 'PasskeySettings', { canGoBack: true });
 const SafeAppSettings = withErrorBoundary(AppSettingsScreen, 'AppSettings', { canGoBack: true });
+const SafeNotificationSettings = withErrorBoundary(NotificationSettingsScreen, 'NotificationSettings', { canGoBack: true });
 const SafeAbout = withErrorBoundary(AboutScreen, 'About', { canGoBack: true });
 const SafeWhatsNew = withErrorBoundary(WhatsNewScreen, 'WhatsNew', { canGoBack: true });
 const SafeDailyNutritionDetails = withErrorBoundary(DailyNutritionDetailsScreen, 'DailyNutritionDetails', { canGoBack: true });
@@ -245,7 +256,12 @@ const SafeNutrientTrends = withErrorBoundary(NutrientTrendsScreen, 'NutrientTren
 const SafeCycleSettings = withErrorBoundary(CycleSettingsScreen, 'CycleSettings', { canGoBack: true });
 const SafeCycleOnboarding = withErrorBoundary(CycleOnboardingScreen, 'CycleOnboarding', { canGoBack: true });
 const SafeCycleHub = withErrorBoundary(CycleHubScreen, 'CycleHub', { canGoBack: true });
+const SafeCycleLogModal = withErrorBoundary(CycleLogModalScreen, 'CycleLogModal', { canGoBack: true });
 const SafePregnancySetup = withErrorBoundary(PregnancySetupScreen, 'PregnancySetup', { canGoBack: true });
+const SafeMedicationsList = withErrorBoundary(MedicationsListScreen, 'MedicationsList', { canGoBack: true });
+const SafeMedicationDetail = withErrorBoundary(MedicationDetailScreen, 'MedicationDetail', { canGoBack: true });
+const SafeMedicationForm = withErrorBoundary(MedicationFormScreen, 'MedicationForm', { canGoBack: true });
+const SafeMedicationScheduleForm = withErrorBoundary(MedicationScheduleFormScreen, 'MedicationScheduleForm', { canGoBack: true });
 
 function AppContent() {
   const { theme } = useUniwind();
@@ -289,7 +305,7 @@ function AppContent() {
   const cycleSheetLabel = cycleDiscreet
     ? 'Wellness'
     : cycleMode === 'pregnant' || cycleMode === 'postpartum'
-      ? 'Log Pregnancy'
+      ? 'Log Pregnancy Entry'
       : 'Log Cycle';
   const rememberActiveTab = useCallback((routeName: string) => {
     if ((NON_ADD_TABS as readonly string[]).includes(routeName)) {
@@ -484,15 +500,16 @@ function AppContent() {
 
   // Live start: no draft guard (form drafts belong to the Log Workout path) and
   // no diary date (a live workout is logged to today). Tapping while a workout
-  // is already running resumes it instead of opening the start surface.
+  // is already running prompts to go back to it or clear it and start over.
   const handleStartWorkout = useCallback(() => {
     if (!checkServerConnected('Configure your server connection in Settings to start a workout.')) {
       return;
     }
-    if (useActiveWorkoutStore.getState().sessionId !== null) {
-      navigateFromSheet('ActiveWorkout');
-      return;
-    }
+    const prompted = promptForActiveWorkoutConflict(queryClient, {
+      onGoToWorkout: () => navigateFromSheet('ActiveWorkout'),
+      onClearAndStart: () => navigateFromSheet('PresetSearch'),
+    });
+    if (prompted) return;
     navigateFromSheet('PresetSearch');
   }, [checkServerConnected, navigateFromSheet]);
 
@@ -511,7 +528,7 @@ function AppContent() {
   }, [navigateFromSheet]);
 
   const handleOpenCycle = useCallback(() => {
-    navigateFromSheet('CycleHub');
+    navigateFromSheet('CycleLogModal');
   }, [navigateFromSheet]);
 
   const handleSyncHealthData = useCallback(async () => {
@@ -624,6 +641,7 @@ function AppContent() {
     initializeApp();
 
     initWorkoutNotificationActions();
+    initMedicationNotificationActions();
 
     // iOS-only (no-op on Android): keeps the workout Live Activity in sync
     // with the active-workout store.
@@ -844,7 +862,7 @@ function AppContent() {
         <Stack.Navigator
           screenLayout={usesLiquidGlassNavigation
             ? ({ children, route }) => (
-              <ActiveWorkoutTransitionScreenLayout routeName={route.name}>
+              <ActiveWorkoutTransitionScreenLayout routeName={route.name} routeKey={route.key}>
                 {children}
               </ActiveWorkoutTransitionScreenLayout>
             )
@@ -852,16 +870,16 @@ function AppContent() {
           screenListeners={usesLiquidGlassNavigation
             ? {
               transitionStart: (event) => {
-                notifyActiveWorkoutBarStackTransition('start', Boolean(event.data?.closing));
+                notifyActiveWorkoutBarStackTransition('start', Boolean(event.data?.closing), event.target);
               },
               transitionEnd: (event) => {
                 const closing = Boolean(event.data?.closing);
                 if (!closing) notifyActiveWorkoutBarSwipeProgress(0);
-                notifyActiveWorkoutBarStackTransition('end', closing);
+                notifyActiveWorkoutBarStackTransition('end', closing, event.target);
               },
-              gestureCancel: () => {
+              gestureCancel: (event) => {
                 notifyActiveWorkoutBarSwipeProgress(0);
-                notifyActiveWorkoutBarStackTransition('end', false);
+                notifyActiveWorkoutBarStackTransition('end', false, event.target);
               },
             }
             : undefined}
@@ -1131,6 +1149,14 @@ function AppContent() {
             }}
           />
           <Stack.Screen
+            name="WorkoutComplete"
+            component={SafeWorkoutComplete}
+            options={{
+              headerShown: false,
+              gestureEnabled: true,
+            }}
+          />
+          <Stack.Screen
             name="ActivityDetail"
             component={SafeActivityDetail}
             options={({ route }) => createStackScreenOptions(route.params.session.name ?? 'Activity', { headerBackTitle: 'Diary' })}
@@ -1182,6 +1208,11 @@ function AppContent() {
             options={createStackScreenOptions('Diary Settings', { headerBackTitle: 'Settings' })}
           />
           <Stack.Screen
+            name="WorkoutSettings"
+            component={SafeWorkoutSettings}
+            options={createStackScreenOptions('Workout Settings', { headerBackTitle: 'Settings' })}
+          />
+          <Stack.Screen
             name="ServerSettings"
             component={SafeServerSettings}
             options={createStackScreenOptions('Server Settings', { headerBackTitle: 'Settings' })}
@@ -1197,6 +1228,11 @@ function AppContent() {
             options={createStackScreenOptions('App Settings', { headerBackTitle: 'Settings' })}
           />
           <Stack.Screen
+            name="NotificationSettings"
+            component={SafeNotificationSettings}
+            options={createStackScreenOptions('Notifications', { headerBackTitle: 'App Settings' })}
+          />
+          <Stack.Screen
             name="About"
             component={SafeAbout}
             options={createStackScreenOptions('About', { headerBackTitle: 'Settings' })}
@@ -1209,7 +1245,7 @@ function AppContent() {
           <Stack.Screen
             name="CycleSettings"
             component={SafeCycleSettings}
-            options={createStackScreenOptions('Cycle Settings', { headerBackTitle: 'Settings' })}
+            options={createStackScreenOptions('Cycle & Pregnancy', { headerBackTitle: 'Settings' })}
           />
           <Stack.Screen
             name="CycleOnboarding"
@@ -1226,9 +1262,46 @@ function AppContent() {
             options={createStackScreenOptions('Wellness Hub', { headerBackTitle: 'Dashboard' })}
           />
           <Stack.Screen
+            name="CycleLogModal"
+            component={SafeCycleLogModal}
+            options={createStackScreenOptions('Log Daily Entry', {
+              presentation: 'modal',
+              headerBackButtonDisplayMode: 'minimal',
+              ...(Platform.OS === 'android' ? androidModalAnimation : {}),
+            })}
+          />
+          <Stack.Screen
             name="PregnancySetup"
             component={SafePregnancySetup}
             options={createStackScreenOptions('Pregnancy Setup', {
+              presentation: 'modal',
+              headerBackButtonDisplayMode: 'minimal',
+              ...(Platform.OS === 'android' ? androidModalAnimation : {}),
+            })}
+          />
+          <Stack.Screen
+            name="MedicationsList"
+            component={SafeMedicationsList}
+            options={createStackScreenOptions('Medications', { headerBackButtonDisplayMode: 'minimal' })}
+          />
+          <Stack.Screen
+            name="MedicationDetail"
+            component={SafeMedicationDetail}
+            options={createStackScreenOptions('Medication', { headerBackTitle: 'Medications' })}
+          />
+          <Stack.Screen
+            name="MedicationForm"
+            component={SafeMedicationForm}
+            options={createStackScreenOptions('Medication', {
+              presentation: 'modal',
+              headerBackButtonDisplayMode: 'minimal',
+              ...(Platform.OS === 'android' ? androidModalAnimation : {}),
+            })}
+          />
+          <Stack.Screen
+            name="MedicationScheduleForm"
+            component={SafeMedicationScheduleForm}
+            options={createStackScreenOptions('Medication', {
               presentation: 'modal',
               headerBackButtonDisplayMode: 'minimal',
               ...(Platform.OS === 'android' ? androidModalAnimation : {}),
@@ -1268,8 +1341,9 @@ function AppContent() {
           }}
         />
         <ActiveWorkoutBar />
+        <ActiveWorkoutKeepAwake />
+        <MedicationReminderReconciler />
         <SafeAreaToast />
-        <PrCelebrationToast />
       </SafeAreaProvider>
     </NavigationContainer>
   );

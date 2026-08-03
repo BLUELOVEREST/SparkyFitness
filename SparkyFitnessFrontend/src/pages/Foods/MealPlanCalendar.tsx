@@ -17,6 +17,7 @@ import {
   X,
   CalendarDays,
   MoreHorizontal,
+  Copy,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -30,6 +31,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import {
   useCreateMealPlanMutation,
   useDeleteMealPlanMutation,
+  useDuplicateMealPlanMutation,
   useMealPlanTemplates,
   useUpdateMealPlanMutation,
 } from '@/hooks/Foods/useMealplanTemplate';
@@ -57,6 +59,8 @@ const MealPlanCalendar: React.FC = () => {
   const { mutateAsync: createMealPlanTemplate } = useCreateMealPlanMutation();
   const { mutateAsync: updateMealPlanTemplate } = useUpdateMealPlanMutation();
   const { mutateAsync: deleteMealPlanTemplate } = useDeleteMealPlanMutation();
+  const { mutateAsync: duplicateMealPlanTemplate } =
+    useDuplicateMealPlanMutation();
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
@@ -144,6 +148,26 @@ const MealPlanCalendar: React.FC = () => {
       }
     },
     [activeUserId, deleteMealPlanTemplate, invalidate]
+  );
+
+  const handleDuplicate = useCallback(
+    async (templateId: string) => {
+      if (!activeUserId) return;
+      try {
+        const now = new Date();
+        const currentClientDate = formatDateToYYYYMMDD(now);
+
+        await duplicateMealPlanTemplate({
+          userId: activeUserId,
+          templateId,
+          currentClientDate,
+        });
+        invalidate();
+      } catch (error) {
+        // Handled by mutation cache
+      }
+    },
+    [activeUserId, duplicateMealPlanTemplate, invalidate]
   );
 
   const handleTogglePlanActive = useCallback(
@@ -312,6 +336,10 @@ const MealPlanCalendar: React.FC = () => {
                   <Edit className="mr-2 h-4 w-4" />
                   {t('common.edit', 'Edit')}
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDuplicate(template.id!)}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  {t('common.duplicate', 'Duplicate')}
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
                     handleTogglePlanActive(template.id!, !template.is_active)
@@ -351,7 +379,7 @@ const MealPlanCalendar: React.FC = () => {
         },
       },
     ],
-    [t, handleTogglePlanActive, handleEdit, handleDelete]
+    [t, handleTogglePlanActive, handleEdit, handleDelete, handleDuplicate]
   );
 
   return (

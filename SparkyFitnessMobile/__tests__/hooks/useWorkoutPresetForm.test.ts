@@ -6,10 +6,15 @@ import {
   type PresetClientIds,
 } from '../../src/hooks/useWorkoutPresetForm';
 import { DEFAULT_REST_SEC, buildPresetExercisesPayload } from '../../src/utils/workoutSession';
+import {
+  useAppPreferencesStore,
+  __resetAppPreferencesStoreForTests,
+} from '../../src/stores/appPreferencesStore';
 import { kgToLbs } from '../../src/utils/unitConversions';
 import type { Exercise } from '../../src/types/exercise';
 import type { WorkoutDraftExercise } from '../../src/types/drafts';
 import type { WorkoutPreset } from '../../src/types/workoutPresets';
+import type { PresetSessionResponse } from '@workspace/shared';
 
 function exercise(overrides: Partial<Exercise> = {}): Exercise {
   return {
@@ -75,9 +80,27 @@ describe('presetFormReducer', () => {
       exerciseId: 'ex-1',
       exerciseName: 'Bench Press',
       exerciseCategory: 'strength',
+      exerciseModality: null,
       images: ['bench.png'],
-      sets: [{ clientId: 's1', weight: '', reps: '', restTime: DEFAULT_REST_SEC }],
+      sets: [
+        { clientId: 's1', weight: '', reps: '', distance: '', restTime: DEFAULT_REST_SEC },
+      ],
     });
+  });
+
+  it('ADD_EXERCISE seeds the set with the user-configured default rest', () => {
+    useAppPreferencesStore.getState().setDefaultRestSec(150);
+    try {
+      const next = presetFormReducer(empty, {
+        type: 'ADD_EXERCISE',
+        exercise: exercise(),
+        exerciseClientId: 'e1',
+        setClientId: 's1',
+      });
+      expect(next.exercises[0].sets[0].restTime).toBe(150);
+    } finally {
+      __resetAppPreferencesStoreForTests();
+    }
   });
 
   it('ADD_EXERCISE defaults missing images to an empty array', () => {
@@ -111,7 +134,14 @@ describe('presetFormReducer', () => {
     const sets = next.exercises[0].sets;
     expect(sets).toHaveLength(3);
     // Inherits the last set's weight/reps...
-    expect(sets[2]).toEqual({ clientId: 's3', weight: '110', reps: '3', restTime: 120 });
+    expect(sets[2]).toEqual({
+      clientId: 's3',
+      weight: '110',
+      reps: '3',
+      distance: '',
+      duration: null,
+      restTime: 120,
+    });
   });
 
   it('ADD_SET falls back to empty values and the default rest when the exercise has no sets', () => {
@@ -135,7 +165,14 @@ describe('presetFormReducer', () => {
       setClientId: 's1',
     });
     expect(next.exercises[0].sets).toEqual([
-      { clientId: 's1', weight: '', reps: '', restTime: DEFAULT_REST_SEC },
+      {
+        clientId: 's1',
+        weight: '',
+        reps: '',
+        distance: '',
+        duration: null,
+        restTime: DEFAULT_REST_SEC,
+      },
     ]);
   });
 
@@ -377,6 +414,29 @@ describe('presetFormReducer', () => {
       expect(next.exercises[0].sets[1].reps).toBe('');
     });
 
+    it('preserves an explicit modality, recording null when the preset omits it', () => {
+      const mixed = preset({
+        exercises: [
+          { ...preset().exercises[0], modality: 'duration' },
+          { ...preset().exercises[0], id: 802, exercise_id: 'ex-2' },
+        ],
+      });
+      const next = presetFormReducer(
+        { name: '', description: '', exercises: [] },
+        {
+          type: 'POPULATE_FROM_PRESET',
+          preset: mixed,
+          weightUnit: 'kg',
+          clientIds: [
+            { exerciseClientId: 'e1', setClientIds: ['s1', 's2'] },
+            { exerciseClientId: 'e2', setClientIds: ['s3', 's4'] },
+          ],
+        },
+      );
+      expect(next.exercises[0].exerciseModality).toBe('duration');
+      expect(next.exercises[1].exerciseModality).toBeNull();
+    });
+
     it('maps superset_group into the draft, defaulting to null', () => {
       const grouped = preset({
         exercises: [
@@ -437,6 +497,229 @@ describe('presetFormReducer', () => {
       expect(next.description).toBe('');
       expect(next.exercises[0].images).toEqual([]);
       expect(next.exercises[0].exerciseCategory).toBeNull();
+    });
+
+    it('maps preset set distance (km) into display-unit draft text', () => {
+      const cardioPreset = preset();
+      cardioPreset.exercises[0].sets = [
+        { ...cardioPreset.exercises[0].sets[0], distance: 1.609344 },
+        cardioPreset.exercises[0].sets[1],
+      ];
+      const next = presetFormReducer(
+        { name: '', description: '', exercises: [] },
+        {
+          type: 'POPULATE_FROM_PRESET',
+          preset: cardioPreset,
+          weightUnit: 'kg',
+          distanceUnit: 'miles',
+          clientIds,
+        },
+      );
+      expect(next.exercises[0].sets[0].distance).toBe('1');
+      expect(next.exercises[0].sets[1].distance).toBe('');
+    });
+  });
+
+  describe('POPULATE_FROM_SESSION', () => {
+    function session(overrides: Partial<PresetSessionResponse> = {}): PresetSessionResponse {
+      return {
+        type: 'preset',
+        id: 'session-1',
+        entry_date: '2026-07-01',
+        workout_preset_id: null,
+        name: 'Push Day',
+        description: 'felt strong',
+        notes: 'session note',
+        source: 'sparky',
+        total_duration_minutes: 45,
+        activity_details: [],
+        exercises: [
+          {
+            id: 'entry-1',
+            exercise_id: 'ex-1',
+            duration_minutes: 20,
+            calories_burned: 150,
+            entry_date: '2026-07-01',
+            notes: 'exercise note',
+            distance: null,
+            avg_heart_rate: null,
+            source: null,
+            superset_group: 2,
+            activity_details: [],
+            exercise_snapshot: {
+              id: 'ex-1',
+              name: 'Bench Press',
+              category: 'Strength',
+              images: ['bench.png'],
+              primary_muscles: null,
+              secondary_muscles: null,
+              equipment: null,
+              instructions: null,
+              force: null,
+              level: null,
+              mechanic: null,
+              calories_per_hour: null,
+            },
+            sets: [
+              {
+                id: 101,
+                set_number: 1,
+                set_type: 'warmup',
+                reps: 10,
+                weight: 60,
+                duration: null,
+                rest_time: 90,
+                notes: 'slow eccentric',
+                rpe: 8,
+                completed_at: '2026-07-01T10:00:00.000Z',
+                is_pr: true,
+              },
+              {
+                id: 102,
+                set_number: 2,
+                set_type: null,
+                reps: null,
+                weight: null,
+                duration: 30,
+                rest_time: null,
+                notes: null,
+                rpe: null,
+                completed_at: null,
+                is_pr: false,
+              },
+            ],
+          },
+        ],
+        ...overrides,
+      };
+    }
+
+    const clientIds: PresetClientIds = [
+      { exerciseClientId: 'e1', setClientIds: ['s1', 's2'] },
+    ];
+
+    it('maps the session into a draft, carrying every logged set regardless of completion', () => {
+      const next = presetFormReducer(
+        { name: '', description: '', exercises: [] },
+        { type: 'POPULATE_FROM_SESSION', session: session(), weightUnit: 'kg', clientIds },
+      );
+
+      expect(next.name).toBe('Push Day');
+      expect(next.description).toBe('felt strong');
+      expect(next.exercises[0]).toMatchObject({
+        clientId: 'e1',
+        exerciseId: 'ex-1',
+        exerciseName: 'Bench Press',
+        exerciseCategory: 'Strength',
+        images: ['bench.png'],
+        supersetGroup: 2,
+      });
+      // Both the completed and the uncompleted set carry over.
+      expect(next.exercises[0].sets).toHaveLength(2);
+      expect(next.exercises[0].sets[0]).toMatchObject({
+        clientId: 's1',
+        restTime: 90,
+        weight: '60',
+        reps: '10',
+        setType: 'warmup',
+        notes: 'slow eccentric',
+      });
+      expect(next.exercises[0].sets[1]).toMatchObject({
+        clientId: 's2',
+        weight: '',
+        reps: '',
+        duration: 30,
+      });
+    });
+
+    it('drops session-only fields so they cannot leak into the preset payload', () => {
+      const next = presetFormReducer(
+        { name: '', description: '', exercises: [] },
+        { type: 'POPULATE_FROM_SESSION', session: session(), weightUnit: 'kg', clientIds },
+      );
+
+      expect(next.exercises[0].sets[0].rpe).toBeUndefined();
+      expect(next.exercises[0].sets[0].completedAt).toBeUndefined();
+      expect(next.exercises[0].sets[0].isPr).toBeUndefined();
+      expect(next.exercises[0].serverId).toBeUndefined();
+      expect(next.exercises[0].notes).toBeUndefined();
+
+      const payload = buildPresetExercisesPayload(next.exercises, 'kg');
+      expect(payload[0].sets[0]).not.toHaveProperty('rpe');
+      expect(payload[0].sets[0]).not.toHaveProperty('completed_at');
+    });
+
+    it('converts stored kg weights to lbs when the unit is lbs', () => {
+      const next = presetFormReducer(
+        { name: '', description: '', exercises: [] },
+        { type: 'POPULATE_FROM_SESSION', session: session(), weightUnit: 'lbs', clientIds },
+      );
+      const expected = String(parseFloat(kgToLbs(60).toFixed(1)));
+      expect(next.exercises[0].sets[0].weight).toBe(expected);
+    });
+
+    it('copies the snapshot modality into the draft, recording null when absent', () => {
+      const base = session().exercises[0];
+      const withModality = session({
+        exercises: [
+          {
+            ...base,
+            exercise_snapshot: { ...base.exercise_snapshot!, modality: 'reps_only' },
+          },
+        ],
+      });
+      const next = presetFormReducer(
+        { name: '', description: '', exercises: [] },
+        { type: 'POPULATE_FROM_SESSION', session: withModality, weightUnit: 'kg', clientIds },
+      );
+      expect(next.exercises[0].exerciseModality).toBe('reps_only');
+
+      const bare = presetFormReducer(
+        { name: '', description: '', exercises: [] },
+        { type: 'POPULATE_FROM_SESSION', session: session(), weightUnit: 'kg', clientIds },
+      );
+      expect(bare.exercises[0].exerciseModality).toBeNull();
+    });
+
+    it('falls back to Unknown/null/empty when the exercise snapshot is missing', () => {
+      const bare = session({
+        description: null,
+        exercises: [
+          { ...session().exercises[0], exercise_snapshot: null, superset_group: null },
+        ],
+      });
+      const next = presetFormReducer(
+        { name: '', description: '', exercises: [] },
+        { type: 'POPULATE_FROM_SESSION', session: bare, weightUnit: 'kg', clientIds },
+      );
+      expect(next.description).toBe('');
+      expect(next.exercises[0].exerciseName).toBe('Unknown');
+      expect(next.exercises[0].exerciseCategory).toBeNull();
+      expect(next.exercises[0].images).toEqual([]);
+      expect(next.exercises[0].supersetGroup).toBeNull();
+    });
+
+    it('maps logged cardio distance (km) into display-unit draft text', () => {
+      const base = session().exercises[0];
+      const cardio = session({
+        exercises: [
+          {
+            ...base,
+            sets: [{ ...base.sets[0], distance: 1.609344 }],
+          },
+        ],
+      });
+      const next = presetFormReducer(
+        { name: '', description: '', exercises: [] },
+        {
+          type: 'POPULATE_FROM_SESSION',
+          session: cardio,
+          weightUnit: 'kg',
+          distanceUnit: 'miles',
+          clientIds,
+        },
+      );
+      expect(next.exercises[0].sets[0].distance).toBe('1');
     });
   });
 
@@ -606,5 +889,69 @@ describe('useWorkoutPresetForm', () => {
     expect(result.current.state.exercises[0].clientId).toBe(returnedIds[0]);
     expect(result.current.exercisesModifiedRef.current).toBe(false);
     expect(result.current.initialDescriptionRef.current).toBe('server desc');
+  });
+
+  it('populateFromSession seeds the draft with fresh client ids and resets the modified ref', () => {
+    const { result } = renderHook(() => useWorkoutPresetForm());
+
+    // Dirty the form first so we can prove populate resets the flag.
+    act(() => {
+      result.current.addExercise(exercise());
+    });
+    expect(result.current.exercisesModifiedRef.current).toBe(true);
+
+    const session: PresetSessionResponse = {
+      type: 'preset',
+      id: 'session-1',
+      entry_date: '2026-07-01',
+      workout_preset_id: null,
+      name: 'Push Day',
+      description: null,
+      notes: null,
+      source: 'sparky',
+      total_duration_minutes: 45,
+      activity_details: [],
+      exercises: [
+        {
+          id: 'entry-1',
+          exercise_id: 'ex-1',
+          duration_minutes: 20,
+          calories_burned: 150,
+          entry_date: '2026-07-01',
+          notes: null,
+          distance: null,
+          avg_heart_rate: null,
+          source: null,
+          superset_group: null,
+          activity_details: [],
+          exercise_snapshot: null,
+          sets: [
+            {
+              id: 101,
+              set_number: 1,
+              set_type: null,
+              reps: 5,
+              weight: 100,
+              duration: null,
+              rest_time: 90,
+              notes: null,
+              rpe: null,
+              completed_at: null,
+              is_pr: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    act(() => {
+      result.current.populateFromSession(session, 'kg');
+    });
+
+    expect(result.current.state.name).toBe('Push Day');
+    expect(result.current.state.exercises).toHaveLength(1);
+    expect(result.current.state.exercises[0].clientId).toBeTruthy();
+    expect(result.current.state.exercises[0].sets[0].clientId).toBeTruthy();
+    expect(result.current.exercisesModifiedRef.current).toBe(false);
   });
 });

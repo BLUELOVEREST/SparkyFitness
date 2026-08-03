@@ -126,6 +126,7 @@ jest.mock('expo-notifications', () => {
     scheduleNotificationAsync: jest.fn(async () => `mock-notif-${nextId++}`),
     cancelScheduledNotificationAsync: jest.fn().mockResolvedValue(undefined),
     cancelAllScheduledNotificationsAsync: jest.fn().mockResolvedValue(undefined),
+    getAllScheduledNotificationsAsync: jest.fn().mockResolvedValue([]),
     setNotificationCategoryAsync: jest.fn().mockResolvedValue(undefined),
     getPresentedNotificationsAsync: jest.fn().mockResolvedValue([]),
     dismissNotificationAsync: jest.fn().mockResolvedValue(undefined),
@@ -150,6 +151,17 @@ jest.mock('expo-haptics', () => ({
   selectionAsync: jest.fn().mockResolvedValue(undefined),
   impactAsync: jest.fn().mockResolvedValue(undefined),
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy', Soft: 'soft', Rigid: 'rigid' },
+}));
+
+// Mock expo-audio
+jest.mock('expo-audio', () => ({
+  createAudioPlayer: jest.fn(() => ({
+    play: jest.fn(),
+    pause: jest.fn(),
+    seekTo: jest.fn().mockResolvedValue(undefined),
+    remove: jest.fn(),
+  })),
+  setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock expo-camera
@@ -292,6 +304,9 @@ jest.mock('react-native-reanimated', () => {
     withSpring: (toValue) => toValue,
     withSequence: (...args) => args[args.length - 1],
     withRepeat: (animation) => animation,
+    withDelay: (_delayMs, animation) => animation,
+    cancelAnimation: jest.fn(),
+    useReducedMotion: () => false,
     useAnimatedReaction: jest.fn(),
     // Drag-reorder worklet plumbing — runOnJS returns the fn so callers can
     // invoke it synchronously; the scroll/frame helpers are inert stubs.
@@ -314,7 +329,9 @@ jest.mock('react-native-reanimated', () => {
       exp: jest.fn(),
     },
     FadeIn: createAnimationMock(),
+    FadeInDown: createAnimationMock(),
     FadeOut: createAnimationMock(),
+    FadeOutUp: createAnimationMock(),
     LinearTransition: createAnimationMock(),
   };
 });

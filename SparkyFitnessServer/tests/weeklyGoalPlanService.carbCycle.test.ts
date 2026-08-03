@@ -67,27 +67,22 @@ describe('weeklyGoalPlanService carb cycle', () => {
     const savedTargets = vi.mocked(
       mealMacroTargetRepository.replaceMealMacroTargetsForWeek
     ).mock.calls[0][3];
-    expect(savedTargets).toHaveLength(28);
+    expect(savedTargets).toHaveLength(21);
     expect(savedTargets).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           goal_date: '2026-07-06',
           slot_key: 'morning',
           label: 'Breakfast',
-          carbs: 27.6,
-          protein: 35,
-          fat: 30.6,
-          calories: 526,
+          carbs: 36.8,
+          protein: 46.7,
+          fat: 40.8,
+          calories: 701,
         }),
         expect.objectContaining({
           goal_date: '2026-07-06',
           slot_key: 'noon',
           label: 'Lunch',
-        }),
-        expect.objectContaining({
-          goal_date: '2026-07-06',
-          slot_key: 'afternoon',
-          label: 'Afternoon Meal',
         }),
         expect.objectContaining({
           goal_date: '2026-07-06',

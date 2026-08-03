@@ -7,6 +7,7 @@ import FormScreenChrome from '../components/FormScreenChrome';
 import WorkoutFormExerciseList, {
   type WorkoutFormExerciseListHandle,
 } from '../components/WorkoutFormExerciseList';
+import { useSetEditAccessoryBar, type SetRowAccessoryHandle } from '../components/SetRowChrome';
 import {
   useCreateWorkoutPreset,
   useUpdateWorkoutPreset,
@@ -30,6 +31,7 @@ import type {
   WorkoutPresetUpdatePayload,
 } from '../services/api/workoutPresetsApi';
 
+type CreateParams = Extract<RootStackParamList['WorkoutPresetForm'], { mode: 'create-preset' }>;
 type EditParams = Extract<RootStackParamList['WorkoutPresetForm'], { mode: 'edit-preset' }>;
 
 type WorkoutPresetFormScreenProps = RootStackScreenProps<'WorkoutPresetForm'>;
@@ -41,11 +43,12 @@ interface PresetFormBodyProps {
   setName: (s: string) => void;
   setDescription: (s: string) => void;
   weightUnit: 'kg' | 'lbs';
+  distanceUnit: 'km' | 'miles';
   exerciseSetEditing: ReturnType<typeof useExerciseSetEditing>;
   updateSetField: (
     exerciseClientId: string,
     setClientId: string,
-    field: 'weight' | 'reps',
+    field: 'weight' | 'reps' | 'duration' | 'distance',
     value: string,
   ) => void;
   updateSetMeta: (
@@ -60,6 +63,8 @@ interface PresetFormBodyProps {
   reorderExercises: (fromItemIndex: number, toItemIndex: number) => void;
   isEligibleForPrefill: (clientId: string) => boolean;
   onAddExercisePress: () => void;
+  onReplaceExercise: (clientId: string) => void;
+  onRegisterAccessoryHandle: (key: string, handle: SetRowAccessoryHandle | null) => void;
   onViewExercise: (exercise: Exercise) => void;
   listRef: React.Ref<WorkoutFormExerciseListHandle>;
 }
@@ -69,6 +74,7 @@ const PresetFormBody: React.FC<PresetFormBodyProps> = ({
   setName,
   setDescription,
   weightUnit,
+  distanceUnit,
   exerciseSetEditing,
   updateSetField,
   updateSetMeta,
@@ -79,6 +85,8 @@ const PresetFormBody: React.FC<PresetFormBodyProps> = ({
   reorderExercises,
   isEligibleForPrefill,
   onAddExercisePress,
+  onReplaceExercise,
+  onRegisterAccessoryHandle,
   onViewExercise,
   listRef,
 }) => {
@@ -86,51 +94,52 @@ const PresetFormBody: React.FC<PresetFormBodyProps> = ({
 
   return (
     <View className="gap-4">
-      <View className="bg-surface rounded-xl p-4 gap-4 shadow-sm">
-        <View className="gap-1.5">
-          <Text className="text-text-secondary text-sm font-medium">Name *</Text>
-          <FormInput
-            placeholder="e.g. Push Day"
-            value={state.name}
-            onChangeText={setName}
-            autoCapitalize="words"
-            autoCorrect={false}
-            autoFocus
-            returnKeyType="next"
-          />
-        </View>
-
-        <View className="gap-1.5">
-          <Text className="text-text-secondary text-sm font-medium">Description</Text>
-          <FormInput
-            placeholder="Optional notes about this routine"
-            value={state.description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={2}
-            style={{ minHeight: 48, textAlignVertical: 'top' }}
-          />
-        </View>
+      <View className="gap-1.5">
+        <Text className="text-text-secondary text-sm font-medium">Name *</Text>
+        <FormInput
+          placeholder="e.g. Push Day"
+          value={state.name}
+          onChangeText={setName}
+          autoCapitalize="words"
+          autoCorrect={false}
+          autoFocus
+          returnKeyType="next"
+        />
       </View>
 
-      {/* Full-bleed: cancel FormScreenChrome's px-4 so the card separators
-          reach the screen edges. */}
-      <View className="-mx-4">
+      <View className="gap-1.5">
+        <Text className="text-text-secondary text-sm font-medium">Description</Text>
+        <FormInput
+          placeholder="Optional notes about this routine"
+          value={state.description}
+          onChangeText={setDescription}
+          multiline
+          numberOfLines={2}
+          style={{ minHeight: 48, textAlignVertical: 'top' }}
+        />
+      </View>
+
+      {/* Pull back part of FormScreenChrome's px-4 so the cards sit at the
+          same 12px inset as the active workout screen (px-3). */}
+      <View className="-mx-1">
         <WorkoutFormExerciseList
           ref={listRef}
           exercises={state.exercises}
           weightUnit={weightUnit}
+          distanceUnit={distanceUnit}
           getImageSource={getImageSource}
           activeSetKey={exerciseSetEditing.activeSetKey}
           activeSetField={exerciseSetEditing.activeSetField}
           onActivateSet={exerciseSetEditing.activateSet}
           onDeactivateSet={exerciseSetEditing.deactivateSet}
+          onRegisterAccessoryHandle={onRegisterAccessoryHandle}
           updateSetField={updateSetField}
           updateSetMeta={updateSetMeta}
           removeSet={removeSet}
           onAddSet={exerciseSetEditing.handleAddSet}
           onRemoveExercise={exerciseSetEditing.handleRemoveExercise}
           setExerciseRest={setExerciseRest}
+          onReplaceExercise={onReplaceExercise}
           supersetWith={supersetWith}
           ungroupExercise={ungroupExercise}
           onReorderExercises={reorderExercises}
@@ -153,11 +162,14 @@ function getWeightUnit(value: string | undefined | null): 'kg' | 'lbs' {
 interface CreatePresetModeProps {
   navigation: Navigation;
   route: Route;
+  params: CreateParams;
 }
 
-const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route }) => {
-  const { preferences } = usePreferences();
+const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route, params }) => {
+  const { sourceSession } = params;
+  const { preferences, isLoading: isPreferencesLoading } = usePreferences();
   const weightUnit = getWeightUnit(preferences?.default_weight_unit);
+  const distanceUnit = (preferences?.default_distance_unit as 'km' | 'miles') ?? 'km';
 
   const {
     state,
@@ -165,6 +177,7 @@ const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route }
     setDescription,
     addExercise,
     removeExercise,
+    replaceExercise,
     addSet,
     removeSet,
     updateSetField,
@@ -173,6 +186,7 @@ const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route }
     supersetWith,
     ungroupExercise,
     reorderExercises,
+    populateFromSession,
   } = useWorkoutPresetForm();
 
   const [eligibleIds, setEligibleIds] = useState<Set<string>>(() => new Set());
@@ -188,6 +202,20 @@ const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route }
     },
     [addExercise],
   );
+  // A replaced exercise is effectively freshly added: mark it prefill-eligible
+  // so its empty set seeds from the new exercise's history.
+  const wrappedReplaceExercise = useCallback(
+    (clientId: string, exercise: Parameters<typeof replaceExercise>[1]) => {
+      const result = replaceExercise(clientId, exercise);
+      setEligibleIds(prev => {
+        const next = new Set(prev);
+        next.add(clientId);
+        return next;
+      });
+      return result;
+    },
+    [replaceExercise],
+  );
   const isEligibleForPrefill = useCallback(
     (clientId: string) => eligibleIds.has(clientId),
     [eligibleIds],
@@ -197,8 +225,26 @@ const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route }
     addExercise: wrappedAddExercise,
     removeExercise,
     addSet,
+    replaceExercise: wrappedReplaceExercise,
   });
   useSelectedExercise(route.params, exerciseSetEditing.handleAddExercise);
+
+  // Sticky Done/Next bar for the focused set cell, on both platforms.
+  const { onRegisterAccessoryHandle, accessoryBar } = useSetEditAccessoryBar({
+    activeSetKey: exerciseSetEditing.activeSetKey,
+    activeSetField: exerciseSetEditing.activeSetField,
+    onDeactivateSet: exerciseSetEditing.deactivateSet,
+    rpeEnabled: false,
+  });
+
+  // "Save as preset" from a logged workout: seed the form from the session
+  // once preferences resolve (the weight unit drives the kg→display mapping).
+  const hasPopulatedRef = useRef(false);
+  useEffect(() => {
+    if (sourceSession == null || hasPopulatedRef.current || isPreferencesLoading) return;
+    hasPopulatedRef.current = true;
+    populateFromSession(sourceSession, weightUnit, distanceUnit);
+  }, [sourceSession, isPreferencesLoading, populateFromSession, weightUnit, distanceUnit]);
 
   const { createPresetAsync, isPending } = useCreateWorkoutPreset();
 
@@ -216,6 +262,16 @@ const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route }
     : null;
 
   const openExerciseSearch = () => {
+    // Plain Add: drop any pending replace target so a cancelled replace can't
+    // misroute this add.
+    exerciseSetEditing.setReplaceTarget(null);
+    navigation.navigate('ExerciseSearch', { returnKey: route.key });
+  };
+
+  // ⋮ "Replace exercise": the next ExerciseSearch return swaps this entry in
+  // place instead of appending.
+  const handleReplaceExercise = (clientId: string) => {
+    exerciseSetEditing.setReplaceTarget(clientId);
     navigation.navigate('ExerciseSearch', { returnKey: route.key });
   };
 
@@ -245,7 +301,7 @@ const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route }
       name: trimmedName,
       description: trimmedDescription.length > 0 ? trimmedDescription : null,
       is_public: false,
-      exercises: buildPresetExercisesPayload(state.exercises, weightUnit),
+      exercises: buildPresetExercisesPayload(state.exercises, weightUnit, distanceUnit),
     };
 
     try {
@@ -263,6 +319,7 @@ const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route }
       savingLabel={SAVING_LABEL}
       isSaving={isPending}
       headerAction={reorderAction}
+      keyboardAccessory={accessoryBar}
       onSave={() => {
         void handleSave();
       }}
@@ -273,6 +330,7 @@ const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route }
         setName={setName}
         setDescription={setDescription}
         weightUnit={weightUnit}
+        distanceUnit={distanceUnit}
         exerciseSetEditing={exerciseSetEditing}
         updateSetField={updateSetField}
         updateSetMeta={updateSetMeta}
@@ -283,6 +341,8 @@ const CreatePresetMode: React.FC<CreatePresetModeProps> = ({ navigation, route }
         reorderExercises={reorderExercises}
         isEligibleForPrefill={isEligibleForPrefill}
         onAddExercisePress={openExerciseSearch}
+        onReplaceExercise={handleReplaceExercise}
+        onRegisterAccessoryHandle={onRegisterAccessoryHandle}
         onViewExercise={(exercise) =>
           navigation.navigate('ExerciseDetail', { item: exercise, hideWorkoutActions: true })
         }
@@ -304,8 +364,10 @@ export function buildPresetEditPayload(args: {
   initialDescription: string;
   exercisesModified: boolean;
   weightUnit: 'kg' | 'lbs';
+  distanceUnit: 'km' | 'miles';
 }): WorkoutPresetUpdatePayload {
-  const { state, initialPreset, initialDescription, exercisesModified, weightUnit } = args;
+  const { state, initialPreset, initialDescription, exercisesModified, weightUnit, distanceUnit } =
+    args;
   const payload: WorkoutPresetUpdatePayload = {};
 
   const trimmedName = state.name.trim();
@@ -322,7 +384,7 @@ export function buildPresetEditPayload(args: {
   // would unshare a previously-public preset (server uses COALESCE).
 
   if (exercisesModified) {
-    payload.exercises = buildPresetExercisesPayload(state.exercises, weightUnit);
+    payload.exercises = buildPresetExercisesPayload(state.exercises, weightUnit, distanceUnit);
   }
 
   return payload;
@@ -332,6 +394,7 @@ const EditPresetMode: React.FC<EditPresetModeProps> = ({ navigation, route, para
   const { preset, returnKey } = params;
   const { preferences, isLoading: isPreferencesLoading } = usePreferences();
   const weightUnit = getWeightUnit(preferences?.default_weight_unit);
+  const distanceUnit = (preferences?.default_distance_unit as 'km' | 'miles') ?? 'km';
 
   const {
     state,
@@ -339,6 +402,7 @@ const EditPresetMode: React.FC<EditPresetModeProps> = ({ navigation, route, para
     setDescription,
     addExercise,
     removeExercise,
+    replaceExercise,
     addSet,
     removeSet,
     updateSetField,
@@ -365,6 +429,20 @@ const EditPresetMode: React.FC<EditPresetModeProps> = ({ navigation, route, para
     },
     [addExercise],
   );
+  // A replaced exercise is effectively freshly added: mark it prefill-eligible
+  // so its empty set seeds from the new exercise's history.
+  const wrappedReplaceExercise = useCallback(
+    (clientId: string, exercise: Parameters<typeof replaceExercise>[1]) => {
+      const result = replaceExercise(clientId, exercise);
+      setEligibleIds(prev => {
+        const next = new Set(prev);
+        next.add(clientId);
+        return next;
+      });
+      return result;
+    },
+    [replaceExercise],
+  );
   const isEligibleForPrefill = useCallback(
     (clientId: string) => eligibleIds.has(clientId),
     [eligibleIds],
@@ -374,15 +452,24 @@ const EditPresetMode: React.FC<EditPresetModeProps> = ({ navigation, route, para
     addExercise: wrappedAddExercise,
     removeExercise,
     addSet,
+    replaceExercise: wrappedReplaceExercise,
   });
   useSelectedExercise(route.params, exerciseSetEditing.handleAddExercise);
+
+  // Sticky Done/Next bar for the focused set cell, on both platforms.
+  const { onRegisterAccessoryHandle, accessoryBar } = useSetEditAccessoryBar({
+    activeSetKey: exerciseSetEditing.activeSetKey,
+    activeSetField: exerciseSetEditing.activeSetField,
+    onDeactivateSet: exerciseSetEditing.deactivateSet,
+    rpeEnabled: false,
+  });
 
   const hasPopulatedRef = useRef(false);
   useEffect(() => {
     if (hasPopulatedRef.current || isPreferencesLoading) return;
     hasPopulatedRef.current = true;
-    populateFromPreset(preset, weightUnit);
-  }, [isPreferencesLoading, populateFromPreset, preset, weightUnit]);
+    populateFromPreset(preset, weightUnit, distanceUnit);
+  }, [isPreferencesLoading, populateFromPreset, preset, weightUnit, distanceUnit]);
 
   const { updatePresetAsync, isPending } = useUpdateWorkoutPreset();
 
@@ -400,6 +487,16 @@ const EditPresetMode: React.FC<EditPresetModeProps> = ({ navigation, route, para
     : null;
 
   const openExerciseSearch = () => {
+    // Plain Add: drop any pending replace target so a cancelled replace can't
+    // misroute this add.
+    exerciseSetEditing.setReplaceTarget(null);
+    navigation.navigate('ExerciseSearch', { returnKey: route.key });
+  };
+
+  // ⋮ "Replace exercise": the next ExerciseSearch return swaps this entry in
+  // place instead of appending.
+  const handleReplaceExercise = (clientId: string) => {
+    exerciseSetEditing.setReplaceTarget(clientId);
     navigation.navigate('ExerciseSearch', { returnKey: route.key });
   };
 
@@ -424,6 +521,7 @@ const EditPresetMode: React.FC<EditPresetModeProps> = ({ navigation, route, para
       initialDescription: initialDescriptionRef.current,
       exercisesModified: exercisesModifiedRef.current,
       weightUnit,
+      distanceUnit,
     });
 
     if (Object.keys(payload).length === 0) {
@@ -450,6 +548,7 @@ const EditPresetMode: React.FC<EditPresetModeProps> = ({ navigation, route, para
       savingLabel={SAVING_LABEL}
       isSaving={isPending}
       headerAction={reorderAction}
+      keyboardAccessory={accessoryBar}
       onSave={() => {
         void handleSave();
       }}
@@ -460,6 +559,7 @@ const EditPresetMode: React.FC<EditPresetModeProps> = ({ navigation, route, para
         setName={setName}
         setDescription={setDescription}
         weightUnit={weightUnit}
+        distanceUnit={distanceUnit}
         exerciseSetEditing={exerciseSetEditing}
         updateSetField={updateSetField}
         updateSetMeta={updateSetMeta}
@@ -470,6 +570,8 @@ const EditPresetMode: React.FC<EditPresetModeProps> = ({ navigation, route, para
         reorderExercises={reorderExercises}
         isEligibleForPrefill={isEligibleForPrefill}
         onAddExercisePress={openExerciseSearch}
+        onReplaceExercise={handleReplaceExercise}
+        onRegisterAccessoryHandle={onRegisterAccessoryHandle}
         onViewExercise={(exercise) =>
           navigation.navigate('ExerciseDetail', { item: exercise, hideWorkoutActions: true })
         }
@@ -486,7 +588,7 @@ const WorkoutPresetFormScreen: React.FC<WorkoutPresetFormScreenProps> = ({
   if (route.params.mode === 'edit-preset') {
     return <EditPresetMode navigation={navigation} route={route} params={route.params} />;
   }
-  return <CreatePresetMode navigation={navigation} route={route} />;
+  return <CreatePresetMode navigation={navigation} route={route} params={route.params} />;
 };
 
 export default WorkoutPresetFormScreen;

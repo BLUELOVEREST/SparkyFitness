@@ -63,3 +63,13 @@ export const logActiveMealPlanMealToDiary = async (
     body: { date, mealTypeId },
   });
 };
+
+export const duplicateMealPlanTemplate = async (
+  userId: string,
+  templateId: string,
+  currentClientDate?: string
+): Promise<MealPlanTemplate> => {
+  return await api.post(`/meal-plan-templates/${templateId}/duplicate`, {
+    body: { userId, currentClientDate },
+  });
+};

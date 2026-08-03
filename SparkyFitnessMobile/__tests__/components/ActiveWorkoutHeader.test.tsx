@@ -74,9 +74,11 @@ describe('ActiveWorkoutHeader', () => {
     overrides?: {
       onBack?: () => void;
       onDiscard?: () => void;
+      onEndWorkout?: () => void;
       onRename?: () => void;
       onReorder?: () => void;
       onAddExercise?: () => void;
+      onOpenSettings?: () => void;
       onClearAllSets?: () => void;
     },
   ) {
@@ -89,9 +91,11 @@ describe('ActiveWorkoutHeader', () => {
         progress={progress}
         onBack={overrides?.onBack ?? jest.fn()}
         onDiscard={overrides?.onDiscard ?? jest.fn()}
+        onEndWorkout={overrides?.onEndWorkout}
         onRename={overrides?.onRename}
         onReorder={overrides?.onReorder}
         onAddExercise={overrides?.onAddExercise}
+        onOpenSettings={overrides?.onOpenSettings}
         onClearAllSets={overrides?.onClearAllSets}
       />,
     );
@@ -195,5 +199,41 @@ describe('ActiveWorkoutHeader', () => {
     fireEvent.press(getByLabelText('Workout menu'));
     fireEvent.press(getByText('Clear all logged sets'));
     expect(onClearAllSets).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Workout settings and fires onOpenSettings when provided', () => {
+    const onOpenSettings = jest.fn();
+    const { getByLabelText, getByText } = renderHeaderComponent({}, { onOpenSettings });
+    fireEvent.press(getByLabelText('Workout menu'));
+    fireEvent.press(getByText('Workout settings'));
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits Workout settings when onOpenSettings is not provided', () => {
+    const { getByLabelText, queryByText } = renderHeaderComponent({});
+    fireEvent.press(getByLabelText('Workout menu'));
+    expect(queryByText('Workout settings')).toBeNull();
+  });
+
+  it('separates the full menu into edit, workout, finish, and danger groups', () => {
+    const { getByLabelText, queryAllByTestId } = renderHeaderComponent(
+      {},
+      {
+        onEndWorkout: jest.fn(),
+        onRename: jest.fn(),
+        onReorder: jest.fn(),
+        onAddExercise: jest.fn(),
+        onOpenSettings: jest.fn(),
+        onClearAllSets: jest.fn(),
+      },
+    );
+    fireEvent.press(getByLabelText('Workout menu'));
+    expect(queryAllByTestId('action-sheet-group-spacer')).toHaveLength(3);
+  });
+
+  it('renders the minimal menu (Discard only) without group spacers', () => {
+    const { getByLabelText, queryAllByTestId } = renderHeaderComponent({});
+    fireEvent.press(getByLabelText('Workout menu'));
+    expect(queryAllByTestId('action-sheet-group-spacer')).toHaveLength(0);
   });
 });

@@ -33,7 +33,7 @@ import {
 import { useCopyFoodEntriesFromYesterdayMutation } from '@/hooks/Diary/useFoodEntries';
 import type { Food, FoodEntry, GlycemicIndex } from '@/types/food';
 import type { Meal, FoodEntryMeal } from '@/types/meal';
-import { toHourMinute } from '@workspace/shared';
+import { formatTimeOfDayString } from '@/utils/timeFormatters';
 interface MealTotals {
   calories: number;
   protein: number;
@@ -63,6 +63,7 @@ import { cn } from '@/lib/utils';
 import AllergenBadges from '@/components/AllergenBadges';
 import type { CarbCycleMealTarget } from '@/types/goals';
 import type { ActiveMealPlanDayMeal } from '@/types/meal';
+import { translateWithVars } from '@/utils/i18n';
 
 const MOBILE_ENTRY_NUTRIENT_LIMIT = 4;
 
@@ -130,8 +131,12 @@ const MealCard = ({
   isLoggingPlannedMeal = false,
 }: MealCardProps) => {
   const { t } = useTranslation();
-  const { loggingLevel, nutrientDisplayPreferences, getDateRelationToToday } =
-    usePreferences();
+  const {
+    loggingLevel,
+    nutrientDisplayPreferences,
+    getDateRelationToToday,
+    timeFormat,
+  } = usePreferences();
   const isMobile = useIsMobile();
   const platform = isMobile ? 'mobile' : 'desktop';
 
@@ -275,25 +280,27 @@ const MealCard = ({
                 <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>
-                      {t('mealCard.addFoodToMeal', {
-                        mealName: t(`common.${meal.type}`, meal.name),
-                        defaultValue: `Add Food to ${t(
-                          `common.${meal.type}`,
-                          meal.name
-                        )}`,
-                      })}
+                      {translateWithVars(
+                        t,
+                        'mealCard.addFoodToMeal',
+                        'Add Food to {{mealName}}',
+                        {
+                          mealName: t(`common.${meal.type}`, meal.name),
+                        }
+                      )}
                     </DialogTitle>
                     <DialogDescription>
-                      {t('mealCard.searchFoodsForMeal', {
-                        mealName: t(
-                          `common.${meal.type}`,
-                          meal.name
-                        ).toLowerCase(),
-                        defaultValue: `Search for foods to add to your ${t(
-                          `common.${meal.type}`,
-                          meal.name
-                        ).toLowerCase()}.`,
-                      })}
+                      {translateWithVars(
+                        t,
+                        'mealCard.searchFoodsForMeal',
+                        'Search for foods to add to your {{mealName}}.',
+                        {
+                          mealName: t(
+                            `common.${meal.type}`,
+                            meal.name
+                          ).toLowerCase(),
+                        }
+                      )}
                       <br />
                       <span className="text-red-500">
                         {(selectedDateRelation === 'past' &&
@@ -560,7 +567,10 @@ const MealCard = ({
                               <>
                                 <span aria-hidden="true">&bull;</span>
                                 <span className="font-medium text-blue-600 dark:text-blue-400">
-                                  {toHourMinute(item.entry_time)}
+                                  {formatTimeOfDayString(
+                                    item.entry_time,
+                                    timeFormat
+                                  )}
                                 </span>
                               </>
                             )}
@@ -706,7 +716,7 @@ const MealCard = ({
                         </span>
                         {item.entry_time && (
                           <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full dark:bg-blue-900/30 dark:text-blue-300 font-medium">
-                            {toHourMinute(item.entry_time)}
+                            {formatTimeOfDayString(item.entry_time, timeFormat)}
                           </span>
                         )}
                         {isFromMealPlan && (
@@ -799,10 +809,14 @@ const MealCard = ({
 
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2 gap-4">
                 <span className="font-semibold dark:text-slate-300">
-                  {t('diary.mealTotal', {
-                    defaultValue: '{{mealName}} Total:',
-                    mealName: meal.name,
-                  })}
+                  {translateWithVars(
+                    t,
+                    'diary.mealTotal',
+                    '{{mealName}} Total:',
+                    {
+                      mealName: meal.name,
+                    }
+                  )}
                 </span>
                 <div
                   className="grid gap-x-2 gap-y-2 text-xs sm:text-sm w-full sm:w-[35%] sm:ml-auto"

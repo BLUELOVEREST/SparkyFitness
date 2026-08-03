@@ -1,5 +1,6 @@
 import { useCallback, useReducer, useRef } from 'react';
-import { weightFromKg } from '../utils/unitConversions';
+import type { PresetSessionResponse } from '@workspace/shared';
+import { distanceFromKm, weightFromKg } from '../utils/unitConversions';
 import type { WorkoutDraftExercise } from '../types/drafts';
 import type { WorkoutPreset } from '../types/workoutPresets';
 import {
@@ -33,6 +34,14 @@ type PresetFormAction =
       type: 'POPULATE_FROM_PRESET';
       preset: WorkoutPreset;
       weightUnit: 'kg' | 'lbs';
+      distanceUnit: 'km' | 'miles';
+      clientIds: PresetClientIds;
+    }
+  | {
+      type: 'POPULATE_FROM_SESSION';
+      session: PresetSessionResponse;
+      weightUnit: 'kg' | 'lbs';
+      distanceUnit: 'km' | 'miles';
       clientIds: PresetClientIds;
     };
 
@@ -53,6 +62,7 @@ export function presetFormReducer(state: PresetDraft, action: PresetFormAction):
           exerciseId: exercise.exercise_id,
           exerciseName: exercise.exercise_name,
           exerciseCategory: exercise.category ?? null,
+          exerciseModality: exercise.modality ?? null,
           images: exercise.image_url ? [exercise.image_url] : [],
           supersetGroup: exercise.superset_group ?? null,
           sets: exercise.sets.map((set, setIdx) => ({
@@ -63,9 +73,48 @@ export function presetFormReducer(state: PresetDraft, action: PresetFormAction):
                 ? String(parseFloat(weightFromKg(set.weight, action.weightUnit).toFixed(1)))
                 : '',
             reps: set.reps != null ? String(set.reps) : '',
+            distance:
+              set.distance != null
+                ? String(parseFloat(distanceFromKm(set.distance, action.distanceUnit).toFixed(2)))
+                : '',
             setType: set.set_type ?? undefined,
             duration: set.duration,
             notes: set.notes,
+          })),
+        })),
+      };
+
+    // "Save as preset" from a logged workout. Every logged set carries over
+    // verbatim (completed or not — completion is about that day's session, not
+    // the template); session-only fields (completion, PRs, RPE, per-exercise
+    // notes/calories/duration) have no preset column and are dropped.
+    case 'POPULATE_FROM_SESSION':
+      return {
+        name: action.session.name,
+        description: action.session.description ?? '',
+        exercises: action.session.exercises.map((exercise, exerciseIdx) => ({
+          clientId: action.clientIds[exerciseIdx].exerciseClientId,
+          exerciseId: exercise.exercise_id,
+          exerciseName: exercise.exercise_snapshot?.name ?? 'Unknown',
+          exerciseCategory: exercise.exercise_snapshot?.category ?? null,
+          exerciseModality: exercise.exercise_snapshot?.modality ?? null,
+          images: exercise.exercise_snapshot?.images ?? [],
+          supersetGroup: exercise.superset_group ?? null,
+          sets: exercise.sets.map((set, setIdx) => ({
+            clientId: action.clientIds[exerciseIdx].setClientIds[setIdx],
+            restTime: set.rest_time,
+            setType: set.set_type ?? undefined,
+            duration: set.duration,
+            notes: set.notes,
+            weight:
+              set.weight != null
+                ? String(parseFloat(weightFromKg(set.weight, action.weightUnit).toFixed(1)))
+                : '',
+            reps: set.reps != null ? String(set.reps) : '',
+            distance:
+              set.distance != null
+                ? String(parseFloat(distanceFromKm(set.distance, action.distanceUnit).toFixed(2)))
+                : '',
           })),
         })),
       };
@@ -87,6 +136,7 @@ export function useWorkoutPresetForm() {
     exercisesModifiedRef,
     addExercise,
     removeExercise,
+    replaceExercise,
     addSet,
     removeSet,
     updateSetField,
@@ -106,15 +156,35 @@ export function useWorkoutPresetForm() {
   }, []);
 
   const populateFromPreset = useCallback(
-    (preset: WorkoutPreset, weightUnit: 'kg' | 'lbs'): string[] => {
+    (
+      preset: WorkoutPreset,
+      weightUnit: 'kg' | 'lbs',
+      distanceUnit: 'km' | 'miles',
+    ): string[] => {
       const clientIds: PresetClientIds = preset.exercises.map(e => ({
         exerciseClientId: generateClientId(),
         setClientIds: e.sets.map(() => generateClientId()),
       }));
       exercisesModifiedRef.current = false;
       initialDescriptionRef.current = preset.description ?? '';
-      dispatch({ type: 'POPULATE_FROM_PRESET', preset, weightUnit, clientIds });
+      dispatch({ type: 'POPULATE_FROM_PRESET', preset, weightUnit, distanceUnit, clientIds });
       return clientIds.map(c => c.exerciseClientId);
+    },
+    [exercisesModifiedRef],
+  );
+
+  const populateFromSession = useCallback(
+    (
+      session: PresetSessionResponse,
+      weightUnit: 'kg' | 'lbs',
+      distanceUnit: 'km' | 'miles',
+    ) => {
+      const clientIds: PresetClientIds = session.exercises.map(e => ({
+        exerciseClientId: generateClientId(),
+        setClientIds: e.sets.map(() => generateClientId()),
+      }));
+      exercisesModifiedRef.current = false;
+      dispatch({ type: 'POPULATE_FROM_SESSION', session, weightUnit, distanceUnit, clientIds });
     },
     [exercisesModifiedRef],
   );
@@ -125,6 +195,7 @@ export function useWorkoutPresetForm() {
     setDescription,
     addExercise,
     removeExercise,
+    replaceExercise,
     addSet,
     removeSet,
     updateSetField,
@@ -134,6 +205,7 @@ export function useWorkoutPresetForm() {
     ungroupExercise,
     reorderExercises,
     populateFromPreset,
+    populateFromSession,
     exercisesModifiedRef,
     initialDescriptionRef,
   };

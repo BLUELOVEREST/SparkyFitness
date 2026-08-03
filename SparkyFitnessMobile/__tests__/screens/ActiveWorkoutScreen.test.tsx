@@ -55,6 +55,13 @@ jest.mock('../../src/components/ActiveWorkoutHeader', () => {
   };
 });
 
+// Accessory handles the card mock registers when a test focuses a set's RPE
+// cell, keyed by set id, so tests can assert bar-action dispatch.
+const mockAccessoryHandles: Record<
+  string,
+  { log: jest.Mock; focusField: jest.Mock; advance: jest.Mock }
+> = {};
+
 // Trigger pressables standing in for each card, driving the screen's wiring.
 jest.mock('../../src/components/ActiveWorkoutExerciseCard', () => {
   const React = require('react');
@@ -67,6 +74,39 @@ jest.mock('../../src/components/ActiveWorkoutExerciseCard', () => {
           testID={`card-${props.exercise.id}-overflow`}
           onPress={() => props.onPressOverflow?.(props.exercise.id)}
         />
+        {props.exercise.sets.map((set: any) => {
+          const key = String(set.id);
+          const registerHandle = () => {
+            const handle = { log: jest.fn(), focusField: jest.fn(), advance: jest.fn() };
+            mockAccessoryHandles[key] = handle;
+            props.onRegisterAccessoryHandle?.(key, handle);
+          };
+          return (
+            <React.Fragment key={key}>
+              <Pressable
+                testID={`focus-rpe-${key}`}
+                onPress={() => {
+                  registerHandle();
+                  props.onActivateRpe?.(key);
+                }}
+              />
+              <Pressable
+                testID={`focus-duration-${key}`}
+                onPress={() => {
+                  registerHandle();
+                  props.onActivateSet?.(key, 'duration');
+                }}
+              />
+              <Pressable
+                testID={`focus-distance-${key}`}
+                onPress={() => {
+                  registerHandle();
+                  props.onActivateSet?.(key, 'distance');
+                }}
+              />
+            </React.Fragment>
+          );
+        })}
       </View>
     ),
   };
@@ -87,6 +127,31 @@ jest.mock('../../src/components/WorkoutReorderList', () => ({
   __esModule: true,
   default: () => null,
 }));
+
+// Captures the custom-duration sheet's props and present args so tests can
+// assert the long-workout adjust wiring and drive onSave directly.
+const mockDurationSheet: {
+  present: jest.Mock;
+  dismiss: jest.Mock;
+  props: { onSave: (minutes: number) => void } | null;
+} = { present: jest.fn(), dismiss: jest.fn(), props: null };
+
+jest.mock('../../src/components/WorkoutDurationSheet', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: React.forwardRef((props: any, ref: any) => {
+      React.useEffect(() => {
+        mockDurationSheet.props = props;
+      });
+      React.useImperativeHandle(ref, () => ({
+        present: mockDurationSheet.present,
+        dismiss: mockDurationSheet.dismiss,
+      }));
+      return null;
+    }),
+  };
+});
 
 // Captures the sheet's props each render and exposes present/dismiss spies,
 // so tests can assert the imperative wiring and drive owner callbacks
@@ -188,6 +253,7 @@ function makeSession(): PresetSessionResponse {
 const navigation = {
   goBack: jest.fn(),
   navigate: jest.fn(),
+  replace: jest.fn(),
   canGoBack: jest.fn(() => true),
   addListener: jest.fn(() => jest.fn()),
 } as any;
@@ -263,6 +329,29 @@ describe('ActiveWorkoutScreen overflow menu wiring', () => {
     expect(sheetItemKeys()).not.toContain('clear');
   });
 
+  it('omits Clear logged sets for a completed cardio effort form', () => {
+    __resetActiveWorkoutStoreForTests();
+    const session = makeSession();
+    const cardio = makeExercise('ex-d', 'Running', [
+      makeSet(401, {
+        completed_at: '2026-07-01T10:00:00.000Z',
+        reps: null,
+        weight: null,
+        duration: 1800,
+        distance: 5,
+      }),
+    ]);
+    cardio.exercise_snapshot.modality = 'duration_distance';
+    session.exercises.push(cardio);
+    useActiveWorkoutStore.getState().startWorkout(session);
+    const { getByTestId } = renderScreen();
+
+    fireEvent.press(getByTestId('card-ex-d-overflow'));
+
+    expect(mockSheet.props?.title).toBe('Running');
+    expect(sheetItemKeys()).not.toContain('clear');
+  });
+
   it('swaps to the candidate pick list in place and back', () => {
     const { getByTestId } = renderScreen();
     fireEvent.press(getByTestId('card-ex-a-overflow'));
@@ -307,6 +396,87 @@ describe('ActiveWorkoutScreen overflow menu wiring', () => {
     fireEvent.press(getByTestId('card-ex-b-overflow'));
     expect(mockSheet.present).toHaveBeenCalledTimes(2);
     expect(mockSheet.props?.title).toBe('Squat');
+  });
+});
+
+describe('ActiveWorkoutScreen keyboard accessory bar', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    __resetActiveWorkoutStoreForTests();
+    __resetAppPreferencesStoreForTests();
+    useActiveWorkoutStore.getState().startWorkout(makeSession());
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("offers Next Set on a completed set's last field instead of Log", () => {
+    const { getByTestId, getByText, queryByText } = renderScreen();
+    // Set 101 is server-completed; RPE is the walk's last field.
+    fireEvent.press(getByTestId('focus-rpe-101'));
+    expect(queryByText('Log')).toBeNull();
+    fireEvent.press(getByText('Next Set'));
+    expect(mockAccessoryHandles['101'].advance).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Log (and no Next Set) on an uncompleted set's last field", () => {
+    const { getByTestId, getByText, queryByText } = renderScreen();
+    fireEvent.press(getByTestId('focus-rpe-102'));
+    expect(queryByText('Next Set')).toBeNull();
+    fireEvent.press(getByText('Log'));
+    expect(mockAccessoryHandles['102'].log).toHaveBeenCalledTimes(1);
+  });
+
+  const startWithCardio = (completed: boolean) => {
+    __resetActiveWorkoutStoreForTests();
+    const session = makeSession();
+    const cardio = makeExercise('ex-d', 'Running', [
+      makeSet(401, {
+        completed_at: completed ? '2026-07-01T10:00:00.000Z' : null,
+        reps: null,
+        weight: null,
+        duration: 1800,
+        distance: 5,
+      }),
+    ]);
+    cardio.exercise_snapshot.modality = 'duration_distance';
+    session.exercises.push(cardio);
+    useActiveWorkoutStore.getState().startWorkout(session);
+  };
+
+  it('walks Next from a cardio duration field to distance', () => {
+    startWithCardio(false);
+    const { getByTestId, getByText } = renderScreen();
+
+    fireEvent.press(getByTestId('focus-duration-401'));
+    fireEvent.press(getByText('Next'));
+
+    expect(mockAccessoryHandles['401'].focusField).toHaveBeenCalledWith('distance');
+  });
+
+  it('offers Log on an uncompleted cardio distance field, never Next Set', () => {
+    startWithCardio(false);
+    const { getByTestId, getByText, queryByText } = renderScreen();
+
+    fireEvent.press(getByTestId('focus-distance-401'));
+
+    expect(queryByText('Next')).toBeNull();
+    expect(queryByText('Next Set')).toBeNull();
+    fireEvent.press(getByText('Log'));
+    expect(mockAccessoryHandles['401'].log).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends a completed cardio bar at Done — no Next Set into a second set', () => {
+    startWithCardio(true);
+    const { getByTestId, queryByText } = renderScreen();
+
+    fireEvent.press(getByTestId('focus-distance-401'));
+
+    expect(queryByText('Next')).toBeNull();
+    expect(queryByText('Next Set')).toBeNull();
+    expect(queryByText('Log')).toBeNull();
   });
 });
 
@@ -426,6 +596,212 @@ describe('ActiveWorkoutScreen finish flow with a failing flush', () => {
 
     expect(useActiveWorkoutStore.getState().session).not.toBeNull();
     expect(navigation.goBack).not.toHaveBeenCalled();
+  });
+});
+
+describe('ActiveWorkoutScreen finish success celebration', () => {
+  let alertSpy: jest.SpyInstance;
+
+  function lastAlertButton(label: string): { onPress?: () => void } {
+    const call = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
+    const button = (call?.[2] ?? []).find((b: { text?: string }) => b.text === label);
+    expect(button).toBeDefined();
+    return button;
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    __resetActiveWorkoutStoreForTests();
+    __resetAppPreferencesStoreForTests();
+    (useActiveWorkoutAutosave as jest.Mock).mockReturnValue({
+      flush: jest.fn(async () => true),
+    });
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  async function endWorkout(getByText: (text: string) => unknown) {
+    fireEvent.press(getByText('End Workout') as any);
+    await act(async () => {
+      lastAlertButton('End Workout').onPress?.();
+    });
+  }
+
+  it('replaces to WorkoutComplete with a snapshot taken before clearing the store', async () => {
+    useActiveWorkoutStore.getState().startWorkout(makeSession(), {
+      createdByLiveStart: true,
+      plannedSetValues: [[{ weight: 80, reps: 5, duration: null }]],
+      sourcePresetId: 42,
+      sourceServerConfigId: 'config-1',
+    });
+    act(() => useActiveWorkoutStore.getState().completeSet('102'));
+    const { getByText } = renderScreen();
+
+    await endWorkout(getByText);
+
+    expect(navigation.replace).toHaveBeenCalledTimes(1);
+    const [routeName, params] = navigation.replace.mock.calls[0];
+    expect(routeName).toBe('WorkoutComplete');
+    expect(params.session.id).toBe('session-1');
+    // Both the live completion and the server-seeded one ride the snapshot.
+    expect(params.completedSetIds['102']).toBeTruthy();
+    expect(params.completedSetIds['101']).toBeTruthy();
+    expect(params.prSetIds).toEqual({});
+    expect(typeof params.finishedAt).toBe('number');
+    // The update-preset prompt inputs ride the same pre-clear snapshot.
+    expect(params.sourcePresetId).toBe(42);
+    expect(params.sourceServerConfigId).toBe('config-1');
+    expect(params.plannedSetValues).toEqual({ '101': { weight: 80, reps: 5, duration: null } });
+    expect(useActiveWorkoutStore.getState().session).toBeNull();
+    expect(navigation.goBack).not.toHaveBeenCalled();
+  });
+
+  it('skips the celebration and exits as before when no sets were completed', async () => {
+    const session = makeSession();
+    session.exercises[0].sets[0].completed_at = null;
+    useActiveWorkoutStore.getState().startWorkout(session);
+    const { getByText } = renderScreen();
+
+    await endWorkout(getByText);
+
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(navigation.goBack).toHaveBeenCalled();
+    expect(useActiveWorkoutStore.getState().session).toBeNull();
+  });
+});
+
+describe('ActiveWorkoutScreen long-workout duration adjust', () => {
+  const MIN = 60_000;
+  let alertSpy: jest.SpyInstance;
+  let startedAtAtFlush: number | null | undefined;
+
+  function lastAlertButton(label: string): { onPress?: () => void } {
+    const call = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
+    const button = (call?.[2] ?? []).find((b: { text?: string }) => b.text === label);
+    expect(button).toBeDefined();
+    return button;
+  }
+
+  function lastAlertTitle(): string | undefined {
+    return alertSpy.mock.calls[alertSpy.mock.calls.length - 1]?.[0];
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    __resetActiveWorkoutStoreForTests();
+    __resetAppPreferencesStoreForTests();
+    useActiveWorkoutStore.getState().startWorkout(makeSession());
+    startedAtAtFlush = undefined;
+    (useActiveWorkoutAutosave as jest.Mock).mockReturnValue({
+      // Snapshots startedAt at flush time — the finish flow clears the store
+      // right after, so this is the value the duration payload was built from.
+      flush: jest.fn(async () => {
+        startedAtAtFlush = useActiveWorkoutStore.getState().startedAt;
+        return true;
+      }),
+    });
+    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  /** Complete '102' 5 min in, then '201' 12 h later: active 5 min, span 12h 5m. */
+  function completeSetsAroundLongBreak(): { start: number; lastCompletedAt: number } {
+    const start = useActiveWorkoutStore.getState().startedAt!;
+    const lastCompletedAt = start + 725 * MIN;
+    act(() => {
+      jest.setSystemTime(start + 5 * MIN);
+      useActiveWorkoutStore.getState().completeSet('102');
+      jest.setSystemTime(lastCompletedAt);
+      useActiveWorkoutStore.getState().completeSet('201');
+    });
+    return { start, lastCompletedAt };
+  }
+
+  async function endWorkout(getByText: (text: string) => unknown) {
+    fireEvent.press(getByText('End Workout') as any);
+    expect(lastAlertTitle()).toBe('End workout?');
+    await act(async () => {
+      lastAlertButton('End Workout').onPress?.();
+    });
+  }
+
+  it('finishes directly when the workout has no long gap', async () => {
+    const start = useActiveWorkoutStore.getState().startedAt!;
+    act(() => {
+      jest.setSystemTime(start + 2 * MIN);
+      useActiveWorkoutStore.getState().completeSet('102');
+      jest.setSystemTime(start + 4 * MIN);
+      useActiveWorkoutStore.getState().completeSet('201');
+    });
+    const { getByText } = renderScreen();
+
+    await endWorkout(getByText);
+
+    expect(lastAlertTitle()).toBe('End workout?');
+    expect(startedAtAtFlush).toBe(start);
+    expect(navigation.replace).toHaveBeenCalledWith(
+      'WorkoutComplete',
+      expect.objectContaining({ finishedAt: expect.any(Number) }),
+    );
+  });
+
+  it('offers the gap-clamped active time and rebases on accept', async () => {
+    const { lastCompletedAt } = completeSetsAroundLongBreak();
+    const { getByText } = renderScreen();
+
+    await endWorkout(getByText);
+    expect(lastAlertTitle()).toBe('Adjust workout duration?');
+
+    await act(async () => {
+      lastAlertButton('Log 5 min').onPress?.();
+    });
+
+    expect(startedAtAtFlush).toBe(lastCompletedAt - 5 * MIN);
+    expect(useActiveWorkoutStore.getState().session).toBeNull();
+    expect(navigation.replace).toHaveBeenCalledWith('WorkoutComplete', expect.anything());
+  });
+
+  it('keeps the full span when the user declines', async () => {
+    const { start } = completeSetsAroundLongBreak();
+    const { getByText } = renderScreen();
+
+    await endWorkout(getByText);
+
+    await act(async () => {
+      lastAlertButton('Keep 12h 5m').onPress?.();
+    });
+
+    expect(startedAtAtFlush).toBe(start);
+    expect(navigation.replace).toHaveBeenCalledWith('WorkoutComplete', expect.anything());
+  });
+
+  it('opens the custom sheet capped at the span and finishes with the picked value', async () => {
+    const { lastCompletedAt } = completeSetsAroundLongBreak();
+    const { getByText } = renderScreen();
+
+    await endWorkout(getByText);
+
+    act(() => {
+      lastAlertButton('Custom…').onPress?.();
+    });
+    expect(mockDurationSheet.present).toHaveBeenCalledWith(5, 725);
+
+    await act(async () => {
+      mockDurationSheet.props?.onSave(20);
+    });
+
+    expect(startedAtAtFlush).toBe(lastCompletedAt - 20 * MIN);
+    expect(navigation.replace).toHaveBeenCalledWith('WorkoutComplete', expect.anything());
   });
 });
 

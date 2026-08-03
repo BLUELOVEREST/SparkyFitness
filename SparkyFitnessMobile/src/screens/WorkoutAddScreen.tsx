@@ -19,6 +19,7 @@ import FormInput from '../components/FormInput';
 import WorkoutFormExerciseList, {
   type WorkoutFormExerciseListHandle,
 } from '../components/WorkoutFormExerciseList';
+import { useSetEditAccessoryBar } from '../components/SetRowChrome';
 import CalendarSheet, { type CalendarSheetRef } from '../components/CalendarSheet';
 import { useWorkoutForm, getWorkoutDraftSubmission } from '../hooks/useWorkoutForm';
 import { useSelectedExercise } from '../hooks/useSelectedExercise';
@@ -69,11 +70,14 @@ const WorkoutAddScreen: React.FC<Props> = ({ navigation, route }) => {
     state,
     addExercise,
     removeExercise,
+    replaceExercise,
+    clearExerciseCompletions,
     addSet,
     removeSet,
     updateSetField,
     updateSetMeta,
     setExerciseRest,
+    setExerciseNotes,
     supersetWith,
     ungroupExercise,
     reorderExercises,
@@ -107,6 +111,21 @@ const WorkoutAddScreen: React.FC<Props> = ({ navigation, route }) => {
     [addExercise],
   );
 
+  // A replaced exercise is effectively freshly added: mark it prefill-eligible
+  // so its empty set seeds from the new exercise's history.
+  const wrappedReplaceExercise = useCallback(
+    (clientId: string, exercise: Parameters<typeof replaceExercise>[1]) => {
+      const result = replaceExercise(clientId, exercise);
+      setEligibleIds(prev => {
+        const next = new Set(prev);
+        next.add(clientId);
+        return next;
+      });
+      return result;
+    },
+    [replaceExercise],
+  );
+
   const {
     activeSetKey,
     activeSetField,
@@ -115,7 +134,20 @@ const WorkoutAddScreen: React.FC<Props> = ({ navigation, route }) => {
     handleAddSet,
     activateSet,
     deactivateSet,
-  } = useExerciseSetEditing({ addExercise: wrappedAddExercise, removeExercise, addSet });
+    setReplaceTarget,
+  } = useExerciseSetEditing({
+    addExercise: wrappedAddExercise,
+    removeExercise,
+    addSet,
+    replaceExercise: wrappedReplaceExercise,
+  });
+
+  // Sticky Done/Next bar for the focused set cell, on both platforms.
+  const { onRegisterAccessoryHandle, accessoryBar } = useSetEditAccessoryBar({
+    activeSetKey,
+    activeSetField,
+    onDeactivateSet: deactivateSet,
+  });
 
   const isEligibleForPrefill = useCallback(
     (clientId: string) => eligibleIds.has(clientId),
@@ -135,8 +167,9 @@ const WorkoutAddScreen: React.FC<Props> = ({ navigation, route }) => {
   const isPending = isCreating || isUpdating;
   const { preferences, isLoading: isPreferencesLoading } = usePreferences();
   const weightUnit = preferences?.default_weight_unit ?? 'kg';
+  const distanceUnit = (preferences?.default_distance_unit as 'km' | 'miles') ?? 'km';
   const { getImageSource } = useExerciseImageSource();
-  const submission = getWorkoutDraftSubmission(state, weightUnit as 'kg' | 'lbs');
+  const submission = getWorkoutDraftSubmission(state, weightUnit as 'kg' | 'lbs', distanceUnit);
 
   // Populate the edit form once after the preferences query settles so
   // the initial unit conversion is correct without overwriting later edits.
@@ -156,15 +189,20 @@ const WorkoutAddScreen: React.FC<Props> = ({ navigation, route }) => {
     // One-time initialization from the async-loaded session; setting state
     // synchronously here is intentional and mirrors the populate() side effect.
     setHasPopulatedEdit(true);
-    populate(session, weightUnit as 'kg' | 'lbs');
-  }, [isEditMode, session, isPreferencesLoading, populate, weightUnit, hasPopulatedEdit]);
+    populate(session, weightUnit as 'kg' | 'lbs', distanceUnit);
+  }, [isEditMode, session, isPreferencesLoading, populate, weightUnit, distanceUnit, hasPopulatedEdit]);
 
   // Populate from preset once after preferences load
   const hasPopulatedPresetRef = useRef(false);
   useEffect(() => {
     if (!preset || isEditMode || hasPopulatedPresetRef.current || isPreferencesLoading) return;
     hasPopulatedPresetRef.current = true;
-    const populatedIds = populateFromPreset(preset, weightUnit as 'kg' | 'lbs', initialDate);
+    const populatedIds = populateFromPreset(
+      preset,
+      weightUnit as 'kg' | 'lbs',
+      distanceUnit,
+      initialDate,
+    );
     // One-time initialization from the async-loaded preset; setting state
     // synchronously here is intentional and mirrors the populateFromPreset side effect.
     setEligibleIds(prev => {
@@ -172,15 +210,28 @@ const WorkoutAddScreen: React.FC<Props> = ({ navigation, route }) => {
       populatedIds.forEach(id => next.add(id));
       return next;
     });
-  }, [preset, isEditMode, isPreferencesLoading, populateFromPreset, weightUnit, initialDate]);
+  }, [preset, isEditMode, isPreferencesLoading, populateFromPreset, weightUnit, distanceUnit, initialDate]);
 
   const isInitializingEditForm = isEditMode && !hasPopulatedEdit;
 
   useSelectedExercise(route.params, handleAddExercise);
 
   const openExerciseSearch = useCallback(() => {
+    // Plain Add: drop any pending replace target so a cancelled replace can't
+    // misroute this add.
+    setReplaceTarget(null);
     navigation.navigate('ExerciseSearch', { returnKey: route.key });
-  }, [navigation, route.key]);
+  }, [setReplaceTarget, navigation, route.key]);
+
+  // ⋮ "Replace exercise": the next ExerciseSearch return swaps this entry in
+  // place instead of appending.
+  const handleReplaceExercise = useCallback(
+    (clientId: string) => {
+      setReplaceTarget(clientId);
+      navigation.navigate('ExerciseSearch', { returnKey: route.key });
+    },
+    [setReplaceTarget, navigation, route.key],
+  );
 
   const handleCancel = useCallback(async () => {
     if (!isEditMode && !hasDraftData) {
@@ -356,25 +407,31 @@ const WorkoutAddScreen: React.FC<Props> = ({ navigation, route }) => {
                   )}
                 </View>
 
-                {/* Full-bleed: cancel the scroll container's px-4 so the card
-                    separators reach the screen edges. */}
-                <View className="-mx-4">
+                {/* Pull back part of the scroll container's px-4 so the cards
+                    sit at the same 12px inset as the active workout screen
+                    (px-3). */}
+                <View className="-mx-1">
                   <WorkoutFormExerciseList
                     ref={exerciseListRef}
                     exercises={state.exercises}
                     weightUnit={weightUnit as 'kg' | 'lbs'}
+                    distanceUnit={distanceUnit}
                     getImageSource={getImageSource}
                     excludePresetEntryId={session?.id}
                     activeSetKey={activeSetKey}
                     activeSetField={activeSetField}
                     onActivateSet={activateSet}
                     onDeactivateSet={deactivateSet}
+                    onRegisterAccessoryHandle={onRegisterAccessoryHandle}
                     updateSetField={updateSetField}
                     updateSetMeta={updateSetMeta}
                     removeSet={removeSet}
                     onAddSet={handleAddSet}
                     onRemoveExercise={handleRemoveExercise}
                     setExerciseRest={setExerciseRest}
+                    setExerciseNotes={setExerciseNotes}
+                    onReplaceExercise={handleReplaceExercise}
+                    clearExerciseCompletions={clearExerciseCompletions}
                     supersetWith={supersetWith}
                     ungroupExercise={ungroupExercise}
                     onReorderExercises={reorderExercises}
@@ -386,6 +443,7 @@ const WorkoutAddScreen: React.FC<Props> = ({ navigation, route }) => {
                       })
                     }
                     isEligibleForPrefill={isEligibleForPrefill}
+                    showCompletion
                     removeExerciseOnLastSetDelete
                   />
                 </View>
@@ -420,6 +478,7 @@ const WorkoutAddScreen: React.FC<Props> = ({ navigation, route }) => {
             </Button>
           </View>
 
+          {accessoryBar}
         </>
       )}
 

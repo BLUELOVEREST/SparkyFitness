@@ -5,30 +5,37 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   ExerciseEntryResponse,
   ExerciseEntrySetResponse,
+  ExerciseModality,
+  ExerciseRecentSessionSet,
   ExerciseSnapshotResponse,
   PresetSessionResponse,
 } from '@workspace/shared';
 import type { Exercise } from '../types/exercise';
 import {
-  DEFAULT_REST_SEC,
-  describeActiveSet,
+  describeActiveSetAssumed,
+  formatDurationSeconds,
+  getDefaultRestSec,
   getSupersetRuns,
+  isCardioModality,
   isDropSetType,
+  isDurationModality,
   isPrSet,
   moveSessionExerciseItem,
   normalizeSessionSupersetGroups,
+  resolveAssumedSetValues,
+  resolveSnapshotModality,
   seedPrFromSession,
   supersetSessionExercises,
   ungroupSessionExercise,
 } from '../utils/workoutSession';
-import type { PrBaselineEntry } from '../utils/workoutSession';
+import type { AssumedSetValues, PrBaselineEntry } from '../utils/workoutSession';
 import { newUuid } from '../utils/ids';
 import {
   addNotificationResponseListener,
   cancelScheduledNotification,
   COMPLETE_SET_ACTION,
   dismissDeliveredNotification,
-  fireRestCompleteHaptic,
+  fireRestCompleteCue,
   scheduleRestNotification,
 } from '../services/notifications';
 import { fireSelectionHaptic, fireSuccessHaptic } from '../services/haptics';
@@ -38,14 +45,6 @@ const STORAGE_KEY = '@SparkyFitness/active-workout';
 
 /** Monotonic counter used to reject stale async schedule resolutions. */
 let restInstanceCounter = 0;
-
-/**
- * Monotonic counter stamped onto each `lastPrEvent`. The celebration listener
- * keys its effect on this so one PR fires exactly one toast — and, since the
- * counter and `lastPrEvent` are both transient (never persisted), a cold start
- * can't replay a stale celebration.
- */
-let prEventCounter = 0;
 
 export interface WorkoutStep {
   exerciseId: string;
@@ -69,20 +68,6 @@ export type CompletedSetMap = Record<string, number>;
  * `false`, so unchecking a PR set clears it server-side).
  */
 export type PrSetMap = Record<string, true>;
-
-/**
- * Transient one-shot describing the most recent PR, consumed by the
- * celebration toast listener. Excluded from `partialize` so a cold start never
- * replays it. `weightKg` is metric (the toast converts for display); `seq`
- * makes each event distinct so the listener fires once per PR.
- */
-export interface PrEvent {
-  setId: string;
-  exerciseName: string;
-  weightKg: number;
-  reps: number | null;
-  seq: number;
-}
 
 /**
  * Rest-timer state for the currently-active workout. The rest always
@@ -165,11 +150,6 @@ export interface ActiveWorkoutState {
   /** Set ids that earned a PR this session. Persisted; see {@link PrSetMap}. */
   prSetIds: PrSetMap;
   /**
-   * Transient last-PR one-shot for the celebration listener. NOT persisted —
-   * see {@link PrEvent}.
-   */
-  lastPrEvent: PrEvent | null;
-  /**
    * Current set id → stable React render key. A set's birth id is its render
    * key, so a missing entry means "the id is its own key"; an entry appears
    * only once a set's id has churned (a negative temp id replaced by the
@@ -186,10 +166,41 @@ export interface ActiveWorkoutState {
    * stable across an autosave.
    */
   setRenderKeys: Record<string, string>;
+  /**
+   * Planned weight/reps per set id, captured at live start from the preset
+   * before the create payload is stripped (see `stripPlannedSetValues`). A
+   * placeholder fallback only — never written back to sets except through
+   * completion adoption. Keys are birth server ids (live starts create every
+   * set server-side), so they survive autosaves. Persisted: the plan can't be
+   * recaptured after a cold start.
+   */
+  plannedSetValues: Record<string, AssumedSetValues>;
+  /**
+   * Each exercise's most recent prior-session sets (keyed by `exercise_id`),
+   * captured once per exercise from the stats query like `prBaseline`. This is
+   * the store-side copy placeholder adoption resolves against, so lock-screen
+   * completes (Live Activity, rest notification) assume the same values the
+   * row renders. Persisted so a cold-start resume keeps resolving.
+   */
+  previousSessionSets: Record<string, ExerciseRecentSessionSet[]>;
+  /**
+   * Preset this live workout was started from, plus the server config it
+   * lives on — preset ids are numeric and collide across configured servers,
+   * and switching the active server doesn't clear this store. Both feed the
+   * update-preset prompt on the completion screen. Persisted so the link
+   * survives a cold-start resume.
+   */
+  sourcePresetId: number | null;
+  sourceServerConfigId: string | null;
 
   startWorkout: (
     session: PresetSessionResponse,
-    opts?: { createdByLiveStart?: boolean },
+    opts?: {
+      createdByLiveStart?: boolean;
+      plannedSetValues?: AssumedSetValues[][];
+      sourcePresetId?: number;
+      sourceServerConfigId?: string;
+    },
   ) => void;
   startWorkoutAtSet: (session: PresetSessionResponse, setId: string) => void;
   /**
@@ -200,6 +211,16 @@ export interface ActiveWorkoutState {
    * excluded) or `null` when the exercise has no history.
    */
   capturePrBaseline: (exerciseId: string, baseline: PrBaselineEntry | null) => void;
+  /**
+   * Capture an exercise's most recent prior-session sets for placeholder
+   * resolution, once. Same gating as {@link capturePrBaseline}: no-op unless a
+   * live workout is active and the key is absent. Pass `[]` for an exercise
+   * with no history — that still marks it captured.
+   */
+  capturePreviousSessionSets: (
+    exerciseId: string,
+    sets: ExerciseRecentSessionSet[],
+  ) => void;
   clearWorkout: () => void;
   /**
    * Complete any set — not just the cursor — and move the next-up highlight to
@@ -250,7 +271,10 @@ export interface ActiveWorkoutState {
 
   /** Patch value fields on a set. Weight is in kg — UI converts before calling. */
   updateSetField: (setId: string, patch: ActiveSetPatch) => void;
-  /** Append a set to an exercise, cloning the last set's plan. Uses a negative temp id. */
+  /**
+   * Append an empty set to an exercise, cloning the last set's structure
+   * (rest/type/duration) but not its values. Uses a negative temp id.
+   */
   addSetToExercise: (entryId: string) => void;
   /**
    * Delete a set, renumbering the rest. Deleting an exercise's last remaining
@@ -263,6 +287,16 @@ export interface ActiveWorkoutState {
    * chips must stay in agreement.
    */
   setExerciseRest: (entryId: string, seconds: number) => void;
+  /**
+   * Rebase `startedAt` so the wall-clock span from start to the last completed
+   * set equals `minutes` — the end-of-workout "adjust duration" path for a
+   * workout left open across a long break. Duration stamping (and the calories
+   * the server derives from it) reads `startedAt` at flush time, so this one
+   * field is the whole correction. Marks the session dirty so the finish flush
+   * rewrites the server durations. No-op without a live session or a
+   * post-start completion.
+   */
+  setWorkoutDurationMinutes: (minutes: number) => void;
   /**
    * Rename the live session. A no-op for an empty or unchanged name; otherwise
    * marks the session dirty so autosave persists the new name to the server.
@@ -329,7 +363,10 @@ export interface ActiveWorkoutState {
 
 /** Fields the active-workout screen can edit on a set. */
 export type ActiveSetPatch = Partial<
-  Pick<ExerciseEntrySetResponse, 'weight' | 'reps' | 'rpe' | 'set_type' | 'notes'>
+  Pick<
+    ExerciseEntrySetResponse,
+    'weight' | 'reps' | 'duration' | 'distance' | 'rpe' | 'set_type' | 'notes'
+  >
 >;
 
 const initialData: Pick<
@@ -346,8 +383,11 @@ const initialData: Pick<
   | 'createdByLiveStart'
   | 'prBaseline'
   | 'prSetIds'
-  | 'lastPrEvent'
   | 'setRenderKeys'
+  | 'plannedSetValues'
+  | 'previousSessionSets'
+  | 'sourcePresetId'
+  | 'sourceServerConfigId'
 > = {
   sessionId: null,
   session: null,
@@ -361,8 +401,11 @@ const initialData: Pick<
   createdByLiveStart: false,
   prBaseline: {},
   prSetIds: {},
-  lastPrEvent: null,
   setRenderKeys: {},
+  plannedSetValues: {},
+  previousSessionSets: {},
+  sourcePresetId: null,
+  sourceServerConfigId: null,
 };
 
 /**
@@ -403,7 +446,7 @@ export function buildStepsFromSession(session: PresetSessionResponse): WorkoutSt
 
     const run = runByFirstEntryId.get(exercise.id);
     if (!run) {
-      const restSec = exercise.sets[0]?.rest_time ?? DEFAULT_REST_SEC;
+      const restSec = exercise.sets[0]?.rest_time ?? getDefaultRestSec();
       for (const set of exercise.sets) {
         pushStep(exercise, set, restSec);
       }
@@ -415,7 +458,7 @@ export function buildStepsFromSession(session: PresetSessionResponse): WorkoutSt
 
     // Rest is per-round; group actions harmonize every member's rest_time,
     // so the anchor's first set speaks for the whole group.
-    const groupRest = members[0].sets[0]?.rest_time ?? DEFAULT_REST_SEC;
+    const groupRest = members[0].sets[0]?.rest_time ?? getDefaultRestSec();
     const roundCount = Math.max(...members.map((m) => m.sets.length));
     for (let round = 0; round < roundCount; round++) {
       let firstInRound = true;
@@ -514,7 +557,11 @@ function nextTempSetId(
   return min - 1;
 }
 
-function makeDefaultSet(id: number, setNumber: number): ExerciseEntrySetResponse {
+function makeDefaultSet(
+  id: number,
+  setNumber: number,
+  modality: ExerciseModality,
+): ExerciseEntrySetResponse {
   return {
     id,
     set_number: setNumber,
@@ -522,30 +569,15 @@ function makeDefaultSet(id: number, setNumber: number): ExerciseEntrySetResponse
     reps: null,
     weight: null,
     duration: null,
-    rest_time: DEFAULT_REST_SEC,
+    distance: null,
+    // Cardio efforts carry no between-set rest; a nonzero value would both
+    // start the rest timer and inflate the server's set-derived duration.
+    rest_time: isCardioModality(modality) ? 0 : getDefaultRestSec(),
     notes: null,
     rpe: null,
     completed_at: null,
     is_pr: false,
   };
-}
-
-/**
- * Seed the completion map from server-persisted `completed_at` timestamps so
- * a workout started from a session with prior progress resumes where it left
- * off. Missing or unparseable timestamps count as not completed. Also used by
- * read-only session views to derive done/upcoming per set.
- */
-/** Find a set anywhere in the session by its stringified id. */
-function findSessionSet(
-  session: PresetSessionResponse,
-  setId: string,
-): ExerciseEntrySetResponse | undefined {
-  for (const exercise of session.exercises) {
-    const found = exercise.sets.find((s) => String(s.id) === setId);
-    if (found) return found;
-  }
-  return undefined;
 }
 
 /**
@@ -562,6 +594,73 @@ function locateSet(
     if (setIndex >= 0) return { exercise, setIndex };
   }
   return null;
+}
+
+/**
+ * Hevy-style completion adoption: a set logged with empty weight/reps commits
+ * its assumed (placeholder) values, so what the user saw grayed-in is exactly
+ * what gets recorded. Returns the session with the target set patched, or the
+ * input session unchanged when there's nothing to adopt. Runs before PR
+ * detection so an adopted weight can earn a record, and before the rest
+ * notification is built so the next set's cascade sees the adopted values.
+ */
+function adoptAssumedSetValues(
+  state: Pick<ActiveWorkoutState, 'session' | 'previousSessionSets' | 'plannedSetValues'>,
+  setId: string,
+): PresetSessionResponse | null {
+  const session = state.session;
+  if (!session) return session;
+  const located = locateSet(session, setId);
+  if (!located) return session;
+  const { exercise, setIndex } = located;
+  const target = exercise.sets[setIndex];
+
+  // Only the fields the modality renders adopt: a duration set must not be
+  // stamped with legacy isometric reps from history, and a weighted set must
+  // not inherit a duration. Cardio renders duration + distance, so both adopt.
+  const modality = resolveSnapshotModality(exercise.exercise_snapshot);
+  const durationLike = isDurationModality(modality);
+  const cardio = isCardioModality(modality);
+  const relevantFilled = cardio
+    ? target.duration != null && target.distance != null
+    : durationLike
+      ? target.duration != null
+      : modality === 'reps_only'
+        ? target.reps != null
+        : target.weight != null && target.reps != null;
+  if (relevantFilled) return session;
+
+  const assumed = resolveAssumedSetValues(
+    exercise.sets,
+    state.previousSessionSets[exercise.exercise_id],
+    state.plannedSetValues,
+  )[setIndex];
+  const patch: ActiveSetPatch = cardio
+    ? {
+        duration: target.duration ?? assumed.duration ?? null,
+        distance: target.distance ?? assumed.distance ?? null,
+      }
+    : durationLike
+      ? { duration: target.duration ?? assumed.duration ?? null }
+      : modality === 'reps_only'
+        ? { reps: target.reps ?? assumed.reps }
+        : {
+            weight: target.weight ?? assumed.weight,
+            reps: target.reps ?? assumed.reps,
+          };
+  if (Object.values(patch).every((v) => v == null)) return session;
+
+  return {
+    ...session,
+    exercises: session.exercises.map((e) =>
+      e.id !== exercise.id
+        ? e
+        : {
+            ...e,
+            sets: e.sets.map((s, i) => (i === setIndex ? { ...s, ...patch } : s)),
+          },
+    ),
+  };
 }
 
 /**
@@ -583,11 +682,11 @@ function restSecBeforeNextSet(
   nextSetId: string,
 ): number {
   const to = locateSet(session, nextSetId);
-  if (!to) return DEFAULT_REST_SEC;
+  if (!to) return getDefaultRestSec();
   if (isDropSetType(to.exercise.sets[to.setIndex]?.set_type)) return 0;
 
   const from = locateSet(session, completedSetId);
-  if (!from) return to.exercise.sets[0]?.rest_time ?? DEFAULT_REST_SEC;
+  if (!from) return to.exercise.sets[0]?.rest_time ?? getDefaultRestSec();
 
   // Back-to-back superset partners: same run, different member, same round.
   const toRun = getSupersetRuns(session.exercises).find((r) =>
@@ -601,9 +700,15 @@ function restSecBeforeNextSet(
   ) {
     return 0;
   }
-  return from.exercise.sets[0]?.rest_time ?? DEFAULT_REST_SEC;
+  return from.exercise.sets[0]?.rest_time ?? getDefaultRestSec();
 }
 
+/**
+ * Seed the completion map from server-persisted `completed_at` timestamps so
+ * a workout started from a session with prior progress resumes where it left
+ * off. Missing or unparseable timestamps count as not completed. Also used by
+ * read-only session views to derive done/upcoming per set.
+ */
 export function seedCompletionFromSession(session: PresetSessionResponse): CompletedSetMap {
   const seeded: CompletedSetMap = {};
   for (const exercise of session.exercises) {
@@ -710,11 +815,16 @@ function buildRestNotificationContent(
   setId: string | null,
   fallbackExerciseName: string,
 ): { title: string; body: string } {
-  const desc = describeActiveSet(session, setId);
+  // Assumed-aware so an upcoming set with empty fields still announces its
+  // placeholder rep target, matching what the row shows grayed-in.
+  const { previousSessionSets, plannedSetValues } = useActiveWorkoutStore.getState();
+  const desc = describeActiveSetAssumed(session, setId, previousSessionSets, plannedSetValues);
   if (desc != null) {
     const name = desc.exerciseName ?? fallbackExerciseName;
     let body = `${name} · Set ${desc.setNumber} of ${desc.setCount}`;
-    if (desc.reps != null) {
+    if (desc.durationSec != null) {
+      body += ` · ${formatDurationSeconds(desc.durationSec)} target`;
+    } else if (desc.reps != null) {
       body += ` · ${desc.reps} rep${desc.reps === 1 ? '' : 's'} target`;
     }
     return { title: 'Rest complete: next set up', body };
@@ -763,7 +873,7 @@ function startRestForStep(
   durationSecOverride?: number,
 ): Rest {
   const step = steps.find((s) => s.setId === setId);
-  const durationSec = durationSecOverride ?? step?.restSec ?? DEFAULT_REST_SEC;
+  const durationSec = durationSecOverride ?? step?.restSec ?? getDefaultRestSec();
   const token = ++restInstanceCounter;
   const endsAt = Date.now() + durationSec * 1000;
 
@@ -795,6 +905,24 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
         // the first uncompleted step (null = every step already done). The
         // store stays clean — the server already knows these completions.
         const completedSetIds = seedCompletionFromSession(session);
+        // Key the live-start plan (positional, from the stripped create
+        // payload) to the created session's set ids — same exercise and set
+        // order by construction.
+        const plannedSetValues: Record<string, AssumedSetValues> = {};
+        opts?.plannedSetValues?.forEach((plannedSets, exerciseIndex) => {
+          session.exercises[exerciseIndex]?.sets.forEach((s, setIndex) => {
+            const planned = plannedSets[setIndex];
+            if (
+              planned != null &&
+              (planned.weight != null ||
+                planned.reps != null ||
+                planned.duration != null ||
+                planned.distance != null)
+            ) {
+              plannedSetValues[String(s.id)] = planned;
+            }
+          });
+        });
         set({
           sessionId: session.id,
           session,
@@ -807,12 +935,17 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
           hasUnsavedChanges: false,
           createdByLiveStart: opts?.createdByLiveStart ?? false,
           // Baseline is captured lazily per exercise by the live card; stamps
-          // resume from the server. A fresh start clears any prior event.
+          // resume from the server.
           prBaseline: {},
           prSetIds: seedPrFromSession(session),
-          lastPrEvent: null,
           // A fresh start has no id churn yet — every set keys by its own id.
           setRenderKeys: {},
+          plannedSetValues,
+          // Previous-session sets are captured lazily per exercise by the
+          // live card, like the PR baseline.
+          previousSessionSets: {},
+          sourcePresetId: opts?.sourcePresetId ?? null,
+          sourceServerConfigId: opts?.sourceServerConfigId ?? null,
         });
       },
 
@@ -851,9 +984,16 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
           // completeActiveSet); stamps resume from the server.
           prBaseline: {},
           prSetIds: seedPrFromSession(session),
-          lastPrEvent: null,
           // A fresh start has no id churn yet — every set keys by its own id.
           setRenderKeys: {},
+          // A resumed diary workout has no live-start plan; its set values
+          // are real. Previous-session sets re-capture lazily.
+          plannedSetValues: {},
+          previousSessionSets: {},
+          // Nor was it started from a preset this session — no update-preset
+          // prompt on finish.
+          sourcePresetId: null,
+          sourceServerConfigId: null,
         });
       },
 
@@ -866,6 +1006,15 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
         if (state.sessionId == null) return;
         if (exerciseId in state.prBaseline) return;
         set({ prBaseline: { ...state.prBaseline, [exerciseId]: baseline } });
+      },
+
+      capturePreviousSessionSets: (exerciseId, sets) => {
+        const state = get();
+        // Same gating as capturePrBaseline: live workout only, once per
+        // exercise, not a session edit.
+        if (state.sessionId == null) return;
+        if (exerciseId in state.previousSessionSets) return;
+        set({ previousSessionSets: { ...state.previousSessionSets, [exerciseId]: sets } });
       },
 
       clearWorkout: () => {
@@ -882,32 +1031,28 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
 
         cancelCurrentRestNotification(state.rest);
 
+        // Logging a set with empty weight/reps adopts its assumed
+        // (placeholder) values — one choke point, so the row's Log control,
+        // the rest bar, the notification action, and the Live Activity button
+        // all record the same thing the user saw grayed-in.
+        const session = adoptAssumedSetValues(state, setId);
+
         const completedSetIds: CompletedSetMap = {
           ...state.completedSetIds,
           [setId]: Date.now(),
         };
 
         // PR detection runs against the pre-completion map (the candidate is
-        // excluded internally). On a hit: stamp the set, fire the strong
-        // success haptic, and publish the one-shot the celebration listener
-        // consumes. A regular log fires only the light selection tick, so the
-        // PR buzz still stands out against it.
+        // excluded internally). On a hit: stamp the set and fire the strong
+        // success haptic. A regular log fires only the light selection tick,
+        // so the PR buzz still stands out against it.
         let prSetIds = state.prSetIds;
-        let lastPrEvent = state.lastPrEvent;
         if (
-          state.session != null &&
-          isPrSet(state.session, setId, state.completedSetIds, state.prBaseline)
+          session != null &&
+          isPrSet(session, setId, state.completedSetIds, state.prBaseline)
         ) {
           prSetIds = { ...state.prSetIds, [setId]: true };
           fireSuccessHaptic();
-          const set0 = findSessionSet(state.session, setId);
-          lastPrEvent = {
-            setId,
-            exerciseName: state.steps[targetIndex].exerciseName,
-            weightKg: set0?.weight ?? 0,
-            reps: set0?.reps ?? null,
-            seq: ++prEventCounter,
-          };
         } else {
           fireSelectionHaptic();
         }
@@ -924,9 +1069,9 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
         if (!nextStep) {
           // No uncompleted step remains: workout is done. No final rest timer.
           set({
+            session,
             completedSetIds,
             prSetIds,
-            lastPrEvent,
             activeSetId: null,
             rest: READY_REST,
             sessionRevision: state.sessionRevision + 1,
@@ -940,20 +1085,20 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
         // `restSec` — so out-of-order logging still rests between superset
         // rounds instead of skipping the timer on an interior partner.
         const restSec =
-          state.session != null
-            ? restSecBeforeNextSet(state.session, setId, nextStep.setId)
+          session != null
+            ? restSecBeforeNextSet(session, setId, nextStep.setId)
             : nextStep.restSec;
 
         set({
+          session,
           completedSetIds,
           prSetIds,
-          lastPrEvent,
           activeSetId: nextStep.setId,
           // Zero rest (back-to-back superset partners, or an explicit rest_time
           // of 0) advances straight to ready — no timer flash.
           rest:
             restSec > 0
-              ? startRestForStep(state.steps, nextStep.setId, state.session, restSec)
+              ? startRestForStep(state.steps, nextStep.setId, session, restSec)
               : READY_REST,
           sessionRevision: state.sessionRevision + 1,
           hasUnsavedChanges: true,
@@ -1112,7 +1257,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
             // Shrunk past zero — same outcome as the countdown hitting zero.
             cancelCurrentRestNotification(rest);
             set({ rest: READY_REST });
-            fireRestCompleteHaptic();
+            fireRestCompleteCue();
             return;
           }
 
@@ -1140,7 +1285,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
           const newRemainingMs = rest.pausedRemainingMs + deltaMs;
           if (newRemainingMs <= 0) {
             set({ rest: READY_REST });
-            fireRestCompleteHaptic();
+            fireRestCompleteCue();
             return;
           }
           set({
@@ -1165,7 +1310,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
         }
         cancelCurrentRestNotification(rest);
         set({ rest: READY_REST });
-        fireRestCompleteHaptic();
+        fireRestCompleteCue();
       },
 
       dismissRest: () => {
@@ -1265,20 +1410,30 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
 
         const tempId = nextTempSetId(session, state.setRenderKeys);
         const lastSet = exercise.sets[exercise.sets.length - 1];
-        // Clone the last set's plan (weight/reps/rest/type/duration) but not
-        // its outcomes (notes/rpe/completed_at/is_pr) — those describe a
-        // performed set.
+        // Clone the last set's structure (rest/type) but not its
+        // weight/reps — a new set starts empty and shows the row above's
+        // values as its gray placeholder — nor its outcomes
+        // (notes/rpe/completed_at/is_pr), which describe a performed set.
+        // On duration exercises the duration IS the value, so it empties like
+        // weight/reps; elsewhere it's invisible structure and clones along.
+        // Cardio distance is likewise a per-set value, never structure.
+        const modality = resolveSnapshotModality(exercise.exercise_snapshot);
+        const durationLike = isDurationModality(modality);
         const newSet: ExerciseEntrySetResponse = lastSet
           ? {
               ...lastSet,
               id: tempId,
               set_number: exercise.sets.length + 1,
+              weight: null,
+              reps: null,
+              ...(durationLike ? { duration: null } : {}),
+              ...(isCardioModality(modality) ? { distance: null } : {}),
               notes: null,
               rpe: null,
               completed_at: null,
               is_pr: false,
             }
-          : makeDefaultSet(tempId, 1);
+          : makeDefaultSet(tempId, 1, modality);
 
         const next: PresetSessionResponse = {
           ...session,
@@ -1345,6 +1500,21 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
         set(buildSessionEditState(state, next));
       },
 
+      setWorkoutDurationMinutes: (minutes) => {
+        const state = get();
+        if (state.sessionId == null || state.startedAt == null) return;
+        let lastCompletedMs = 0;
+        for (const ms of Object.values(state.completedSetIds)) {
+          if (ms > lastCompletedMs) lastCompletedMs = ms;
+        }
+        if (lastCompletedMs <= state.startedAt) return;
+        set({
+          startedAt: lastCompletedMs - Math.max(1, Math.round(minutes)) * 60_000,
+          sessionRevision: state.sessionRevision + 1,
+          hasUnsavedChanges: true,
+        });
+      },
+
       renameSession: (name) => {
         const state = get();
         const session = state.session;
@@ -1384,6 +1554,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
           id: exercise.id,
           name: exercise.name,
           category: exercise.category ?? null,
+          modality: exercise.modality ?? null,
           images: exercise.images ?? null,
           primary_muscles: exercise.primary_muscles ?? null,
           secondary_muscles: exercise.secondary_muscles ?? null,
@@ -1411,7 +1582,13 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
           superset_group: null,
           exercise_snapshot: snapshot,
           activity_details: [],
-          sets: [makeDefaultSet(nextTempSetId(session, state.setRenderKeys), 1)],
+          sets: [
+            makeDefaultSet(
+              nextTempSetId(session, state.setRenderKeys),
+              1,
+              resolveSnapshotModality(snapshot),
+            ),
+          ],
         };
 
         const next: PresetSessionResponse = {
@@ -1443,6 +1620,7 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
           id: exercise.id,
           name: exercise.name,
           category: exercise.category ?? null,
+          modality: exercise.modality ?? null,
           images: exercise.images ?? null,
           primary_muscles: exercise.primary_muscles ?? null,
           secondary_muscles: exercise.secondary_muscles ?? null,
@@ -1464,7 +1642,13 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
                   ...e,
                   exercise_id: exercise.id,
                   exercise_snapshot: snapshot,
-                  sets: [makeDefaultSet(nextTempSetId(session, state.setRenderKeys), 1)],
+                  sets: [
+                    makeDefaultSet(
+                      nextTempSetId(session, state.setRenderKeys),
+                      1,
+                      resolveSnapshotModality(snapshot),
+                    ),
+                  ],
                 }
               : e,
           ),
@@ -1659,10 +1843,17 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
         // next launch. sessionRevision is deliberately transient.
         hasUnsavedChanges: state.hasUnsavedChanges,
         createdByLiveStart: state.createdByLiveStart,
-        // Baseline and stamps survive a cold-start resume; `lastPrEvent` is
-        // deliberately omitted so a resume never replays a celebration.
+        // Baseline and stamps survive a cold-start resume.
         prBaseline: state.prBaseline,
         prSetIds: state.prSetIds,
+        // Placeholder sources survive a cold start: the plan can't be
+        // recaptured (the create payload is gone), and lock-screen completes
+        // may adopt before any card remounts to re-capture history.
+        plannedSetValues: state.plannedSetValues,
+        previousSessionSets: state.previousSessionSets,
+        // The preset link feeds the finish prompt; survives a cold start.
+        sourcePresetId: state.sourcePresetId,
+        sourceServerConfigId: state.sourceServerConfigId,
       }),
       migrate: (persistedState, version) => {
         // v4 changed `completedSetIds` values from `true` to epoch-ms tap
@@ -1701,7 +1892,7 @@ let restDeadlineTimerId: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Keep exactly one JS timer pointed at the current rest deadline so the
- * resting → ready flip (notification cancel + haptic) happens in the store,
+ * resting → ready flip (notification cancel + haptic/sound cue) happens in the store,
  * independent of which screens are mounted. The callback re-checks live state:
  * a timer that fires early (clock drift) reschedules for the remainder instead
  * of stranding the rest in 'resting'.
@@ -1763,7 +1954,6 @@ export function initWorkoutNotificationActions(): void {
  */
 export function __resetActiveWorkoutStoreForTests(): void {
   restInstanceCounter = 0;
-  prEventCounter = 0;
   notificationActionsSubscription?.remove();
   notificationActionsSubscription = null;
   useActiveWorkoutStore.setState({ ...initialData });

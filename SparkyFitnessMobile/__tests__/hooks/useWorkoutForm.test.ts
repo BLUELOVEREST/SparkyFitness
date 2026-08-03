@@ -182,6 +182,156 @@ describe('workoutFormReducer', () => {
     });
   });
 
+  describe('REPLACE_EXERCISE', () => {
+    const makeReplaceState = (): WorkoutDraft => ({
+      ...makeEmptyDraft(),
+      exercises: [
+        {
+          clientId: 'first',
+          serverId: 'srv-1',
+          exerciseId: 'ex-1',
+          exerciseName: 'Bench Press',
+          exerciseCategory: 'Strength',
+          images: ['bench.png'],
+          supersetGroup: 1,
+          notes: 'felt heavy',
+          snapshot: {
+            id: 'ex-1',
+            name: 'Bench Press',
+            category: 'Strength',
+            images: null,
+            primary_muscles: null,
+            secondary_muscles: null,
+            equipment: null,
+            instructions: null,
+            force: null,
+            level: null,
+            mechanic: null,
+            calories_per_hour: null,
+          },
+          sets: [
+            { clientId: 's1', serverId: 101, weight: '100', reps: '5', restTime: 120 },
+            { clientId: 's2', serverId: 102, weight: '100', reps: '4', restTime: 120 },
+          ],
+        },
+        {
+          clientId: 'second',
+          serverId: 'srv-2',
+          exerciseId: 'ex-2',
+          exerciseName: 'Squat',
+          exerciseCategory: 'Strength',
+          images: [],
+          supersetGroup: 1,
+          sets: [{ clientId: 's3', serverId: 103, weight: '140', reps: '3' }],
+        },
+      ],
+    });
+
+    it('swaps the exercise identity in place, resetting to one default set', () => {
+      const state = makeReplaceState();
+      const result = workoutFormReducer(state, {
+        type: 'REPLACE_EXERCISE',
+        clientId: 'first',
+        exercise: makeExercise({ id: 'ex-9', name: 'Incline Press', images: ['incline.png'] }),
+        setClientId: 'new-set',
+      });
+
+      const replaced = result.exercises[0];
+      expect(replaced.exerciseId).toBe('ex-9');
+      expect(replaced.exerciseName).toBe('Incline Press');
+      expect(replaced.images).toEqual(['incline.png']);
+      expect(replaced.sets).toEqual([
+        { clientId: 'new-set', weight: '', reps: '', distance: '', restTime: 90 },
+      ]);
+      expect(replaced.serverId).toBeUndefined();
+      expect(replaced.snapshot).toBeNull();
+      // Position, draft identity, grouping, and the entry note survive.
+      expect(replaced.clientId).toBe('first');
+      expect(replaced.supersetGroup).toBe(1);
+      expect(replaced.notes).toBe('felt heavy');
+      // The sibling is untouched.
+      expect(result.exercises[1]).toBe(state.exercises[1]);
+    });
+
+    it('drops serverIds so the payload takes the delete-and-recreate path for the whole session', () => {
+      const state = makeReplaceState();
+      const result = workoutFormReducer(state, {
+        type: 'REPLACE_EXERCISE',
+        clientId: 'first',
+        exercise: makeExercise({ id: 'ex-9', name: 'Incline Press' }),
+        setClientId: 'new-set',
+      });
+
+      const payload = buildExercisesPayload(result.exercises, 'kg');
+      expect(payload.every(e => !('id' in e))).toBe(true);
+      expect(payload.flatMap(e => e.sets).every(s => !('id' in s))).toBe(true);
+    });
+  });
+
+  describe('CLEAR_EXERCISE_COMPLETIONS', () => {
+    const makeCompletionsState = (): WorkoutDraft => ({
+      ...makeEmptyDraft(),
+      exercises: [
+        {
+          clientId: 'logged',
+          exerciseId: 'ex-1',
+          exerciseName: 'Bench Press',
+          exerciseCategory: 'Strength',
+          images: [],
+          sets: [
+            {
+              clientId: 's1',
+              weight: '100',
+              reps: '5',
+              completedAt: '2026-03-12T10:00:00.000Z',
+              isPr: true,
+            },
+            { clientId: 's2', weight: '105', reps: '5' },
+          ],
+        },
+        {
+          clientId: 'other',
+          exerciseId: 'ex-2',
+          exerciseName: 'Squat',
+          exerciseCategory: 'Strength',
+          images: [],
+          sets: [
+            { clientId: 's3', weight: '140', reps: '3', completedAt: '2026-03-12T10:05:00.000Z' },
+          ],
+        },
+      ],
+    });
+
+    it('un-logs every set of the target, dropping PR flags but keeping values, and round-trips into the payload', () => {
+      const result = workoutFormReducer(makeCompletionsState(), {
+        type: 'CLEAR_EXERCISE_COMPLETIONS',
+        clientId: 'logged',
+      });
+
+      expect(result.exercises[0].sets[0].completedAt).toBeNull();
+      expect(result.exercises[0].sets[0].isPr).toBe(false);
+      expect(result.exercises[0].sets[0].weight).toBe('100');
+      expect(result.exercises[1].sets[0].completedAt).toBe('2026-03-12T10:05:00.000Z');
+
+      const payload = buildExercisesPayload(result.exercises, 'kg');
+      expect(payload[0].sets[0].completed_at).toBeNull();
+      expect(payload[0].sets[0].is_pr).toBe(false);
+      expect(payload[1].sets[0].completed_at).toBe('2026-03-12T10:05:00.000Z');
+    });
+
+    it('returns the state identity when the exercise has no logged sets', () => {
+      const state = workoutFormReducer(makeCompletionsState(), {
+        type: 'CLEAR_EXERCISE_COMPLETIONS',
+        clientId: 'logged',
+      });
+      const result = workoutFormReducer(state, {
+        type: 'CLEAR_EXERCISE_COMPLETIONS',
+        clientId: 'logged',
+      });
+      expect(result).toBe(state);
+    });
+  });
+
   describe('ADD_SET', () => {
     it('adds a set pre-filled from the previous set values', () => {
       const state: WorkoutDraft = {
@@ -296,6 +446,28 @@ describe('workoutFormReducer', () => {
         setClientId: 'set-new',
       });
       expect(result.exercises[0].sets[1].restTime).toBe(90);
+    });
+
+    it('copies the previous set duration onto the new set', () => {
+      const state: WorkoutDraft = {
+        ...makeEmptyDraft(),
+        exercises: [
+          {
+            clientId: 'ex-abc',
+            exerciseId: 'ex-1',
+            exerciseName: 'Plank',
+            exerciseCategory: 'isometric',
+            sets: [{ clientId: 'set-1', weight: '', reps: '', duration: 45 }],
+          },
+        ],
+      };
+
+      const result = workoutFormReducer(state, {
+        type: 'ADD_SET',
+        exerciseClientId: 'ex-abc',
+        setClientId: 'set-new',
+      });
+      expect(result.exercises[0].sets[1].duration).toBe(45);
     });
   });
 
@@ -463,6 +635,48 @@ describe('workoutFormReducer', () => {
       expect(result.exercises[0].sets[0].reps).toBe('12');
       expect(result.exercises[0].sets[0].weight).toBe('135');
     });
+
+    it('parses duration text to integer seconds, clearing on empty/garbage', () => {
+      const state: WorkoutDraft = {
+        ...makeEmptyDraft(),
+        exercises: [
+          {
+            clientId: 'ex-abc',
+            exerciseId: 'ex-1',
+            exerciseName: 'Plank',
+            exerciseCategory: 'isometric',
+            sets: [{ clientId: 'set-1', weight: '', reps: '', duration: null }],
+          },
+        ],
+      };
+
+      const typed = workoutFormReducer(state, {
+        type: 'UPDATE_SET_FIELD',
+        exerciseClientId: 'ex-abc',
+        setClientId: 'set-1',
+        field: 'duration',
+        value: '75',
+      });
+      expect(typed.exercises[0].sets[0].duration).toBe(75);
+
+      const cleared = workoutFormReducer(typed, {
+        type: 'UPDATE_SET_FIELD',
+        exerciseClientId: 'ex-abc',
+        setClientId: 'set-1',
+        field: 'duration',
+        value: '',
+      });
+      expect(cleared.exercises[0].sets[0].duration).toBeNull();
+
+      const garbage = workoutFormReducer(typed, {
+        type: 'UPDATE_SET_FIELD',
+        exerciseClientId: 'ex-abc',
+        setClientId: 'set-1',
+        field: 'duration',
+        value: 'abc',
+      });
+      expect(garbage.exercises[0].sets[0].duration).toBeNull();
+    });
   });
 
   describe('RESET', () => {
@@ -564,7 +778,7 @@ describe('workoutFormReducer', () => {
     it('populates from a preset session in kg', () => {
       const state = makeEmptyDraft();
       const session = makeSession();
-      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg' });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg', distanceUnit: 'km' });
 
       expect(result.name).toBe('Push Day');
       expect(result.nameManuallySet).toBe(true);
@@ -577,6 +791,40 @@ describe('workoutFormReducer', () => {
       expect(result.exercises[0].sets[0].reps).toBe('10');
       expect(result.exercises[0].sets[1].weight).toBe('80');
       expect(result.exercises[0].sets[1].reps).toBe('8');
+    });
+
+    it('carries the snapshot modality onto the draft exercise', () => {
+      const state = makeEmptyDraft();
+      const session = makeSession({
+        exercises: [
+          {
+            exercise_id: 'ex-1',
+            exercise_snapshot: {
+              id: 'ex-1',
+              name: 'Plank',
+              category: 'isometric',
+              modality: 'duration',
+              calories_per_hour: 200,
+              source: 'system',
+            },
+            duration_minutes: 5,
+            calories_burned: 20,
+            sets: [],
+          } as any,
+        ],
+      });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg', distanceUnit: 'km' });
+
+      expect(result.exercises[0].exerciseModality).toBe('duration');
+      // Old-server sessions omit it — the draft records null and resolvers
+      // fall back to the category.
+      const bare = workoutFormReducer(state, {
+        type: 'POPULATE',
+        session: makeSession(),
+        weightUnit: 'kg',
+        distanceUnit: 'km',
+      });
+      expect(bare.exercises[0].exerciseModality).toBeNull();
     });
 
     it('round-trips set_type, duration, notes, rpe, and completed_at into the draft so edit-saves cannot wipe them', () => {
@@ -605,7 +853,7 @@ describe('workoutFormReducer', () => {
           } as any,
         ],
       });
-      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg' });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg', distanceUnit: 'km' });
 
       const set = result.exercises[0].sets[0];
       expect(set.setType).toBe('warmup');
@@ -615,10 +863,32 @@ describe('workoutFormReducer', () => {
       expect(set.completedAt).toBe('2026-03-15T10:30:00.000Z');
     });
 
+    it('round-trips the exercise-level note into the draft and payload so edit-saves cannot wipe it', () => {
+      const state = makeEmptyDraft();
+      const session = makeSession({
+        exercises: [
+          {
+            exercise_id: 'ex-1',
+            exercise_snapshot: { id: 'ex-1', name: 'Bench Press', category: 'Strength', calories_per_hour: 400, source: 'system' },
+            duration_minutes: 20,
+            calories_burned: 150,
+            notes: 'felt heavy today',
+            sets: [
+              { id: 'set-1', set_number: 1, weight: 60, reps: 10, set_type: 'normal' } as ExerciseEntrySetResponse,
+            ],
+          } as any,
+        ],
+      });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg', distanceUnit: 'km' });
+
+      expect(result.exercises[0].notes).toBe('felt heavy today');
+      expect(buildExercisesPayload(result.exercises, 'kg')[0].notes).toBe('felt heavy today');
+    });
+
     it('seeds duration and calories from the session for payload round-trip', () => {
       const state = makeEmptyDraft();
       const session = makeSession();
-      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg' });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg', distanceUnit: 'km' });
 
       expect(result.exercises[0].durationMinutes).toBe(20);
       expect(result.exercises[0].calories).toBe('150');
@@ -628,7 +898,7 @@ describe('workoutFormReducer', () => {
     it('converts weight from kg to lbs', () => {
       const state = makeEmptyDraft();
       const session = makeSession();
-      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'lbs' });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'lbs', distanceUnit: 'miles' });
 
       // 60 kg in lbs ≈ 132.3
       const weight1 = parseFloat(result.exercises[0].sets[0].weight);
@@ -653,7 +923,7 @@ describe('workoutFormReducer', () => {
           } as any,
         ],
       });
-      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg' });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg', distanceUnit: 'km' });
 
       expect(result.exercises[0].sets[0].weight).toBe('');
       expect(result.exercises[0].sets[0].reps).toBe('');
@@ -662,7 +932,7 @@ describe('workoutFormReducer', () => {
     it('uses today date when session entry_date is null', () => {
       const state = makeEmptyDraft();
       const session = makeSession({ entry_date: null as any });
-      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg' });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg', distanceUnit: 'km' });
 
       expect(result.entryDate).toBe('2026-03-12');
     });
@@ -680,7 +950,7 @@ describe('workoutFormReducer', () => {
           } as any,
         ],
       });
-      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg' });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg', distanceUnit: 'km' });
 
       expect(result.exercises[0].exerciseName).toBe('Unknown');
       expect(result.exercises[0].exerciseCategory).toBeNull();
@@ -709,7 +979,7 @@ describe('workoutFormReducer', () => {
           } as any,
         ],
       });
-      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg' });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg', distanceUnit: 'km' });
 
       expect(result.exercises[0].serverId).toBe('ex-uuid-1');
       expect(result.exercises[0].sets[0].serverId).toBe(101);
@@ -750,7 +1020,7 @@ describe('workoutFormReducer', () => {
           } as any,
         ],
       });
-      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg' });
+      const result = workoutFormReducer(state, { type: 'POPULATE', session, weightUnit: 'kg', distanceUnit: 'km' });
 
       expect(result.exercises[0].supersetGroup).toBe(3);
       expect(result.exercises[1].supersetGroup).toBe(3);
@@ -845,6 +1115,69 @@ describe('workoutFormReducer', () => {
         patch: { rpe: null },
       });
       expect(state.exercises[0].sets[0].rpe).toBeNull();
+    });
+
+    it('patches a set note and round-trips it into the payload', () => {
+      const state = workoutFormReducer(stateWithSets(), {
+        type: 'UPDATE_SET_META',
+        exerciseClientId: 'a',
+        setClientId: 'a-s1',
+        patch: { notes: 'slow tempo' },
+      });
+
+      expect(state.exercises[0].sets[0].notes).toBe('slow tempo');
+      expect(state.exercises[0].sets[1].notes).toBeUndefined();
+
+      const payload = buildExercisesPayload(state.exercises, 'kg');
+      expect(payload[0].sets[0].notes).toBe('slow tempo');
+      expect(payload[0].sets[1].notes).toBeNull();
+    });
+  });
+
+  describe('SET_EXERCISE_NOTES', () => {
+    const stateWithExercise = (notes?: string | null): WorkoutDraft => ({
+      ...makeEmptyDraft(),
+      exercises: [
+        {
+          clientId: 'a',
+          exerciseId: 'ex-1',
+          exerciseName: 'Bench Press',
+          exerciseCategory: null,
+          images: [],
+          notes,
+          sets: [{ clientId: 'a-s1', weight: '100', reps: '5' }],
+        },
+      ],
+    });
+
+    it('trims and stores the note, round-tripping it into the payload', () => {
+      const state = workoutFormReducer(stateWithExercise(), {
+        type: 'SET_EXERCISE_NOTES',
+        exerciseClientId: 'a',
+        notes: '  felt heavy  ',
+      });
+      expect(state.exercises[0].notes).toBe('felt heavy');
+      expect(buildExercisesPayload(state.exercises, 'kg')[0].notes).toBe('felt heavy');
+    });
+
+    it('clears the note when the text is empty', () => {
+      const state = workoutFormReducer(stateWithExercise('felt heavy'), {
+        type: 'SET_EXERCISE_NOTES',
+        exerciseClientId: 'a',
+        notes: '   ',
+      });
+      expect(state.exercises[0].notes).toBeNull();
+      expect(buildExercisesPayload(state.exercises, 'kg')[0].notes).toBeNull();
+    });
+
+    it('returns the state identity when nothing changes', () => {
+      const state = stateWithExercise('felt heavy');
+      const next = workoutFormReducer(state, {
+        type: 'SET_EXERCISE_NOTES',
+        exerciseClientId: 'a',
+        notes: ' felt heavy ',
+      });
+      expect(next).toBe(state);
     });
   });
 
@@ -1261,7 +1594,7 @@ describe('workoutFormReducer', () => {
         ],
       };
 
-      const result = getWorkoutDraftSubmission(state, 'kg');
+      const result = getWorkoutDraftSubmission(state, 'kg', 'km');
 
       expect(result.name).toBe('Push Day');
       expect(result.entryDate).toBe('2026-03-20');
@@ -1273,6 +1606,7 @@ describe('workoutFormReducer', () => {
           exercise_id: 'uuid-1',
           sort_order: 0,
           duration_minutes: 0,
+          notes: null,
           superset_group: null,
           sets: [
             {
@@ -1281,6 +1615,7 @@ describe('workoutFormReducer', () => {
               reps: 5,
               set_type: null,
               duration: null,
+              distance: null,
               notes: null,
               rpe: null,
               completed_at: null,
@@ -1307,7 +1642,7 @@ describe('workoutFormReducer', () => {
         ],
       };
 
-      const result = getWorkoutDraftSubmission(state, 'lbs');
+      const result = getWorkoutDraftSubmission(state, 'lbs', 'miles');
 
       expect(result.name).toBe('Workout');
       expect(result.exerciseCount).toBe(0);

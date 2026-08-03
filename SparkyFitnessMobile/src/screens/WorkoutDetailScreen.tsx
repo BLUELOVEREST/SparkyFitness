@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import Animated, { LinearTransition } from 'react-native-reanimated';
@@ -13,7 +13,12 @@ import Button from '../components/ui/Button';
 import WorkoutFormExerciseList, {
   type WorkoutFormExerciseListHandle,
 } from '../components/WorkoutFormExerciseList';
+import { useSetEditAccessoryBar } from '../components/SetRowChrome';
 import ActiveWorkoutExerciseCard from '../components/ActiveWorkoutExerciseCard';
+import ActionSheet, {
+  type ActionSheetItem,
+  type ActionSheetRef,
+} from '../components/ActionSheet';
 import { MetricColumnMenu } from '../components/WorkoutMenus';
 import { type AnchorRect } from '../components/AnchoredMenu';
 import {
@@ -28,7 +33,7 @@ import {
   useDeleteWorkout,
   useUpdateWorkout,
 } from '../hooks/useExerciseMutations';
-import { flushActiveWorkoutBeforeClear } from '../hooks/useActiveWorkoutAutosave';
+import { promptForActiveWorkoutConflict } from '../hooks/useStartLiveWorkout';
 import { usePreferences } from '../hooks/usePreferences';
 import { useExerciseImageSource } from '../hooks/useExerciseImageSource';
 import { useSelectedExercise } from '../hooks/useSelectedExercise';
@@ -55,6 +60,7 @@ import { useScreenHeader, SAVE_LABEL, SAVING_LABEL, type HeaderItem } from '../h
 import { useSupersetBorders } from '../components/ActiveWorkoutRail';
 import type { RootStackScreenProps } from '../types/navigation';
 import type { UpdatePresetSessionRequest } from '@workspace/shared';
+import { canEditGroupedWorkout } from '@workspace/shared';
 
 type Props = RootStackScreenProps<'WorkoutDetail'>;
 
@@ -64,6 +70,7 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const queryClient = useQueryClient();
   const { preferences } = usePreferences();
   const weightUnit = preferences?.default_weight_unit ?? 'kg';
+  const distanceUnit = (preferences?.default_distance_unit as 'km' | 'miles') ?? 'km';
 
   const calendarSheetRef = useRef<CalendarSheetRef>(null);
   const exerciseListRef = useRef<WorkoutFormExerciseListHandle>(null);
@@ -89,14 +96,22 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   // Metric column is shared with the active-workout screen; changing it on
   // either screen changes both (intended).
   const metricColumn = useAppPreferencesStore((s) => s.activeWorkoutMetricColumn);
-  const [metricMenuAnchor, setMetricMenuAnchor] = useState<AnchorRect | null>(null);
-  const handlePressMetricHeader = useCallback((anchor: AnchorRect) => {
-    setMetricMenuAnchor(anchor);
-  }, []);
+  const [metricMenu, setMetricMenu] = useState<{
+    anchor: AnchorRect;
+    clampedToRpe: boolean;
+  } | null>(null);
+  const handlePressMetricHeader = useCallback(
+    (anchor: AnchorRect, clampedToRpe: boolean) => {
+      setMetricMenu({ anchor, clampedToRpe });
+    },
+    [],
+  );
 
-  // Active workout state (narrow selectors to avoid re-rendering on unrelated changes)
+  // Active workout state (narrow selector to avoid re-rendering on unrelated
+  // changes). The Diary routes the live session to ActiveWorkout instead of
+  // here, but this gate still hides Start actions if the screen is reached
+  // for the live session some other way.
   const activeSessionId = useActiveWorkoutStore((s) => s.sessionId);
-  const activeSetId = useActiveWorkoutStore((s) => s.activeSetId);
   const activeWorkoutBarPadding = useActiveWorkoutBarPadding('stack');
   const isWorkoutActive = activeSessionId === session.id;
 
@@ -104,26 +119,8 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  // Auto-expand the exercise containing the active set while the workout is
-  // running for this session, so opening the detail page mid-workout (e.g.
-  // from the Diary) lands with the current exercise already open. Never
-  // auto-collapses; the user can still close it manually, and it re-expands
-  // only when the active set advances into a different exercise.
-  useEffect(() => {
-    if (!isWorkoutActive || activeSetId == null) return;
-    const activeExercise = session.exercises.find(ex =>
-      ex.sets.some(s => String(s.id) === activeSetId),
-    );
-    if (!activeExercise) return;
-    // Syncs the expanded section to the external active-workout store; guarded so
-    // it only auto-expands the active exercise, never collapses a user's choice.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setExpandedSections(prev =>
-      prev[activeExercise.id] ? prev : { ...prev, [activeExercise.id]: true },
-    );
-  }, [isWorkoutActive, activeSetId, session]);
-
-  const { label: sourceLabel, isSparky } = getSourceLabel(session.source);
+  const sourceLabel = getSourceLabel(session.source);
+  const canEdit = canEditGroupedWorkout(session.source);
   const entryDate = session.entry_date ?? '';
   const normalizedDate = normalizeDate(entryDate);
 
@@ -154,12 +151,15 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     state: formState,
     addExercise,
     removeExercise,
+    replaceExercise,
+    clearExerciseCompletions,
     addSet,
     removeSet,
     updateSetField,
     updateSetMeta,
     setExerciseRest,
     setExerciseCalories,
+    setExerciseNotes,
     supersetWith,
     ungroupExercise,
     reorderExercises,
@@ -169,8 +169,8 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     exercisesModifiedRef,
   } = useWorkoutForm({ isEditMode: true, skipDraftLoad: true });
   const submission = useMemo(
-    () => getWorkoutDraftSubmission(formState, weightUnit as 'kg' | 'lbs'),
-    [formState, weightUnit],
+    () => getWorkoutDraftSubmission(formState, weightUnit as 'kg' | 'lbs', distanceUnit),
+    [formState, weightUnit, distanceUnit],
   );
   const hasEditedExercisesWithSets = submission.canSave;
 
@@ -189,6 +189,21 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     [addExercise],
   );
 
+  // A replaced exercise is effectively freshly added: mark it prefill-eligible
+  // so its empty set seeds from the new exercise's history.
+  const wrappedReplaceExercise = useCallback(
+    (clientId: string, exercise: Parameters<typeof replaceExercise>[1]) => {
+      const result = replaceExercise(clientId, exercise);
+      setEligibleIds(prev => {
+        const next = new Set(prev);
+        next.add(clientId);
+        return next;
+      });
+      return result;
+    },
+    [replaceExercise],
+  );
+
   const {
     activeSetKey,
     activeSetField,
@@ -197,7 +212,21 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     handleAddSet,
     activateSet,
     deactivateSet,
-  } = useExerciseSetEditing({ addExercise: wrappedAddExercise, removeExercise, addSet });
+    setReplaceTarget,
+  } = useExerciseSetEditing({
+    addExercise: wrappedAddExercise,
+    removeExercise,
+    addSet,
+    replaceExercise: wrappedReplaceExercise,
+  });
+
+  // Sticky Done/Next bar for the focused set cell (edit mode), on both
+  // platforms.
+  const { onRegisterAccessoryHandle, accessoryBar } = useSetEditAccessoryBar({
+    activeSetKey,
+    activeSetField,
+    onDeactivateSet: deactivateSet,
+  });
 
   const isEligibleForPrefill = useCallback(
     (clientId: string) => eligibleIds.has(clientId),
@@ -205,11 +234,11 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   );
 
   const startEditing = useCallback(() => {
-    populate(session, weightUnit as 'kg' | 'lbs');
+    populate(session, weightUnit as 'kg' | 'lbs', distanceUnit);
     setEditNotes(session.notes ?? '');
     setEligibleIds(new Set());
     setIsEditing(true);
-  }, [populate, session, weightUnit]);
+  }, [populate, session, weightUnit, distanceUnit]);
 
   const cancelEditing = useCallback(() => {
     setIsEditing(false);
@@ -258,75 +287,81 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     [session, navigation],
   );
 
-  // Start this workout, first offering to clear any other in-progress session
-  // (mirrors useStartLiveWorkout's "Replace current workout?" prompt). The
+  // Start this workout, first resolving any other in-progress session through
+  // the shared conflict prompt (go to it, or clear it and start this one). The
   // Start button and "Start workout here" long-press are both gated on
   // !isWorkoutActive, so a non-null sessionId here means a *different* workout.
   const beginWorkout = useCallback(
     (atSetId?: string) => {
-      if (useActiveWorkoutStore.getState().sessionId !== null) {
-        Alert.alert(
-          'Replace current workout?',
-          'You already have a workout in progress. Starting this one clears it here. Any sets already saved stay in your diary.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Clear & Start',
-              style: 'destructive',
-              onPress: () => {
-                void (async () => {
-                  // Best-effort save of the in-progress session before dropping
-                  // it locally, mirroring the HUD's Clear action.
-                  await flushActiveWorkoutBeforeClear(queryClient);
-                  useActiveWorkoutStore.getState().clearWorkout();
-                  enterLiveWorkout(atSetId);
-                })();
-              },
-            },
-          ],
-        );
-        return;
-      }
+      const prompted = promptForActiveWorkoutConflict(queryClient, {
+        onGoToWorkout: () => navigation.navigate('ActiveWorkout'),
+        onClearAndStart: () => enterLiveWorkout(atSetId),
+      });
+      if (prompted) return;
       enterLiveWorkout(atSetId);
     },
-    [queryClient, enterLiveWorkout],
+    [queryClient, navigation, enterLiveWorkout],
   );
 
   const handleStartWorkout = () => beginWorkout();
 
+  // Long-pressing a set opens a menu-style bottom sheet (same ActionSheet the
+  // live/edit exercise ⋮ menus use). Gated on canEdit like the Start button:
+  // sessions that are not editable (external/unknown sources) can be neither
+  // edited nor run live — a live workout autosaves via the nested-exercise
+  // update, which the server rejects (409) for them.
+  const setMenuSheetRef = useRef<ActionSheetRef>(null);
+  const [setMenuTargetId, setSetMenuTargetId] = useState<string | null>(null);
   const handleLongPressSet = useCallback(
     (setId: string) => {
-      const buttons: {
-        text: string;
-        style?: 'cancel' | 'destructive';
-        onPress?: () => void;
-      }[] = [];
-
-      if (isSparky) {
-        buttons.push({ text: 'Edit', onPress: startEditing });
-      }
-
-      // Gated on isSparky like the Start button: a live workout autosaves via
-      // the nested-exercise update, which the server rejects (409) for
-      // synced (non-manual/sparky) sessions.
-      if (!isWorkoutActive && isSparky) {
-        buttons.push({
-          text: 'Start workout here',
-          onPress: () => beginWorkout(setId),
-        });
-      }
-
-      if (buttons.length === 0) return;
-
-      buttons.push({ text: 'Cancel', style: 'cancel' });
-      Alert.alert(name, undefined, buttons);
+      if (!canEdit) return;
+      setSetMenuTargetId(setId);
+      setMenuSheetRef.current?.present();
     },
-    [isSparky, isWorkoutActive, name, startEditing, beginWorkout],
+    [canEdit],
   );
 
+  const setMenuItems = useMemo<ActionSheetItem[]>(() => {
+    if (setMenuTargetId == null) return [];
+    const items: ActionSheetItem[] = [
+      { key: 'edit', label: 'Edit', onPress: startEditing },
+    ];
+    if (!isWorkoutActive) {
+      items.push({
+        key: 'start-here',
+        label: 'Start workout here',
+        onPress: () => beginWorkout(setMenuTargetId),
+      });
+    }
+    return items;
+  }, [setMenuTargetId, isWorkoutActive, startEditing, beginWorkout]);
+
+  // "Save as preset": review-and-save through the preset create form,
+  // prefilled from this session. Not gated on canEdit — templating a synced
+  // workout (e.g. a Garmin strength import) only reads the session.
+  const handleSaveAsPreset = useCallback(() => {
+    navigation.navigate('WorkoutPresetForm', {
+      mode: 'create-preset',
+      sourceSession: session,
+    });
+  }, [navigation, session]);
+
   const openExerciseSearch = () => {
+    // Plain Add: drop any pending replace target so a cancelled replace can't
+    // misroute this add.
+    setReplaceTarget(null);
     navigation.navigate('ExerciseSearch', { returnKey: route.key });
   };
+
+  // ⋮ "Replace exercise": the next ExerciseSearch return swaps this entry in
+  // place instead of appending.
+  const handleReplaceExercise = useCallback(
+    (clientId: string) => {
+      setReplaceTarget(clientId);
+      navigation.navigate('ExerciseSearch', { returnKey: route.key });
+    },
+    [setReplaceTarget, navigation, route.key],
+  );
 
   // Tap an exercise thumbnail → its library detail. Session entries carry a
   // full snapshot, so the detail screen opens with muscles/equipment already
@@ -395,8 +430,10 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             activeSetId={null}
             metricColumn={metricColumn}
             weightUnit={weightUnit as 'kg' | 'lbs'}
+            distanceUnit={distanceUnit}
             getImageSource={getImageSource}
-            showRestChip={isSparky}
+            excludePresetEntryId={session.id}
+            showRestChip={canEdit}
             onPressThumb={handleViewExercise}
             onToggleExpanded={toggleSection}
             onPressMetricHeader={handlePressMetricHeader}
@@ -541,6 +578,15 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     accessibilityLabel: 'Reorder exercises',
     identifier: 'workout-detail-reorder',
   };
+  const saveAsPresetHeaderItem: HeaderItem = {
+    kind: 'icon',
+    sfSymbol: 'bookmark',
+    ionicon: 'bookmark-outline',
+    role: 'secondary',
+    onPress: handleSaveAsPreset,
+    accessibilityLabel: 'Save as preset',
+    identifier: 'workout-detail-save-as-preset',
+  };
 
   // Small inline native title (set in App.tsx as a small title so re-applying it
   // for the edit-mode swap updates in place rather than flying in a large one).
@@ -566,16 +612,19 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       ? canReorderEdit
         ? [reorderHeaderItem, saveHeaderItem]
         : saveHeaderItem
-      : isSparky
-        ? {
-            kind: 'text',
-            label: 'Edit',
-            role: 'secondary',
-            onPress: startEditing,
-            accessibilityLabel: 'Edit workout',
-            identifier: 'workout-detail-edit',
-          }
-        : null,
+      : canEdit
+        ? [
+            saveAsPresetHeaderItem,
+            {
+              kind: 'text',
+              label: 'Edit',
+              role: 'secondary',
+              onPress: startEditing,
+              accessibilityLabel: 'Edit workout',
+              identifier: 'workout-detail-edit',
+            },
+          ]
+        : saveAsPresetHeaderItem,
   });
 
   // Native-header mode: the glass header (above) replaces the custom header,
@@ -637,26 +686,28 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         {renderSummaryCard()}
 
         {/* Start Workout button */}
-        {!isEditing && isSparky && !isWorkoutActive && (
+        {!isEditing && canEdit && !isWorkoutActive && (
           <Button variant="primary" onPress={handleStartWorkout} className="mt-4">
             Start Workout
           </Button>
         )}
 
-        {/* Exercises render full-bleed: cancel the scroll container's px-4 so
-            the card separators reach the screen edges. */}
-        <View className="-mx-4">
+        {/* Pull back part of the scroll container's px-4 so the cards sit at
+            the same 12px inset as the active workout screen (px-3). */}
+        <View className="-mx-1">
           {isEditing ? (
             <WorkoutFormExerciseList
               ref={exerciseListRef}
               exercises={formState.exercises}
               weightUnit={weightUnit as 'kg' | 'lbs'}
+              distanceUnit={distanceUnit}
               getImageSource={getImageSource}
               excludePresetEntryId={session.id}
               activeSetKey={activeSetKey}
               activeSetField={activeSetField}
               onActivateSet={activateSet}
               onDeactivateSet={deactivateSet}
+              onRegisterAccessoryHandle={onRegisterAccessoryHandle}
               updateSetField={updateSetField}
               updateSetMeta={updateSetMeta}
               removeSet={removeSet}
@@ -664,6 +715,9 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
               onRemoveExercise={handleRemoveExercise}
               setExerciseRest={setExerciseRest}
               setExerciseCalories={setExerciseCalories}
+              setExerciseNotes={setExerciseNotes}
+              onReplaceExercise={handleReplaceExercise}
+              clearExerciseCompletions={clearExerciseCompletions}
               supersetWith={supersetWith}
               ungroupExercise={ungroupExercise}
               onReorderExercises={reorderExercises}
@@ -732,9 +786,19 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
       />
 
       <MetricColumnMenu
-        anchor={metricMenuAnchor}
-        onClose={() => setMetricMenuAnchor(null)}
+        anchor={metricMenu?.anchor ?? null}
+        onClose={() => setMetricMenu(null)}
+        includeWeightMetrics={!metricMenu?.clampedToRpe}
       />
+
+      <ActionSheet
+        ref={setMenuSheetRef}
+        title={name}
+        items={setMenuItems}
+        onDismiss={() => setSetMenuTargetId(null)}
+      />
+
+      {accessoryBar}
     </>
   );
 

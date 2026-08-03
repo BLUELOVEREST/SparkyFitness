@@ -25,43 +25,76 @@ type LegacyKey = keyof typeof LEGACY_KEYS;
 /** Which stat the active-workout log shows in its per-set metric column. */
 export type ActiveWorkoutMetricColumn = 'rpe' | 'volume' | 'e1rm' | 'tenrm';
 
+/** Factory default rest period between sets, in seconds. */
+export const DEFAULT_REST_SEC = 90;
+
 export const PREFERENCE_DEFAULTS = {
   hapticsEnabled: true,
   soundsEnabled: true,
   notificationsEnabled: true,
+  restTimerNotificationsEnabled: true,
+  fastingGoalNotificationsEnabled: true,
   hydrationCardVisible: true,
   fastingCardVisible: true,
+  cycleCardVisible: true,
   askSparkyVisible: true,
+  medicationsCardVisible: true,
+  medicationRemindersEnabled: true,
+  medicationReminderRepeats: true,
+  medicationReminderHideNames: false,
   liquidGlassTabBarEnabled: false,
   activeWorkoutMetricColumn: 'rpe' as ActiveWorkoutMetricColumn,
   diarySummaryVisible: false,
   diarySummaryExpanded: false,
+  defaultRestSec: DEFAULT_REST_SEC as number,
+  restTimerSoundEnabled: true,
+  workoutKeepAwakeEnabled: false,
 } as const;
 
 export type AppPreferencesData = {
   hapticsEnabled: boolean;
   soundsEnabled: boolean;
   notificationsEnabled: boolean;
+  restTimerNotificationsEnabled: boolean;
+  fastingGoalNotificationsEnabled: boolean;
   hydrationCardVisible: boolean;
   fastingCardVisible: boolean;
+  cycleCardVisible: boolean;
   askSparkyVisible: boolean;
+  medicationsCardVisible: boolean;
+  medicationRemindersEnabled: boolean;
+  medicationReminderRepeats: boolean;
+  medicationReminderHideNames: boolean;
   liquidGlassTabBarEnabled: boolean;
   activeWorkoutMetricColumn: ActiveWorkoutMetricColumn;
   diarySummaryVisible: boolean;
   diarySummaryExpanded: boolean;
+  defaultRestSec: number;
+  restTimerSoundEnabled: boolean;
+  workoutKeepAwakeEnabled: boolean;
 };
 
 export interface AppPreferencesState extends AppPreferencesData {
   setHapticsEnabled: (value: boolean) => void;
   setSoundsEnabled: (value: boolean) => void;
   setNotificationsEnabled: (value: boolean) => void;
+  setRestTimerNotificationsEnabled: (value: boolean) => void;
+  setFastingGoalNotificationsEnabled: (value: boolean) => void;
   setHydrationCardVisible: (value: boolean) => void;
   setFastingCardVisible: (value: boolean) => void;
+  setCycleCardVisible: (value: boolean) => void;
   setAskSparkyVisible: (value: boolean) => void;
+  setMedicationsCardVisible: (value: boolean) => void;
+  setMedicationRemindersEnabled: (value: boolean) => void;
+  setMedicationReminderRepeats: (value: boolean) => void;
+  setMedicationReminderHideNames: (value: boolean) => void;
   setLiquidGlassTabBarEnabled: (value: boolean) => void;
   setActiveWorkoutMetricColumn: (value: ActiveWorkoutMetricColumn) => void;
   setDiarySummaryVisible: (value: boolean) => void;
   setDiarySummaryExpanded: (value: boolean) => void;
+  setDefaultRestSec: (value: number) => void;
+  setRestTimerSoundEnabled: (value: boolean) => void;
+  setWorkoutKeepAwakeEnabled: (value: boolean) => void;
 }
 
 /**
@@ -108,13 +141,23 @@ export const useAppPreferencesStore = create<AppPreferencesState>()(
       setHapticsEnabled: (value) => set({ hapticsEnabled: value }),
       setSoundsEnabled: (value) => set({ soundsEnabled: value }),
       setNotificationsEnabled: (value) => set({ notificationsEnabled: value }),
+      setRestTimerNotificationsEnabled: (value) => set({ restTimerNotificationsEnabled: value }),
+      setFastingGoalNotificationsEnabled: (value) => set({ fastingGoalNotificationsEnabled: value }),
       setHydrationCardVisible: (value) => set({ hydrationCardVisible: value }),
       setFastingCardVisible: (value) => set({ fastingCardVisible: value }),
+      setCycleCardVisible: (value) => set({ cycleCardVisible: value }),
       setAskSparkyVisible: (value) => set({ askSparkyVisible: value }),
+      setMedicationsCardVisible: (value) => set({ medicationsCardVisible: value }),
+      setMedicationRemindersEnabled: (value) => set({ medicationRemindersEnabled: value }),
+      setMedicationReminderRepeats: (value) => set({ medicationReminderRepeats: value }),
+      setMedicationReminderHideNames: (value) => set({ medicationReminderHideNames: value }),
       setLiquidGlassTabBarEnabled: (value) => set({ liquidGlassTabBarEnabled: value }),
       setActiveWorkoutMetricColumn: (value) => set({ activeWorkoutMetricColumn: value }),
       setDiarySummaryVisible: (value) => set({ diarySummaryVisible: value }),
       setDiarySummaryExpanded: (value) => set({ diarySummaryExpanded: value }),
+      setDefaultRestSec: (value) => set({ defaultRestSec: value }),
+      setRestTimerSoundEnabled: (value) => set({ restTimerSoundEnabled: value }),
+      setWorkoutKeepAwakeEnabled: (value) => set({ workoutKeepAwakeEnabled: value }),
     }),
     {
       name: STORE_KEY,
@@ -124,15 +167,25 @@ export const useAppPreferencesStore = create<AppPreferencesState>()(
         hapticsEnabled: state.hapticsEnabled,
         soundsEnabled: state.soundsEnabled,
         notificationsEnabled: state.notificationsEnabled,
+        restTimerNotificationsEnabled: state.restTimerNotificationsEnabled,
+        fastingGoalNotificationsEnabled: state.fastingGoalNotificationsEnabled,
         hydrationCardVisible: state.hydrationCardVisible,
         fastingCardVisible: state.fastingCardVisible,
+        cycleCardVisible: state.cycleCardVisible,
         askSparkyVisible: state.askSparkyVisible,
+        medicationsCardVisible: state.medicationsCardVisible,
+        medicationRemindersEnabled: state.medicationRemindersEnabled,
+        medicationReminderRepeats: state.medicationReminderRepeats,
+        medicationReminderHideNames: state.medicationReminderHideNames,
         liquidGlassTabBarEnabled: state.liquidGlassTabBarEnabled,
-        // Older persisted blobs without this key backfill via the default
+        // Older persisted blobs without these keys backfill via the default
         // shallow merge — no version bump needed.
         activeWorkoutMetricColumn: state.activeWorkoutMetricColumn,
         diarySummaryVisible: state.diarySummaryVisible,
         diarySummaryExpanded: state.diarySummaryExpanded,
+        defaultRestSec: state.defaultRestSec,
+        restTimerSoundEnabled: state.restTimerSoundEnabled,
+        workoutKeepAwakeEnabled: state.workoutKeepAwakeEnabled,
       }),
       migrate: (persistedState, version) => {
         if (
@@ -152,6 +205,16 @@ export const useAppPreferencesStore = create<AppPreferencesState>()(
     },
   ),
 );
+
+/**
+ * The user's default rest period in seconds, for non-React callers (stores,
+ * reducers, payload builders). Components should subscribe with
+ * `useAppPreferencesStore((s) => s.defaultRestSec)` instead so they re-render
+ * when the setting changes.
+ */
+export function getDefaultRestSec(): number {
+  return useAppPreferencesStore.getState().defaultRestSec;
+}
 
 /**
  * Test-only helper — resets store state to defaults and clears the persisted

@@ -27,7 +27,7 @@ import { flushActiveWorkoutBeforeClear } from '../hooks/useActiveWorkoutAutosave
 import { usePreferences } from '../hooks/usePreferences';
 import { useRestCountdown } from '../hooks/useRestCountdown';
 import {
-  describeActiveSet,
+  describeActiveSetAssumed,
   formatRestCountdown,
   formatSetLoad,
   normalizeWeightUnit,
@@ -63,12 +63,15 @@ const EMBEDDED_FAB_CLEARANCE = 6;
 type StackTransitionSnapshot = {
   phase: 'idle' | 'start' | 'end';
   closing: boolean;
+  /** Key of the route the transition belongs to; null when unknown. */
+  routeKey: string | null;
   tick: number;
 };
 
 let stackTransitionSnapshot: StackTransitionSnapshot = {
   phase: 'idle',
   closing: false,
+  routeKey: null,
   tick: 0,
 };
 
@@ -82,10 +85,12 @@ const tabBarHeightListeners = new Set<() => void>();
 export function notifyActiveWorkoutBarStackTransition(
   phase: 'start' | 'end',
   closing: boolean,
+  routeKey?: string,
 ) {
   stackTransitionSnapshot = {
     phase,
     closing,
+    routeKey: routeKey ?? null,
     tick: stackTransitionSnapshot.tick + 1,
   };
   stackTransitionListeners.forEach(listener =>
@@ -164,8 +169,16 @@ function computeNavInfo(state: NavigationState | undefined): {
   suppressed: boolean;
   isOnTabs: boolean;
   tabsUnderTop: boolean;
+  topRouteKey: string | null;
 } {
-  if (!state) return { suppressed: false, isOnTabs: false, tabsUnderTop: false };
+  if (!state) {
+    return {
+      suppressed: false,
+      isOnTabs: false,
+      tabsUnderTop: false,
+      topRouteKey: null,
+    };
+  }
   const index = state.index ?? 0;
   const name = state.routes[index]?.name ?? null;
   const previousName = index > 0 ? state.routes[index - 1]?.name : null;
@@ -173,7 +186,28 @@ function computeNavInfo(state: NavigationState | undefined): {
     suppressed: name != null && HIDDEN_ROUTES.has(name),
     isOnTabs: name === 'Tabs',
     tabsUnderTop: previousName === 'Tabs',
+    topRouteKey: state.routes[index]?.key ?? null,
   };
+}
+
+/**
+ * The HUD may render on a suppressed route only while that route is being
+ * dismissed to reveal Tabs, so the bar can slide into its above-tab-bar
+ * position during the swipe/close. The transition must belong to the current
+ * top route: a pop can also *land* on a suppressed route with Tabs underneath
+ * (e.g. ExerciseSearch back to ActiveWorkout), and its closing snapshot —
+ * which lingers at 'end' until the next transition — must not keep the bar
+ * visible there. A null routeKey (no emitting screen known) is trusted.
+ */
+export function isClosingToTabsTransition(
+  navInfo: { tabsUnderTop: boolean; topRouteKey: string | null },
+  transition: Pick<StackTransitionSnapshot, 'phase' | 'closing' | 'routeKey'>,
+): boolean {
+  if (transition.phase !== 'start' && transition.phase !== 'end') return false;
+  if (!transition.closing || !navInfo.tabsUnderTop) return false;
+  return (
+    transition.routeKey == null || transition.routeKey === navInfo.topRouteKey
+  );
 }
 
 function clampProgress(value: number): number {
@@ -282,6 +316,8 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
   const sessionId = useActiveWorkoutStore(s => s.sessionId);
   const activeSession = useActiveWorkoutStore(s => s.session);
   const activeSetId = useActiveWorkoutStore(s => s.activeSetId);
+  const previousSessionSets = useActiveWorkoutStore(s => s.previousSessionSets);
+  const plannedSetValues = useActiveWorkoutStore(s => s.plannedSetValues);
   const { state: restState, remainingMs, progress } = useRestCountdown();
   const queryClient = useQueryClient();
   const { preferences } = usePreferences();
@@ -303,7 +339,8 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
       setNavInfo(prev =>
         prev.suppressed === next.suppressed &&
         prev.isOnTabs === next.isOnTabs &&
-        prev.tabsUnderTop === next.tabsUnderTop
+        prev.tabsUnderTop === next.tabsUnderTop &&
+        prev.topRouteKey === next.topRouteKey
           ? prev
           : next,
       );
@@ -323,10 +360,7 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
   const tabBarBottomOffset =
     nativeTabBarHeight ?? TAB_BAR_HEIGHT + Math.max(insets.bottom, 4);
   const stackBottomOffset = insets.bottom;
-  const isClosingToTabs =
-    (stackTransition.phase === 'start' || stackTransition.phase === 'end') &&
-    stackTransition.closing &&
-    navInfo.tabsUnderTop;
+  const isClosingToTabs = isClosingToTabsTransition(navInfo, stackTransition);
   const shouldSitAboveTabs =
     usesNativeTabs && (isClosingToTabs || navInfo.isOnTabs);
   const bottomOffset = useSharedValue(
@@ -363,7 +397,8 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
       setStackTransition(prev => {
         if (
           prev.phase === snapshot.phase &&
-          prev.closing === snapshot.closing
+          prev.closing === snapshot.closing &&
+          prev.routeKey === snapshot.routeKey
         ) {
           return prev;
         }
@@ -417,7 +452,14 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
   // against the session snapshot since `steps` only holds name/restSec.
   // Split into discrete fields so the rendering can stack "status: name -
   // set N/M" on one row and the load ("135 lbs × 8") on a second row.
-  const activeSetDescription = describeActiveSet(activeSession, activeSetId);
+  // Assumed-aware: an upcoming set with empty fields shows its placeholder
+  // target, matching the gray values the live row renders.
+  const activeSetDescription = describeActiveSetAssumed(
+    activeSession,
+    activeSetId,
+    previousSessionSets,
+    plannedSetValues,
+  );
   const activeSetLabel =
     activeSetDescription == null
       ? null
@@ -433,10 +475,7 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
       : stackBottomOffset;
 
     if (usesNativeTabs) {
-      const isNativeClosingToTabs =
-        navInfo.tabsUnderTop && stackTransition.closing;
-
-      if (!isNativeClosingToTabs) {
+      if (!isClosingToTabs) {
         // Writing a Reanimated shared value from an effect is the supported API;
         // the compiler's immutability rule flags it as a mutation regardless.
         // eslint-disable-next-line react-hooks/immutability
@@ -453,10 +492,9 @@ const ActiveWorkoutBar: React.FC<ActiveWorkoutBarProps> = ({
     bottomOffset.value = withTiming(targetBottomOffset, config);
   }, [
     bottomOffset,
-    navInfo.tabsUnderTop,
+    isClosingToTabs,
     shouldSitAboveTabs,
     stackBottomOffset,
-    stackTransition.closing,
     stackTransition.phase,
     stackTransition.tick,
     tabBarBottomOffset,

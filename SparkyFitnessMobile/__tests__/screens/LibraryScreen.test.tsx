@@ -11,6 +11,7 @@ import { fetchWorkoutPresetsPage } from '../../src/services/api/workoutPresetsAp
 jest.mock('../../src/hooks', () => ({
   useFoods: jest.fn(),
   useMeals: jest.fn(),
+  useMedications: jest.fn(() => ({ data: [], isLoading: false, isError: false, refetch: jest.fn() })),
   useRecentMeals: jest.fn(),
   useServerConnection: jest.fn(),
   useSuggestedExercises: jest.fn(),
@@ -314,6 +315,12 @@ describe('LibraryScreen', () => {
     const screen = renderScreen();
     fireEvent.press(screen.getByText('Workout Plans'));
     expect(navigation.navigate).toHaveBeenCalledWith('WorkoutPlanTemplates');
+  });
+
+  it('navigates to MedicationsList when the Medications row is pressed', () => {
+    const screen = renderScreen();
+    fireEvent.press(screen.getByText('Medications'));
+    expect(navigation.navigate).toHaveBeenCalledWith('MedicationsList');
   });
 
   it('does not queue multiple create screens during the same navigation transition', () => {

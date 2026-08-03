@@ -1,10 +1,14 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import WorkoutDetailScreen from '../../src/screens/WorkoutDetailScreen';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { __resetActiveWorkoutStoreForTests } from '../../src/stores/activeWorkoutStore';
+import type { ActionSheetItem } from '../../src/components/ActionSheet';
+import {
+  __resetActiveWorkoutStoreForTests,
+  useActiveWorkoutStore,
+} from '../../src/stores/activeWorkoutStore';
 import {
   useAppPreferencesStore,
   __resetAppPreferencesStoreForTests,
@@ -67,12 +71,54 @@ jest.mock('../../src/components/Icon', () => {
   };
 });
 
+// The start-workout path fires notification-permission prompts and forgets
+// the promise; stub them so tests stay deterministic. requireActual keeps the
+// rest of the module intact for the active-workout store's imports.
+jest.mock('../../src/services/notifications', () => ({
+  ...jest.requireActual('../../src/services/notifications'),
+  ensureNotificationPermission: jest.fn(() => Promise.resolve(true)),
+  maybePromptForExactAlarmPermission: jest.fn(() => Promise.resolve()),
+}));
+
+// Captures the set long-press sheet's props each render and exposes a
+// present spy, so tests can assert the imperative wiring and drive item
+// onPress callbacks directly (same pattern as ActiveWorkoutScreen.test.tsx).
+const mockSheet: {
+  present: jest.Mock;
+  dismiss: jest.Mock;
+  props: {
+    title: string;
+    items: ActionSheetItem[];
+    onDismiss?: () => void;
+  } | null;
+} = { present: jest.fn(), dismiss: jest.fn(), props: null };
+
+jest.mock('../../src/components/ActionSheet', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: React.forwardRef((props: any, ref: any) => {
+      React.useEffect(() => {
+        mockSheet.props = props;
+      });
+      React.useImperativeHandle(ref, () => ({
+        present: mockSheet.present,
+        dismiss: mockSheet.dismiss,
+      }));
+      return null;
+    }),
+  };
+});
+
 const mockNavigation = {
   setOptions: jest.fn(),
   navigate: jest.fn(),
   goBack: jest.fn(),
   replace: jest.fn(),
   setParams: jest.fn(),
+  // Returns an unsubscribe; useExerciseSetEditing subscribes to 'transitionEnd'
+  // to defer add-exercise activation until the search modal finishes dismissing.
+  addListener: jest.fn(() => jest.fn()),
 } as any;
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
@@ -177,6 +223,7 @@ describe('WorkoutDetailScreen', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSheet.props = null;
     __resetActiveWorkoutStoreForTests();
     __resetAppPreferencesStoreForTests();
     mockUsePreferences.mockReturnValue({
@@ -238,25 +285,113 @@ describe('WorkoutDetailScreen', () => {
   it('hides the rest chip on imported (non-Sparky) workouts', () => {
     const sparky = renderScreen(buildSession());
     fireEvent.press(sparky.getByLabelText('Expand Bench Press'));
-    expect(sparky.getByText('Rest 1:30')).toBeTruthy();
+    expect(sparky.getByLabelText('Rest 1:30')).toBeTruthy();
     sparky.unmount();
 
     const imported = renderScreen(buildSession({ source: 'healthkit' }));
     fireEvent.press(imported.getByLabelText('Expand Bench Press'));
-    expect(imported.queryByText('Rest 1:30')).toBeNull();
+    expect(imported.queryByLabelText('Rest 1:30')).toBeNull();
+  });
+
+  describe('save as preset', () => {
+    it('routes the header bookmark to the prefilled create form', () => {
+      const session = buildSession();
+      const screen = renderScreen(session);
+
+      fireEvent.press(screen.getByLabelText('Save as preset'));
+
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('WorkoutPresetForm', {
+        mode: 'create-preset',
+        sourceSession: session,
+      });
+    });
+
+    it('stays available for imported (non-Sparky) workouts', () => {
+      const session = buildSession({ source: 'healthkit' });
+      const screen = renderScreen(session);
+
+      fireEvent.press(screen.getByLabelText('Save as preset'));
+
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('WorkoutPresetForm', {
+        mode: 'create-preset',
+        sourceSession: session,
+      });
+    });
+  });
+
+  describe('set long-press menu', () => {
+    const expandAndLongPressSet = (screen: ReturnType<typeof renderScreen>) => {
+      fireEvent.press(screen.getByLabelText('Expand Bench Press'));
+      fireEvent(screen.getByTestId('set-row'), 'longPress');
+    };
+
+    it('presents Edit and Start-workout-here for a Sparky workout', () => {
+      const screen = renderScreen(buildSession());
+      expandAndLongPressSet(screen);
+
+      expect(mockSheet.present).toHaveBeenCalled();
+      expect(mockSheet.props?.title).toBe('Push Day');
+      expect(mockSheet.props?.items.map(i => i.label)).toEqual([
+        'Edit',
+        'Start workout here',
+      ]);
+    });
+
+    it('enters edit mode from the Edit item', () => {
+      const screen = renderScreen(buildSession());
+      expandAndLongPressSet(screen);
+
+      const edit = mockSheet.props?.items.find(i => i.key === 'edit');
+      expect(edit).toBeDefined();
+      act(() => edit!.onPress());
+
+      expect(screen.getByLabelText('Add set to Bench Press')).toBeTruthy();
+    });
+
+    it('starts the workout at the long-pressed set', () => {
+      const screen = renderScreen(buildSession());
+      expandAndLongPressSet(screen);
+
+      const start = mockSheet.props?.items.find(i => i.key === 'start-here');
+      expect(start).toBeDefined();
+      act(() => start!.onPress());
+
+      expect(useActiveWorkoutStore.getState().sessionId).toBe('session-1');
+      expect(useActiveWorkoutStore.getState().activeSetId).toBe('101');
+      expect(mockNavigation.replace).toHaveBeenCalledWith('ActiveWorkout');
+    });
+
+    it('omits Start-workout-here while this session is already live', () => {
+      const session = buildSession();
+      act(() => useActiveWorkoutStore.getState().startWorkout(session));
+      const screen = renderScreen(session);
+      expandAndLongPressSet(screen);
+
+      expect(mockSheet.props?.items.map(i => i.key)).toEqual(['edit']);
+    });
+
+    it('does not open for imported workouts', () => {
+      const screen = renderScreen(buildSession({ source: 'healthkit' }));
+      expandAndLongPressSet(screen);
+
+      expect(mockSheet.present).not.toHaveBeenCalled();
+    });
   });
 
   describe('edit mode', () => {
-    it('excludes the edited session from the stats baseline', () => {
+    it('excludes the viewed and edited session from the stats baseline', () => {
       const screen = renderScreen(buildSession());
 
-      // View mode: the stats fetch is disabled entirely.
-      expect(mockUseExerciseStats).toHaveBeenCalledWith(null, undefined);
+      // View mode: session.id reaches the stats layer so the workout being
+      // viewed can't surface as its own Best.
+      expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', 'session-1');
+      expect(mockUseExerciseStats).not.toHaveBeenCalledWith(null, undefined);
+      mockUseExerciseStats.mockClear();
 
       fireEvent.press(screen.getByLabelText('Edit workout'));
 
-      // Edit mode: session.id reaches the stats layer so the workout being
-      // edited can't pollute its own Last/Best/recent-sessions baseline.
+      // Edit mode: same exclusion, so the workout being edited can't pollute
+      // its own Last/Best/recent-sessions baseline.
       expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', 'session-1');
     });
 
@@ -275,8 +410,8 @@ describe('WorkoutDetailScreen', () => {
       fireEvent.press(screen.getByLabelText('Change type for set 1'));
       fireEvent.press(screen.getByLabelText('Warmup'));
 
-      // Activate the row, type an RPE, blur to snap it to 0.5 steps.
-      fireEvent.press(screen.getByLabelText('Edit weight for set 1'));
+      // Inputs are always mounted in edit mode; type an RPE and blur to snap
+      // it to 0.5 steps.
       const rpeInput = screen.getByLabelText('RPE');
       fireEvent.changeText(rpeInput, '8.6');
       fireEvent(rpeInput, 'blur');
@@ -305,8 +440,8 @@ describe('WorkoutDetailScreen', () => {
       // The completed set shows a green check that now toggles completion.
       expect(screen.getByTestId('completed-badge')).toBeTruthy();
       expect(screen.getByLabelText('Un-complete set 1')).toBeTruthy();
-      // The value cell still activates for editing.
-      fireEvent.press(screen.getByLabelText('Edit weight for set 1'));
+      // The value cells stay editable (always-mounted inputs).
+      expect(screen.getByLabelText('Weight')).toBeTruthy();
       expect(screen.getByLabelText('RPE')).toBeTruthy();
     });
 
