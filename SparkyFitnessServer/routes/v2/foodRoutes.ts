@@ -431,7 +431,11 @@ const detailHandler: RequestHandler<{
       }
 
       case 'grocy': {
-        food = await getGrocyFoodDetails();
+        food = await getGrocyFoodDetails(
+          externalId,
+          credentials.base_url,
+          credentials.app_key
+        );
         break;
       }
     }
