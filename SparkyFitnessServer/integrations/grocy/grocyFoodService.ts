@@ -25,14 +25,17 @@ type GrocyConversion = {
 };
 
 type GrocyFood = {
-  id: number;
+  id: number | null;
   name: string;
   aliases?: string[];
   matched_alias?: string | null;
+  imported?: boolean;
   stock_unit?: GrocyUnit | null;
   nutrition?: GrocyNutrition | null;
   source?: {
+    type?: string | null;
     provider?: string | null;
+    external_id?: string | null;
   } | null;
   unit_conversions?: GrocyConversion[];
 };
@@ -227,11 +230,23 @@ function buildVariants(food: GrocyFood, nutrition: GrocyNutrition) {
 
 export function mapGrocyFood(food: GrocyFood): NormalizedFood | null {
   if (
-    !food?.id ||
+    !food ||
     !food.name ||
     !food.nutrition ||
     !hasCompleteNutrition(food.nutrition)
   ) {
+    return null;
+  }
+
+  const externalProvider = food.source?.provider || food.source?.type;
+  const externalId = food.source?.external_id;
+  const providerExternalId =
+    food.imported === false && externalProvider && externalId
+      ? `${externalProvider}:${externalId}`
+      : food.id
+        ? String(food.id)
+        : null;
+  if (!providerExternalId) {
     return null;
   }
 
@@ -244,7 +259,7 @@ export function mapGrocyFood(food: GrocyFood): NormalizedFood | null {
   return {
     name: food.name,
     brand: food.source?.provider || 'Grocy',
-    provider_external_id: String(food.id),
+    provider_external_id: providerExternalId,
     provider_type: 'grocy',
     provider_verified: true,
     macro_role: inferMacroRole({
@@ -366,5 +381,17 @@ export async function importFoodToGrocy(
     protein: variant.protein,
     fat: variant.fat,
     carbohydrates: variant.carbs,
+  });
+}
+
+export async function importGrocyFoodFromSource(
+  provider: string,
+  externalId: string,
+  baseUrl: string | undefined,
+  appKey: string | undefined
+) {
+  return postGrocyJson(baseUrl, appKey, '/api/eric/foods/import-from-source', {
+    provider,
+    external_id: externalId,
   });
 }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getGrocyFoodDetails,
+  importGrocyFoodFromSource,
   mapGrocyFood,
   searchGrocyFoods,
 } from '../integrations/grocy/grocyFoodService.js';
@@ -57,6 +58,30 @@ const grocyFood = {
       factor: 50,
     },
   ],
+};
+
+const booheeExternalFood = {
+  id: null,
+  imported: false,
+  name: 'Chicken Breast',
+  source: {
+    type: 'boohee',
+    provider: 'boohee',
+    external_id: 'boohee-chicken',
+  },
+  nutrition: {
+    basis_amount: 100,
+    basis_qu_id: 1,
+    basis_unit: {
+      id: 1,
+      name: 'g',
+      name_plural: 'g',
+    },
+    calories: 165,
+    protein: 31,
+    fat: 3.6,
+    carbohydrates: 0,
+  },
 };
 
 describe('grocyFoodService', () => {
@@ -155,6 +180,55 @@ describe('grocyFoodService', () => {
       totalCount: 15,
       hasMore: true,
     });
+  });
+
+  it('maps Grocy-returned Boohee external candidates as selectable foods', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      makeResponse({
+        foods: [booheeExternalFood],
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          totalCount: 1,
+          hasMore: false,
+        },
+      })
+    );
+
+    const result = await searchGrocyFoods(
+      'chicken',
+      'https://grocy.example.test',
+      'secret'
+    );
+
+    expect(result.foods[0]).toMatchObject({
+      name: 'Chicken Breast',
+      provider_type: 'grocy',
+      provider_external_id: 'boohee:boohee-chicken',
+      provider_verified: true,
+    });
+  });
+
+  it('imports a Grocy-returned external food candidate through Grocy', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(makeResponse({ id: 42 }));
+
+    await importGrocyFoodFromSource(
+      'boohee',
+      'boohee-chicken',
+      'https://grocy.example.test',
+      'secret'
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://grocy.example.test/api/eric/foods/import-from-source',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          provider: 'boohee',
+          external_id: 'boohee-chicken',
+        }),
+      })
+    );
   });
 
   it('fetches Grocy food details by product id', async () => {
