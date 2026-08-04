@@ -16,7 +16,9 @@ const makeResponse = (body: unknown, ok = true, status = 200) =>
 
 const grocyFood = {
   id: 42,
-  name: 'Egg',
+  name: '番茄',
+  aliases: ['西红柿', 'tomato'],
+  matched_alias: '西红柿',
   source: {
     provider: 'china-food-composition',
   },
@@ -71,7 +73,7 @@ describe('grocyFoodService', () => {
     const result = mapGrocyFood(grocyFood);
 
     expect(result).toMatchObject({
-      name: 'Egg',
+      name: '番茄',
       brand: 'china-food-composition',
       provider_external_id: '42',
       provider_type: 'grocy',
@@ -98,6 +100,8 @@ describe('grocyFoodService', () => {
         is_default: false,
       })
     );
+    expect(result).not.toHaveProperty('aliases');
+    expect(result).not.toHaveProperty('matched_alias');
   });
 
   it('does not map incomplete Grocy nutrition as zero nutrition', () => {
@@ -166,7 +170,8 @@ describe('grocyFoodService', () => {
       'https://grocy.example.test/api/eric/foods/42',
       expect.any(Object)
     );
-    expect(result.name).toBe('Egg');
+    expect(result.name).toBe('番茄');
+    expect(result.provider_external_id).toBe('42');
   });
 
   it('requires configured Grocy credentials', async () => {

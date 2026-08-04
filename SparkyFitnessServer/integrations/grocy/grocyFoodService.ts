@@ -27,6 +27,8 @@ type GrocyConversion = {
 type GrocyFood = {
   id: number;
   name: string;
+  aliases?: string[];
+  matched_alias?: string | null;
   stock_unit?: GrocyUnit | null;
   nutrition?: GrocyNutrition | null;
   source?: {
