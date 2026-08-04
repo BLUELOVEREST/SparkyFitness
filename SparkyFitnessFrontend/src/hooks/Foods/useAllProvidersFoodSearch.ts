@@ -111,6 +111,25 @@ const allProvidersFoodSearchKey = (
 const PAGE_SIZE_PROVIDERS = ['usda', 'yazio'];
 const LIMITED_FALLBACK_PROVIDERS = ['boohee'];
 
+export function splitFoodSearchProviders(providers: DataProvider[]): {
+  primaryProviders: DataProvider[];
+  fallbackProviders: DataProvider[];
+} {
+  const hasGrocyProvider = providers.some(
+    (provider) => provider.provider_type === 'grocy'
+  );
+  const primaryProviders = providers.filter(
+    (provider) => !LIMITED_FALLBACK_PROVIDERS.includes(provider.provider_type)
+  );
+  const fallbackProviders = hasGrocyProvider
+    ? []
+    : providers.filter((provider) =>
+        LIMITED_FALLBACK_PROVIDERS.includes(provider.provider_type)
+      );
+
+  return { primaryProviders, fallbackProviders };
+}
+
 async function fetchProviderResults(
   provider: DataProvider,
   query: string,
@@ -193,12 +212,8 @@ export function useAllProvidersFoodSearch(
   // output gets structural-sharing, so providerResults stays referentially
   // stable across renders. Results are index-aligned with `providers` because
   // the query list below is built from the same `providers.map` order.
-  const primaryProviders = providers.filter(
-    (provider) => !LIMITED_FALLBACK_PROVIDERS.includes(provider.provider_type)
-  );
-  const fallbackProviders = providers.filter((provider) =>
-    LIMITED_FALLBACK_PROVIDERS.includes(provider.provider_type)
-  );
+  const { primaryProviders, fallbackProviders } =
+    splitFoodSearchProviders(providers);
 
   const combine = useCallback(
     (
