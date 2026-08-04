@@ -8,7 +8,7 @@ describe('foodDetailFetch', () => {
     const food = {
       provider_type: 'grocy',
       provider_external_id: 'boohee:foo:bar',
-    };
+    } as const;
 
     expect(isGrocyExternalCandidate(food)).toBe(true);
     expect(shouldFetchFoodDetailsBeforeEdit(food)).toBe(true);
