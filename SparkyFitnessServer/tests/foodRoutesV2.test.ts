@@ -354,7 +354,7 @@ describe('GET /v2/foods/details/:providerType/:externalId', () => {
     vi.clearAllMocks();
   });
 
-  it('imports Grocy external source candidates before returning Grocy details', async () => {
+  const mockGrocyProviderCredentials = () => {
     vi.mocked(
       externalProviderService.getExternalDataProviderDetails
     ).mockResolvedValue({
@@ -377,6 +377,10 @@ describe('GET /v2/foods/details/:providerType/:externalId', () => {
       field_labels: null,
       supports_barcode: false,
     });
+  };
+
+  it('imports Grocy external source candidates before returning Grocy details', async () => {
+    mockGrocyProviderCredentials();
     vi.mocked(importGrocyFoodFromSource).mockResolvedValue({ id: 42 });
     vi.mocked(getGrocyFoodDetails).mockResolvedValue({
       id: '42',
@@ -424,6 +428,124 @@ describe('GET /v2/foods/details/:providerType/:externalId', () => {
       'grocy-secret'
     );
     expect(res.body.provider_type).toBe('grocy');
+  });
+
+  it('splits Grocy external source candidates only on the first colon', async () => {
+    mockGrocyProviderCredentials();
+    vi.mocked(importGrocyFoodFromSource).mockResolvedValue({ id: 42 });
+    vi.mocked(getGrocyFoodDetails).mockResolvedValue({
+      id: '42',
+      name: 'Grocy Food',
+      brand: null,
+      provider_external_id: '42',
+      provider_type: 'grocy',
+      is_custom: false,
+      default_variant: {
+        serving_size: 100,
+        serving_unit: 'g',
+        calories: 100,
+        protein: 10,
+        carbs: 5,
+        fat: 2,
+        is_default: true,
+      },
+      variants: [
+        {
+          serving_size: 100,
+          serving_unit: 'g',
+          calories: 100,
+          protein: 10,
+          carbs: 5,
+          fat: 2,
+          is_default: true,
+        },
+      ],
+    });
+
+    const res = await request(app).get(
+      '/v2/foods/details/grocy/boohee%3Afoo%3Abar?providerId=grocy-provider'
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(importGrocyFoodFromSource).toHaveBeenCalledWith(
+      'boohee',
+      'foo:bar',
+      'https://grocy.example.test',
+      'grocy-secret'
+    );
+    expect(getGrocyFoodDetails).toHaveBeenCalledWith(
+      '42',
+      'https://grocy.example.test',
+      'grocy-secret'
+    );
+  });
+
+  it('rejects unsupported Grocy external source prefixes before import', async () => {
+    mockGrocyProviderCredentials();
+
+    const res = await request(app).get(
+      '/v2/foods/details/grocy/unknown%3Afood-1?providerId=grocy-provider'
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(importGrocyFoodFromSource).not.toHaveBeenCalled();
+    expect(getGrocyFoodDetails).not.toHaveBeenCalled();
+  });
+
+  it('rejects empty Grocy external source prefixes before import', async () => {
+    mockGrocyProviderCredentials();
+
+    const res = await request(app).get(
+      '/v2/foods/details/grocy/%3Afoo?providerId=grocy-provider'
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(importGrocyFoodFromSource).not.toHaveBeenCalled();
+    expect(getGrocyFoodDetails).not.toHaveBeenCalled();
+  });
+
+  it('keeps direct local Grocy product id lookup unchanged', async () => {
+    mockGrocyProviderCredentials();
+    vi.mocked(getGrocyFoodDetails).mockResolvedValue({
+      id: '42',
+      name: 'Grocy Local Food',
+      brand: null,
+      provider_external_id: '42',
+      provider_type: 'grocy',
+      is_custom: false,
+      default_variant: {
+        serving_size: 100,
+        serving_unit: 'g',
+        calories: 100,
+        protein: 10,
+        carbs: 5,
+        fat: 2,
+        is_default: true,
+      },
+      variants: [
+        {
+          serving_size: 100,
+          serving_unit: 'g',
+          calories: 100,
+          protein: 10,
+          carbs: 5,
+          fat: 2,
+          is_default: true,
+        },
+      ],
+    });
+
+    const res = await request(app).get(
+      '/v2/foods/details/grocy/42?providerId=grocy-provider'
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(importGrocyFoodFromSource).not.toHaveBeenCalled();
+    expect(getGrocyFoodDetails).toHaveBeenCalledWith(
+      '42',
+      'https://grocy.example.test',
+      'grocy-secret'
+    );
   });
 
   it('returns direct Boohee details without importing into Grocy', async () => {

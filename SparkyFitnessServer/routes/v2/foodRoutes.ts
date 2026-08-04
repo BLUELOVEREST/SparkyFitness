@@ -435,9 +435,25 @@ const detailHandler: RequestHandler<{
 
       case 'grocy': {
         const separatorIndex = externalId.indexOf(':');
-        if (separatorIndex > 0) {
+        if (separatorIndex >= 0) {
+          if (separatorIndex === 0) {
+            res
+              .status(400)
+              .json({ error: 'Missing Grocy external source provider' });
+            return;
+          }
+
           const sourceProvider = externalId.slice(0, separatorIndex);
           const sourceExternalId = externalId.slice(separatorIndex + 1);
+
+          if (sourceProvider !== 'boohee') {
+            res
+              .status(400)
+              .json({
+                error: `Unsupported Grocy external source provider: ${sourceProvider}`,
+              });
+            return;
+          }
 
           if (!sourceExternalId) {
             res.status(400).json({ error: 'Missing source external id' });
