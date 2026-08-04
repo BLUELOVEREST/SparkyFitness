@@ -111,7 +111,15 @@ describe('Kitchen', () => {
 
     const todayTab = screen.getByRole('tab', { name: /Wednesday/i });
     expect(todayTab).toHaveAttribute('aria-current', 'date');
-    expect(todayTab.className).toContain('ring-inset');
+    expect(todayTab.className).toContain('relative');
+    expect(todayTab.className).toContain('overflow-hidden');
+    expect(
+      screen.getByTestId('kitchen-today-inner-border')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId('kitchen-today-inner-border').className
+    ).toContain('inset-2');
+    expect(todayTab.className).not.toContain('ring-');
     expect(todayTab.className).not.toContain('ring-offset-2');
 
     expect(screen.getByText('Low Carb')).toBeInTheDocument();

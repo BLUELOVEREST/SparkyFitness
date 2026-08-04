@@ -72,13 +72,22 @@ const KitchenDayTab = ({
       role="tab"
       aria-selected={day.isSelected}
       aria-current={day.isToday ? 'date' : undefined}
-      className={`min-w-28 rounded-xl border px-4 py-3 text-left transition-colors ${
+      className={`relative min-w-28 overflow-hidden rounded-xl border px-4 py-3 text-left transition-colors ${
         day.isSelected
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-border bg-card hover:bg-accent'
-      } ${day.isToday && !day.isSelected ? 'ring-2 ring-inset ring-primary/70' : ''}`}
+      }`}
       onClick={() => onSelect(day.date)}
     >
+      {day.isToday ? (
+        <span
+          aria-hidden="true"
+          data-testid="kitchen-today-inner-border"
+          className={`pointer-events-none absolute inset-2 rounded-lg border-2 ${
+            day.isSelected ? 'border-background/90' : 'border-primary/70'
+          }`}
+        />
+      ) : null}
       <span className="block text-sm font-medium">{day.weekdayLabel}</span>
       <span className="block text-lg font-semibold">{day.dayNumberLabel}</span>
       {day.isToday ? (
