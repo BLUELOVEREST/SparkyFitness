@@ -230,8 +230,13 @@ export const getFoodDetailsV2 = async (
   const params: Record<string, string> = {};
   if (providerId) params['providerId'] = providerId;
 
-  return apiCall(`/v2/foods/details/${providerType}/${externalId}`, {
-    method: 'GET',
-    params,
-  });
+  return apiCall(
+    `/v2/foods/details/${encodeURIComponent(providerType)}/${encodeURIComponent(
+      externalId
+    )}`,
+    {
+      method: 'GET',
+      params,
+    }
+  );
 };

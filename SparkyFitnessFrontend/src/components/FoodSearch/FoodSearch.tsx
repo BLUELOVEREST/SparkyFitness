@@ -84,6 +84,7 @@ import {
   getFoodProviderSearchMinLength,
   isFoodProviderSearchActive,
 } from '@/utils/foodSearchQuery.ts';
+import { shouldFetchFoodDetailsBeforeEdit } from './foodDetailFetch.ts';
 
 // Stable empty fallback so the providers reference does not change each render
 // (an inline [] default would re-run the online search effect during loading).
@@ -1111,12 +1112,7 @@ const EnhancedFoodSearch = ({
     food: Food,
     providerIdOverride?: string
   ) => {
-    const needsDetailFetch =
-      (food.provider_type === 'fatsecret' ||
-        food.provider_type === 'usda' ||
-        food.provider_type === 'yazio' ||
-        food.provider_type === 'swissfood') &&
-      food.provider_external_id;
+    const needsDetailFetch = shouldFetchFoodDetailsBeforeEdit(food);
 
     if (needsDetailFetch) {
       // In All Providers mode searchProviderId isn't set, so callers pass the
