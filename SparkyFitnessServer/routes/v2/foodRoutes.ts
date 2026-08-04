@@ -18,7 +18,6 @@ import preferenceService from '../../services/preferenceService.js';
 import {
   isValidProviderType,
   resolveOpenFoodFactsProviderId,
-  resolveGrocyProviderCredentials,
   resolveProviderCredentials,
   searchProviderFoods,
 } from '../../services/externalFoodSearchService.js';
@@ -37,7 +36,7 @@ import { getChinaFoodCompositionDetails } from '../../integrations/chinafood/chi
 import { getBooheeFoodDetails } from '../../integrations/boohee/booheeService.js';
 import {
   getGrocyFoodDetails,
-  importFoodToGrocy,
+  importGrocyFoodFromSource,
 } from '../../integrations/grocy/grocyFoodService.js';
 import {
   getFatSecretNutrients,
@@ -130,35 +129,6 @@ function normalizeFoodForResponse(food: unknown): unknown {
         )
       : nullToUndefined(record.variants as unknown[] | null | undefined),
   };
-}
-
-async function importBooheeFoodToGrocyIfConfigured(
-  authenticatedUserId: string,
-  grocyProviderId: string | undefined,
-  food: unknown
-) {
-  if (!food || typeof food !== 'object' || Array.isArray(food)) {
-    return;
-  }
-
-  try {
-    const credentials = await resolveGrocyProviderCredentials(
-      authenticatedUserId,
-      grocyProviderId
-    );
-    if (!credentials) {
-      log('warn', 'Skipping Boohee to Grocy import: no active Grocy provider');
-      return;
-    }
-
-    await importFoodToGrocy(
-      food as Parameters<typeof importFoodToGrocy>[0],
-      credentials.base_url,
-      credentials.app_key
-    );
-  } catch (error) {
-    log('warn', 'Boohee to Grocy import failed:', error);
-  }
 }
 
 // Match the user's custom nutrients (by name/alias) against the extra nutrient
@@ -460,15 +430,46 @@ const detailHandler: RequestHandler<{
 
       case 'boohee': {
         food = await getBooheeFoodDetails(externalId, credentials.app_key);
-        await importBooheeFoodToGrocyIfConfigured(
-          req.authenticatedUserId,
-          req.query.grocyProviderId as string | undefined,
-          food
-        );
         break;
       }
 
       case 'grocy': {
+        const separatorIndex = externalId.indexOf(':');
+        if (separatorIndex > 0) {
+          const sourceProvider = externalId.slice(0, separatorIndex);
+          const sourceExternalId = externalId.slice(separatorIndex + 1);
+
+          if (!sourceExternalId) {
+            res.status(400).json({ error: 'Missing source external id' });
+            return;
+          }
+
+          const imported = await importGrocyFoodFromSource(
+            sourceProvider,
+            sourceExternalId,
+            credentials.base_url,
+            credentials.app_key
+          );
+          const importedId =
+            imported && typeof imported === 'object'
+              ? (imported as Record<string, unknown>).id
+              : undefined;
+
+          if (importedId === null || importedId === undefined) {
+            throw Object.assign(
+              new Error('Grocy import did not return a product id'),
+              { status: 502 }
+            );
+          }
+
+          food = await getGrocyFoodDetails(
+            String(importedId),
+            credentials.base_url,
+            credentials.app_key
+          );
+          break;
+        }
+
         food = await getGrocyFoodDetails(
           externalId,
           credentials.base_url,
