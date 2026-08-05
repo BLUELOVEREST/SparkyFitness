@@ -6,7 +6,6 @@ import { convertNutritionixToFood } from '@/utils/foodSearch';
 import type { Food, NutritionixItem } from '@/types/food';
 import type { DataProvider } from '@/types/settings';
 import { isFoodProviderSearchActive } from '@/utils/foodSearchQuery';
-import { useDebounce } from '@/hooks/useDebounce';
 
 // A single online provider result, tagged with its source so the UI can render
 // the correct edit/detail flow. Mirrors the per-provider mapping used by the
@@ -80,7 +79,6 @@ export interface ProviderFoodSearchResult {
 }
 
 const STALE_TIME = 1000 * 60 * 5; // 5 minutes
-const DEBOUNCE_MS = 600;
 
 // Stable fallback so a missing refetch does not allocate a new function each
 // render (which would break reference stability of the providerResults items).
@@ -186,7 +184,7 @@ async function fetchProviderResults(
 // page only; "show all" deep-links to the single-provider search for full
 // pagination.
 export function useAllProvidersFoodSearch(
-  searchTerm: string,
+  submittedSearchTerm: string,
   providers: DataProvider[],
   options?: {
     enabled?: boolean;
@@ -197,13 +195,11 @@ export function useAllProvidersFoodSearch(
   providerResults: ProviderFoodSearchResult[];
   anyLoading: boolean;
   isSearchActive: boolean;
-  debouncedSearch: string;
+  submittedSearchTerm: string;
 } {
   const { enabled = true, autoScale, foodDisplayLimit } = options ?? {};
-  const debouncedSearch = useDebounce(searchTerm.trim(), DEBOUNCE_MS);
-  const isSearchActive =
-    isFoodProviderSearchActive(searchTerm.trim()) &&
-    isFoodProviderSearchActive(debouncedSearch);
+  const searchTerm = submittedSearchTerm.trim();
+  const isSearchActive = isFoodProviderSearchActive(searchTerm);
 
   // Project the raw query results into ProviderFoodSearchResult inside
   // useQueries' `combine`, rather than a downstream useMemo over the raw queries
@@ -242,12 +238,12 @@ export function useAllProvidersFoodSearch(
     queries: primaryProviders.map((provider) => ({
       queryKey: allProvidersFoodSearchKey(
         provider.provider_type,
-        debouncedSearch,
+        searchTerm,
         provider.id,
         autoScale
       ),
       queryFn: () =>
-        fetchProviderResults(provider, debouncedSearch, {
+        fetchProviderResults(provider, searchTerm, {
           autoScale,
           foodDisplayLimit,
         }),
@@ -287,12 +283,12 @@ export function useAllProvidersFoodSearch(
     queries: fallbackProviders.map((provider) => ({
       queryKey: allProvidersFoodSearchKey(
         provider.provider_type,
-        debouncedSearch,
+        searchTerm,
         provider.id,
         autoScale
       ),
       queryFn: () =>
-        fetchProviderResults(provider, debouncedSearch, {
+        fetchProviderResults(provider, searchTerm, {
           autoScale,
           foodDisplayLimit,
         }),
@@ -310,5 +306,10 @@ export function useAllProvidersFoodSearch(
 
   const anyLoading = providerResults.some((r) => r.isLoading);
 
-  return { providerResults, isSearchActive, anyLoading, debouncedSearch };
+  return {
+    providerResults,
+    isSearchActive,
+    anyLoading,
+    submittedSearchTerm: searchTerm,
+  };
 }

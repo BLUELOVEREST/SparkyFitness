@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import FoodSearch from '@/components/FoodSearch/FoodSearch';
 import { renderWithClient } from '../test-utils';
@@ -29,6 +29,10 @@ jest.mock('@/hooks/use-mobile', () => ({
   useIsMobile: () => false,
 }));
 
+jest.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ user: { id: 'user-1' } }),
+}));
+
 jest.mock('@/hooks/use-toast', () => ({
   toast: jest.fn(),
 }));
@@ -51,10 +55,22 @@ jest.mock('@/hooks/Foods/useCustomNutrients', () => ({
   useCustomNutrients: () => ({ data: [] }),
 }));
 
+jest.mock('@/hooks/Foods/useFavorites', () => ({
+  useFavoritesQuery: () => ({
+    data: { favoriteFoods: [], favoriteMeals: [] },
+    isLoading: false,
+  }),
+}));
+
 jest.mock('@/hooks/Foods/useMeals', () => ({
   mealSearchOptions: () => ({
     queryKey: ['meals', 'search'],
     queryFn: jest.fn(),
+  }),
+  useRecentAndTopMealsQuery: () => ({
+    recentMeals: [],
+    topMeals: [],
+    isLoading: false,
   }),
 }));
 
@@ -79,7 +95,7 @@ jest.mock('@/hooks/Foods/useAllProvidersFoodSearch', () => ({
     providerResults: [],
     anyLoading: false,
     isSearchActive: false,
-    submittedSearch: '',
+    submittedSearchTerm: '',
   }),
 }));
 
@@ -148,5 +164,57 @@ describe('FoodSearch local database only mode', () => {
     );
     expect(screen.getByText('Rice')).toBeInTheDocument();
     expect(screen.queryByText('Chicken Breast')).not.toBeInTheDocument();
+  });
+
+  it('searches local foods only after submitting the query', () => {
+    renderWithClient(
+      <FoodSearch onFoodSelect={jest.fn()} localDatabaseOnly hideMealTab />
+    );
+
+    expect(mockUseDatabaseFoodSearchQuery).toHaveBeenLastCalledWith(
+      '',
+      20,
+      undefined,
+      true
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Search for foods...'), {
+      target: { value: 'rice' },
+    });
+
+    expect(mockUseDatabaseFoodSearchQuery).not.toHaveBeenLastCalledWith(
+      'rice',
+      20,
+      undefined,
+      true
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(mockUseDatabaseFoodSearchQuery).toHaveBeenLastCalledWith(
+      'rice',
+      20,
+      undefined,
+      true
+    );
+  });
+
+  it('submits local food search with the Enter key', () => {
+    renderWithClient(
+      <FoodSearch onFoodSelect={jest.fn()} localDatabaseOnly hideMealTab />
+    );
+
+    const input = screen.getByPlaceholderText('Search for foods...');
+    fireEvent.change(input, {
+      target: { value: 'chicken' },
+    });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(mockUseDatabaseFoodSearchQuery).toHaveBeenLastCalledWith(
+      'chicken',
+      20,
+      undefined,
+      true
+    );
   });
 });

@@ -4,6 +4,7 @@ import {
   useCallback,
   useMemo,
   useRef,
+  type KeyboardEvent,
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -195,15 +196,7 @@ const EnhancedFoodSearch = ({
   const showExternalFoodTools = !localDatabaseOnly;
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setDebouncedSearchTerm('');
-      return;
-    }
-    const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm), 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
+  const [submittedSearchTerm, setSubmittedSearchTerm] = useState('');
   useEffect(() => {
     if (searchTerm.trim()) setScannedFood(null);
   }, [searchTerm]);
@@ -218,7 +211,7 @@ const EnhancedFoodSearch = ({
   );
   const [showAddFoodDialog, setShowAddFoodDialog] = useState(false);
   const [showImportFromCsvDialog, setShowImportFromCsvDialog] = useState(false);
-  const isSearchEmpty = !searchTerm.trim();
+  const isSearchEmpty = !submittedSearchTerm.trim();
 
   const [manualProviderId, setManualProviderId] = useState<string | null>(null);
   const [isOnlineLoading, setIsOnlineLoading] = useState(false);
@@ -269,7 +262,7 @@ const EnhancedFoodSearch = ({
   const showLocalDatabaseResults = !isSearchEmpty || localDatabaseOnly;
   const { data: searchData, isFetching: isFetchingSearch } =
     useDatabaseFoodSearchQuery(
-      debouncedSearchTerm,
+      submittedSearchTerm,
       foodDisplayLimit,
       mealType,
       showLocalFoods && showLocalDatabaseResults
@@ -531,8 +524,8 @@ const EnhancedFoodSearch = ({
     providerResults,
     anyLoading: anyProviderLoading,
     isSearchActive: isAllProvidersSearchActive,
-    debouncedSearch: allProvidersDebouncedSearch,
-  } = useAllProvidersFoodSearch(searchTerm, foodProviderOptions, {
+    submittedSearchTerm: allProvidersSubmittedSearch,
+  } = useAllProvidersFoodSearch(submittedSearchTerm, foodProviderOptions, {
     enabled:
       isAllProviders &&
       !localDatabaseOnly &&
@@ -544,7 +537,7 @@ const EnhancedFoodSearch = ({
   // Collapse expanded By Source sections when the aggregated query changes.
   useEffect(() => {
     setExpandedProviders(new Set());
-  }, [allProvidersDebouncedSearch]);
+  }, [allProvidersSubmittedSearch]);
 
   // Top Matches: interleave each provider's top results (round-robin by rank).
   const topMatches = useMemo(
@@ -612,8 +605,8 @@ const EnhancedFoodSearch = ({
     }
     setMeals([]);
     setIsMealLoading(true);
-    handleMealSearch(debouncedSearchTerm);
-  }, [debouncedSearchTerm, showMeals, isSearchEmpty, handleMealSearch]);
+    handleMealSearch(submittedSearchTerm);
+  }, [submittedSearchTerm, showMeals, isSearchEmpty, handleMealSearch]);
 
   // --- Online provider search (per-provider handlers) ---
 
@@ -851,7 +844,7 @@ const EnhancedFoodSearch = ({
       setIsOnlineLoading(false);
       return;
     }
-    const term = searchTerm.trim();
+    const term = submittedSearchTerm.trim();
     // Each new search (or provider switch) starts a fresh page 1, so reset the
     // paging cursor and "has more" flag alongside the results below, and
     // invalidate any "Load more" fetch still in flight from the previous search.
@@ -916,7 +909,7 @@ const EnhancedFoodSearch = ({
       active = false;
     };
   }, [
-    searchTerm,
+    submittedSearchTerm,
     selectedFoodDataProvider,
     foodDataProviders,
     searchHandlers,
@@ -929,7 +922,7 @@ const EnhancedFoodSearch = ({
   // the results already on screen. Providers that report no further pages hide
   // the trigger, so this only runs when there is genuinely more to load.
   const handleLoadMore = useCallback(async () => {
-    const term = searchTerm.trim();
+    const term = submittedSearchTerm.trim();
     if (term.length < getFoodProviderSearchMinLength(term) || isLoadingMore) {
       return;
     }
@@ -977,7 +970,7 @@ const EnhancedFoodSearch = ({
       setIsLoadingMore(false);
     }
   }, [
-    searchTerm,
+    submittedSearchTerm,
     isLoadingMore,
     externalPage,
     selectedFoodDataProvider,
@@ -1187,9 +1180,7 @@ const EnhancedFoodSearch = ({
 
   // --- Derived render state ---
 
-  const isDebouncePending =
-    !isSearchEmpty && debouncedSearchTerm !== searchTerm;
-  const localPending = isFetchingSearch || isMealLoading || isDebouncePending;
+  const localPending = isFetchingSearch || isMealLoading;
   const noLocalResults =
     filteredSearchFoodsFavFirst.length === 0 &&
     filteredSearchMealsFavFirst.length === 0;
@@ -1257,6 +1248,17 @@ const EnhancedFoodSearch = ({
       />
     );
 
+  const submitSearch = useCallback(() => {
+    setSubmittedSearchTerm(searchTerm.trim());
+  }, [searchTerm]);
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submitSearch();
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row flex-wrap gap-2">
@@ -1300,9 +1302,18 @@ const EnhancedFoodSearch = ({
             value={searchTerm}
             autoFocus
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
             className="pl-9"
           />
         </div>
+        <Button
+          type="button"
+          disabled={!searchTerm.trim()}
+          onClick={submitSearch}
+        >
+          <Search className="w-4 h-4 mr-2" />
+          {t('enhancedFoodSearch.searchButton', 'Search')}
+        </Button>
         {(isOnlineLoading || localPending || anyProviderLoading) && (
           <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
         )}
