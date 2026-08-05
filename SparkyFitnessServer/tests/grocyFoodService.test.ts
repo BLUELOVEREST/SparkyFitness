@@ -71,9 +71,9 @@ const booheeExternalFood = {
   },
   nutrition: {
     basis_amount: 100,
-    basis_qu_id: 1,
+    basis_qu_id: null,
     basis_unit: {
-      id: 1,
+      id: null,
       name: 'g',
       name_plural: 'g',
     },
@@ -180,6 +180,37 @@ describe('grocyFoodService', () => {
       totalCount: 15,
       hasMore: true,
     });
+  });
+
+  it('can force Grocy external provider fallback when requested', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      makeResponse({
+        foods: [booheeExternalFood],
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          totalCount: 1,
+          hasMore: false,
+        },
+      })
+    );
+
+    const result = await searchGrocyFoods(
+      'caramel',
+      'https://grocy.example.test',
+      'secret',
+      1,
+      20,
+      true
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://grocy.example.test/api/eric/foods/search?query=caramel&page=1&page_size=20&include_external=1',
+      expect.objectContaining({
+        method: 'GET',
+      })
+    );
+    expect(result.foods[0]?.provider_external_id).toBe('boohee:boohee-chicken');
   });
 
   it('maps Grocy-returned Boohee external candidates as selectable foods', async () => {

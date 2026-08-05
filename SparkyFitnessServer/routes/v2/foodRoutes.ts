@@ -230,13 +230,15 @@ const searchHandler: RequestHandler<{ providerType: string }> = async (
   const pageSize = Number(req.query.pageSize) || 20;
   const providerId = req.query.providerId as string | undefined;
   const autoScale = ((req.query.autoScale as string) ?? 'true') !== 'false';
+  const includeExternal =
+    ((req.query.includeExternal as string) ?? 'false') === 'true';
 
   try {
     const { foods, pagination } = await searchProviderFoods(
       req.userId,
       providerType,
       query,
-      { page, pageSize, providerId, autoScale },
+      { page, pageSize, providerId, autoScale, includeExternal },
       req.authenticatedUserId
     );
 
@@ -447,11 +449,9 @@ const detailHandler: RequestHandler<{
           const sourceExternalId = externalId.slice(separatorIndex + 1);
 
           if (sourceProvider !== 'boohee') {
-            res
-              .status(400)
-              .json({
-                error: `Unsupported Grocy external source provider: ${sourceProvider}`,
-              });
+            res.status(400).json({
+              error: `Unsupported Grocy external source provider: ${sourceProvider}`,
+            });
             return;
           }
 

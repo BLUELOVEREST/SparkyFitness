@@ -143,7 +143,7 @@ function numberOrZero(value: unknown) {
 function hasCompleteNutrition(nutrition: GrocyNutrition) {
   return (
     numberOrZero(nutrition.basis_amount) > 0 &&
-    nutrition.basis_qu_id !== null &&
+    Boolean(unitName(nutrition.basis_unit, null)) &&
     nutrition.calories !== null &&
     nutrition.protein !== null &&
     nutrition.fat !== null &&
@@ -301,17 +301,23 @@ export async function searchGrocyFoods(
   baseUrl: string | undefined,
   appKey: string | undefined,
   page = 1,
-  pageSize = 20
+  pageSize = 20,
+  includeExternal = false
 ) {
+  const params: Record<string, string> = {
+    query,
+    page: String(page),
+    page_size: String(pageSize),
+  };
+  if (includeExternal) {
+    params.include_external = '1';
+  }
+
   const payload = await getGrocyJson(
     baseUrl,
     appKey,
     '/api/eric/foods/search',
-    {
-      query,
-      page: String(page),
-      page_size: String(pageSize),
-    }
+    params
   );
   const record =
     payload && typeof payload === 'object'

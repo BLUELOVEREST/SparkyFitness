@@ -224,6 +224,7 @@ const EnhancedFoodSearch = ({
   // "Load more" fetch so it does not swap out the results already on screen.
   const [externalPage, setExternalPage] = useState(1);
   const [externalHasMore, setExternalHasMore] = useState(false);
+  const [externalIncludeExternal, setExternalIncludeExternal] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   // Bumped on every new online search (term or provider change). A "Load more"
   // fetch captures the token at click time and discards its result if the token
@@ -458,9 +459,13 @@ const EnhancedFoodSearch = ({
             defaultFoodDataProviderId,
             foodProviderOptions
           )));
-  const selectedProviderName =
-    foodDataProviders.find((p) => p.id === selectedFoodDataProvider)
-      ?.provider_name ?? '';
+  const selectedProvider = foodDataProviders.find(
+    (p) => p.id === selectedFoodDataProvider
+  );
+  const selectedProviderName = selectedProvider?.provider_name ?? '';
+  const canForceGrocyExternalSearch =
+    selectedProvider?.provider_type === 'grocy' &&
+    isFoodProviderSearchActive(submittedSearchTerm.trim());
 
   // Barcode provider: prefer explicit user selection, then the dedicated barcode
   // provider preference (set in External Provider Settings → Default Barcode Provider),
@@ -619,7 +624,8 @@ const EnhancedFoodSearch = ({
         term: string,
         providerId: string,
         provider: DataProvider,
-        page?: number
+        page?: number,
+        includeExternal?: boolean
       ) => Promise<ProviderSearchPage>
     >
   >(
@@ -801,9 +807,17 @@ const EnhancedFoodSearch = ({
           hasMore: data.pagination?.hasMore ?? false,
         };
       },
-      grocy: async (term, id, _provider, page) => {
+      grocy: async (term, id, _provider, page, includeExternal) => {
         const data = await queryClient.fetchQuery(
-          searchFoodsV2Options('grocy', term, id, undefined, undefined, page)
+          searchFoodsV2Options(
+            'grocy',
+            term,
+            id,
+            undefined,
+            undefined,
+            page,
+            includeExternal
+          )
         );
         return {
           items: data.foods.map((food: Food) => ({
@@ -822,6 +836,7 @@ const EnhancedFoodSearch = ({
       searchToken.current += 1;
       setExternalPage(1);
       setExternalHasMore(false);
+      setExternalIncludeExternal(false);
       setIsLoadingMore(false);
       setExternalResults([]);
       setHasOnlineSearchBeenPerformed(false);
@@ -854,6 +869,7 @@ const EnhancedFoodSearch = ({
     searchToken.current += 1;
     setExternalPage(1);
     setExternalHasMore(false);
+    setExternalIncludeExternal(false);
     setIsLoadingMore(false);
     if (!isFoodProviderSearchActive(term)) {
       setExternalResults([]);
@@ -882,7 +898,8 @@ const EnhancedFoodSearch = ({
           term,
           provider.id,
           provider,
-          1
+          1,
+          false
         );
         if (active) {
           setExternalResults(items);
@@ -941,7 +958,8 @@ const EnhancedFoodSearch = ({
         term,
         provider.id,
         provider,
-        nextPage
+        nextPage,
+        externalIncludeExternal
       );
       // A newer search started while this page was in flight; drop it so it
       // cannot append onto the newer search's results.
@@ -973,6 +991,68 @@ const EnhancedFoodSearch = ({
     submittedSearchTerm,
     isLoadingMore,
     externalPage,
+    selectedFoodDataProvider,
+    foodDataProviders,
+    searchHandlers,
+    t,
+    externalIncludeExternal,
+  ]);
+
+  const handleSearchGrocyExternal = useCallback(async () => {
+    const term = submittedSearchTerm.trim();
+    if (term.length < getFoodProviderSearchMinLength(term) || isOnlineLoading) {
+      return;
+    }
+    const provider = foodDataProviders.find(
+      (p) => p.id === selectedFoodDataProvider
+    );
+    const providerSearch = provider
+      ? searchHandlers[provider.provider_type]
+      : undefined;
+    if (!provider || provider.provider_type !== 'grocy' || !providerSearch) {
+      return;
+    }
+
+    searchToken.current += 1;
+    const token = searchToken.current;
+    setExternalPage(1);
+    setExternalHasMore(false);
+    setExternalIncludeExternal(true);
+    setIsLoadingMore(false);
+    setIsOnlineLoading(true);
+    setSearchProviderId(provider.id);
+    setHasOnlineSearchBeenPerformed(true);
+
+    try {
+      const { items, hasMore } = await providerSearch(
+        term,
+        provider.id,
+        provider,
+        1,
+        true
+      );
+      if (token !== searchToken.current) return;
+      setExternalResults(items);
+      setExternalHasMore(hasMore);
+    } catch {
+      if (token !== searchToken.current) return;
+      setExternalResults([]);
+      setExternalHasMore(false);
+      setExternalIncludeExternal(false);
+      toast({
+        title: t('common.error'),
+        description: t(
+          'enhancedFoodSearch.onlineSearchFailed',
+          'Failed to search the online provider.'
+        ),
+        variant: 'destructive',
+      });
+    } finally {
+      if (token === searchToken.current) setIsOnlineLoading(false);
+    }
+  }, [
+    submittedSearchTerm,
+    isOnlineLoading,
     selectedFoodDataProvider,
     foodDataProviders,
     searchHandlers,
@@ -1533,6 +1613,25 @@ const EnhancedFoodSearch = ({
             {showOnlineResults && !isAllProviders && selectedProviderName && (
               <>
                 <SectionHeader>{selectedProviderName}</SectionHeader>
+                {canForceGrocyExternalSearch && (
+                  <div className="flex justify-end px-1 pb-2">
+                    <Button
+                      variant={externalIncludeExternal ? 'secondary' : 'ghost'}
+                      size="sm"
+                      disabled={isOnlineLoading}
+                      onClick={handleSearchGrocyExternal}
+                    >
+                      {isOnlineLoading && externalIncludeExternal ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        t(
+                          'enhancedFoodSearch.searchMoreBooheeResults',
+                          'Search more Boohee results'
+                        )
+                      )}
+                    </Button>
+                  </div>
+                )}
                 {isOnlineLoading && filteredExternalResults.length === 0 && (
                   <div className="text-center py-6 text-gray-500">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto" />

@@ -207,6 +207,7 @@ export interface ProviderSearchOptions {
   pageSize?: number;
   providerId?: string;
   autoScale?: boolean;
+  includeExternal?: boolean;
 }
 
 const EMPTY_PAGINATION = (
@@ -324,6 +325,7 @@ export async function searchProviderFoods(
   const pageSize = opts.pageSize ?? 20;
   const providerId = opts.providerId;
   const autoScale = opts.autoScale ?? true;
+  const includeExternal = opts.includeExternal ?? false;
 
   const credentials = await resolveProviderCredentials(
     credentialUserId,
@@ -513,7 +515,8 @@ export async function searchProviderFoods(
         credentials.base_url,
         credentials.app_key,
         page,
-        pageSize
+        pageSize,
+        includeExternal
       );
       foods = result.foods || [];
       pagination = result.pagination;

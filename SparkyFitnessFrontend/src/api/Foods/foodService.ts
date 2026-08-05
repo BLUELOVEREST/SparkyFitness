@@ -180,6 +180,7 @@ export interface V2SearchResponse {
 
 interface SearchFoodsV2Options {
   suppressErrorToast?: boolean;
+  includeExternal?: boolean;
 }
 
 export const searchFoodsV2 = async (
@@ -196,6 +197,7 @@ export const searchFoodsV2 = async (
   if (page) params['page'] = String(page);
   if (pageSize) params['pageSize'] = String(pageSize);
   if (autoScale !== undefined) params['autoScale'] = String(autoScale);
+  if (options?.includeExternal) params['includeExternal'] = 'true';
 
   return apiCall(`/v2/foods/search/${providerType}`, {
     method: 'GET',

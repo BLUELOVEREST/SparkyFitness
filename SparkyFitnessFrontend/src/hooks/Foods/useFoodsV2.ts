@@ -12,7 +12,8 @@ export const v2FoodKeys = {
     providerId?: string,
     pageSize?: number,
     autoScale?: boolean,
-    page?: number
+    page?: number,
+    includeExternal?: boolean
   ) =>
     [
       ...v2FoodKeys.all,
@@ -23,6 +24,7 @@ export const v2FoodKeys = {
       pageSize,
       autoScale,
       page,
+      includeExternal,
     ] as const,
   barcode: (barcode: string, providerId?: string) =>
     [...v2FoodKeys.all, 'barcode', barcode, providerId] as const,
@@ -42,7 +44,8 @@ export const searchFoodsV2Options = (
   providerId?: string,
   pageSize?: number,
   autoScale?: boolean,
-  page?: number
+  page?: number,
+  includeExternal?: boolean
 ) => ({
   queryKey: v2FoodKeys.search(
     providerType,
@@ -50,10 +53,13 @@ export const searchFoodsV2Options = (
     providerId,
     pageSize,
     autoScale,
-    page
+    page,
+    includeExternal
   ),
   queryFn: () =>
-    searchFoodsV2(providerType, query, providerId, page, pageSize, autoScale),
+    searchFoodsV2(providerType, query, providerId, page, pageSize, autoScale, {
+      includeExternal,
+    }),
   staleTime: 1000 * 60 * 5,
   enabled: !!query,
   meta: {
