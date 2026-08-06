@@ -13,7 +13,20 @@ type GrocyNutrition = {
   calories: number | null;
   protein: number | null;
   fat: number | null;
-  carbohydrates: number | null;
+  carbs: number | null;
+  saturated_fat?: number | null;
+  polyunsaturated_fat?: number | null;
+  monounsaturated_fat?: number | null;
+  trans_fat?: number | null;
+  cholesterol?: number | null;
+  sodium?: number | null;
+  potassium?: number | null;
+  dietary_fiber?: number | null;
+  sugars?: number | null;
+  vitamin_a?: number | null;
+  vitamin_c?: number | null;
+  calcium?: number | null;
+  iron?: number | null;
 };
 
 type GrocyConversion = {
@@ -48,6 +61,22 @@ type ImportableFood = Pick<
   | 'provider_type'
   | 'default_variant'
 >;
+
+const OPTIONAL_NUTRIENT_KEYS = [
+  'saturated_fat',
+  'polyunsaturated_fat',
+  'monounsaturated_fat',
+  'trans_fat',
+  'cholesterol',
+  'sodium',
+  'potassium',
+  'dietary_fiber',
+  'sugars',
+  'vitamin_a',
+  'vitamin_c',
+  'calcium',
+  'iron',
+] as const;
 
 function requireConfig(
   baseUrl: string | undefined,
@@ -147,7 +176,7 @@ function hasCompleteNutrition(nutrition: GrocyNutrition) {
     nutrition.calories !== null &&
     nutrition.protein !== null &&
     nutrition.fat !== null &&
-    nutrition.carbohydrates !== null
+    nutrition.carbs !== null
   );
 }
 
@@ -165,17 +194,26 @@ function scaleVariant(
   factor: number,
   isDefault: boolean
 ) {
-  return {
+  const variant: NormalizedFood['default_variant'] = {
     serving_size: servingSize,
     serving_unit: servingUnit,
     serving_description: `${servingSize} ${servingUnit}`,
     calories: numberOrZero(nutrition.calories) * factor,
     protein: numberOrZero(nutrition.protein) * factor,
-    carbs: numberOrZero(nutrition.carbohydrates) * factor,
+    carbs: numberOrZero(nutrition.carbs) * factor,
     fat: numberOrZero(nutrition.fat) * factor,
     is_default: isDefault,
     source: 'imported' as const,
   };
+
+  for (const key of OPTIONAL_NUTRIENT_KEYS) {
+    const value = nutrition[key];
+    if (value !== null && value !== undefined) {
+      variant[key] = numberOrZero(value) * factor;
+    }
+  }
+
+  return variant;
 }
 
 function buildVariants(food: GrocyFood, nutrition: GrocyNutrition) {
@@ -375,7 +413,7 @@ export async function importFoodToGrocy(
     });
   }
 
-  return postGrocyJson(baseUrl, appKey, '/api/eric/foods/import', {
+  const payload: Record<string, unknown> = {
     provider: food.provider_type,
     external_id: food.provider_external_id,
     name: food.name,
@@ -386,8 +424,16 @@ export async function importFoodToGrocy(
     calories: variant.calories,
     protein: variant.protein,
     fat: variant.fat,
-    carbohydrates: variant.carbs,
-  });
+    carbs: variant.carbs,
+  };
+
+  for (const key of OPTIONAL_NUTRIENT_KEYS) {
+    if (variant[key] !== null && variant[key] !== undefined) {
+      payload[key] = variant[key];
+    }
+  }
+
+  return postGrocyJson(baseUrl, appKey, '/api/eric/foods/import', payload);
 }
 
 export async function importGrocyFoodFromSource(

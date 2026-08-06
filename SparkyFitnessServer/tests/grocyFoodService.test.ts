@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getGrocyFoodDetails,
+  importFoodToGrocy,
   importGrocyFoodFromSource,
   mapGrocyFood,
   searchGrocyFoods,
@@ -39,7 +40,20 @@ const grocyFood = {
     calories: 143,
     protein: 12.6,
     fat: 9.5,
-    carbohydrates: 1.1,
+    carbs: 1.1,
+    saturated_fat: 2,
+    polyunsaturated_fat: 3,
+    monounsaturated_fat: 4,
+    trans_fat: 0.1,
+    cholesterol: 12,
+    sodium: 130,
+    potassium: 250,
+    dietary_fiber: 1.8,
+    sugars: 0.9,
+    vitamin_a: 20,
+    vitamin_c: 8,
+    calcium: 18,
+    iron: 1.2,
   },
   unit_conversions: [
     {
@@ -80,7 +94,20 @@ const booheeExternalFood = {
     calories: 165,
     protein: 31,
     fat: 3.6,
-    carbohydrates: 0,
+    carbs: 0,
+    saturated_fat: null,
+    polyunsaturated_fat: null,
+    monounsaturated_fat: null,
+    trans_fat: null,
+    cholesterol: null,
+    sodium: null,
+    potassium: null,
+    dietary_fiber: null,
+    sugars: null,
+    vitamin_a: null,
+    vitamin_c: null,
+    calcium: null,
+    iron: null,
   },
 };
 
@@ -111,6 +138,19 @@ describe('grocyFoodService', () => {
         protein: 12.6,
         carbs: 1.1,
         fat: 9.5,
+        saturated_fat: 2,
+        polyunsaturated_fat: 3,
+        monounsaturated_fat: 4,
+        trans_fat: 0.1,
+        cholesterol: 12,
+        sodium: 130,
+        potassium: 250,
+        dietary_fiber: 1.8,
+        sugars: 0.9,
+        vitamin_a: 20,
+        vitamin_c: 8,
+        calcium: 18,
+        iron: 1.2,
         is_default: true,
       },
     });
@@ -122,6 +162,10 @@ describe('grocyFoodService', () => {
         protein: 6.3,
         carbs: 0.55,
         fat: 4.75,
+        saturated_fat: 1,
+        sodium: 65,
+        potassium: 125,
+        dietary_fiber: 0.9,
         is_default: false,
       })
     );
@@ -277,6 +321,77 @@ describe('grocyFoodService', () => {
     );
     expect(result.name).toBe('番茄');
     expect(result.provider_external_id).toBe('42');
+  });
+
+  it('imports a Sparky food into Grocy with the expanded nutrient fields', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(makeResponse({ id: 42 }));
+
+    await importFoodToGrocy(
+      {
+        name: '番茄',
+        brand: 'Grocy',
+        provider_type: 'grocy',
+        provider_external_id: '42',
+        default_variant: {
+          serving_size: 100,
+          serving_unit: 'g',
+          serving_description: '100 g',
+          calories: 143,
+          protein: 12.6,
+          carbs: 1.1,
+          fat: 9.5,
+          saturated_fat: 2,
+          polyunsaturated_fat: 3,
+          monounsaturated_fat: 4,
+          trans_fat: 0.1,
+          cholesterol: 12,
+          sodium: 130,
+          potassium: 250,
+          dietary_fiber: 1.8,
+          sugars: 0.9,
+          vitamin_a: 20,
+          vitamin_c: 8,
+          calcium: 18,
+          iron: 1.2,
+          is_default: true,
+        },
+      },
+      'https://grocy.example.test',
+      'secret'
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://grocy.example.test/api/eric/foods/import',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          provider: 'grocy',
+          external_id: '42',
+          name: '番茄',
+          brand: 'Grocy',
+          stock_unit: 'g',
+          basis_amount: 100,
+          basis_unit: 'g',
+          calories: 143,
+          protein: 12.6,
+          fat: 9.5,
+          carbs: 1.1,
+          saturated_fat: 2,
+          polyunsaturated_fat: 3,
+          monounsaturated_fat: 4,
+          trans_fat: 0.1,
+          cholesterol: 12,
+          sodium: 130,
+          potassium: 250,
+          dietary_fiber: 1.8,
+          sugars: 0.9,
+          vitamin_a: 20,
+          vitamin_c: 8,
+          calcium: 18,
+          iron: 1.2,
+        }),
+      })
+    );
   });
 
   it('requires configured Grocy credentials', async () => {
