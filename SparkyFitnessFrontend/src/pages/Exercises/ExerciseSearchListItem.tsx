@@ -12,6 +12,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { ElementType, useState } from 'react';
+import { resolveExerciseImageSrc } from '@/utils/exerciseImages';
 
 type ExerciseCategory = keyof typeof EXERCISE_CATEGORY_META;
 
@@ -92,6 +93,7 @@ export const ExerciseSearchListItem = ({
   const hasImage =
     exercise.images && exercise.images.some((img) => img.trim() !== '[]');
   const showFallback = !hasImage || imageError;
+  const currentImage = exercise.images?.[currentImageIndex] ?? '';
 
   return (
     <div className="group flex gap-3 p-3 rounded-lg bg-white dark:bg-gray-800/80 border border-gray-100 dark:border-gray-700/60 hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-sm transition-all duration-150">
@@ -99,11 +101,7 @@ export const ExerciseSearchListItem = ({
       {hasImage && !showFallback ? (
         <div className="relative flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50 dark:bg-gray-800">
           <img
-            src={
-              exercise.source
-                ? exercise.images![currentImageIndex]
-                : '/uploads/exercises/' + exercise.images![currentImageIndex]
-            }
+            src={resolveExerciseImageSrc(currentImage)}
             alt={exercise.name}
             className="w-full h-full object-contain"
             onError={() => setImageError(true)}
