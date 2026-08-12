@@ -96,6 +96,7 @@ class HydrationWidget : GlanceAppWidget() {
             Header(snapshot = snapshot, titleSize = 17)
             Spacer(modifier = GlanceModifier.height(6.dp))
             Progress(snapshot = snapshot)
+            StatusLabel(snapshot = snapshot, compact = true)
             Spacer(modifier = GlanceModifier.defaultWeight())
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 AmountButton(context, "-250", -250, GlanceModifier.defaultWeight())
@@ -111,6 +112,7 @@ class HydrationWidget : GlanceAppWidget() {
             Header(snapshot = snapshot, titleSize = 20)
             Spacer(modifier = GlanceModifier.height(8.dp))
             Progress(snapshot = snapshot)
+            StatusLabel(snapshot = snapshot, compact = true)
             Spacer(modifier = GlanceModifier.defaultWeight())
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 AmountButton(context, "+250", 250, GlanceModifier.defaultWeight())
@@ -141,14 +143,7 @@ class HydrationWidget : GlanceAppWidget() {
             Spacer(modifier = GlanceModifier.height(8.dp))
             Progress(snapshot = snapshot)
             Spacer(modifier = GlanceModifier.height(6.dp))
-            Text(
-                text = statusText(snapshot),
-                style = TextStyle(
-                    color = GlanceTheme.colors.onSurfaceVariant,
-                    fontSize = 12.sp,
-                ),
-                maxLines = 1,
-            )
+            StatusLabel(snapshot = snapshot, compact = false)
             Spacer(modifier = GlanceModifier.defaultWeight())
             Row(modifier = GlanceModifier.fillMaxWidth()) {
                 AmountButton(context, "+250", 250, GlanceModifier.defaultWeight())
@@ -198,6 +193,22 @@ class HydrationWidget : GlanceAppWidget() {
             modifier = GlanceModifier.fillMaxWidth().height(8.dp),
             color = HydrationBlue,
             backgroundColor = GlanceTheme.colors.surfaceVariant,
+        )
+    }
+
+    @Composable
+    private fun StatusLabel(snapshot: HydrationSnapshot?, compact: Boolean) {
+        val text = statusText(snapshot)
+        if (compact && text == "Today") return
+
+        Spacer(modifier = GlanceModifier.height(if (compact) 4.dp else 0.dp))
+        Text(
+            text = text,
+            style = TextStyle(
+                color = GlanceTheme.colors.onSurfaceVariant,
+                fontSize = if (compact) 11.sp else 12.sp,
+            ),
+            maxLines = 1,
         )
     }
 

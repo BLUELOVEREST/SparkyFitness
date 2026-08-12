@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.GlanceAppWidgetManager
@@ -21,7 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
+open class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
 
     override val glanceAppWidget: GlanceAppWidget = HydrationWidget()
 
@@ -42,6 +43,7 @@ class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
             ACTION_ADJUST_WATER -> {
                 val pending = goAsync()
                 val amountMl = intent.getIntExtra(EXTRA_AMOUNT_ML, 0)
+                Log.i(TAG, "Received water adjustment action amountMl=$amountMl")
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         adjustWater(context, amountMl)
@@ -73,6 +75,7 @@ class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
     companion object {
         const val PREFS_NAME = "SparkyHydrationWidget"
         const val PREFS_KEY_SNAPSHOT = "hydrationSnapshot"
+        private const val TAG = "HydrationWidget"
         const val ACTION_MIDNIGHT_REFRESH =
             "com.sparkyapps.sparkyfitness.widget.ACTION_HYDRATION_MIDNIGHT_REFRESH"
         const val ACTION_ADJUST_WATER =
@@ -101,8 +104,13 @@ class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
 
         fun allWidgetIds(context: Context): IntArray {
             val manager = AppWidgetManager.getInstance(context)
-            val component = ComponentName(context, HydrationWidgetReceiver::class.java)
-            return manager.getAppWidgetIds(component)
+            return listOf(
+                HydrationWidgetReceiver::class.java,
+                HydrationWidgetMediumReceiver::class.java,
+                HydrationWidgetLargeReceiver::class.java,
+            ).flatMap { receiverClass ->
+                manager.getAppWidgetIds(ComponentName(context, receiverClass)).asIterable()
+            }.toIntArray()
         }
 
         private suspend fun refreshWidgetState(context: Context, json: String) {
@@ -121,6 +129,7 @@ class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
             val rawSnapshot = prefs.getString(PREFS_KEY_SNAPSHOT, null) ?: return
             val snapshot = JSONObject(rawSnapshot)
             val actionConfig = snapshot.optJSONObject("actionConfig") ?: run {
+                Log.w(TAG, "Water adjustment skipped: missing actionConfig")
                 markStatus(context, snapshot, "needsSetup")
                 return
             }
@@ -128,11 +137,16 @@ class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
             val baseUrl = actionConfig.optString("baseUrl", "").trimEnd('/')
             val authHeader = actionConfig.optString("authHeader", "")
             if (date.isBlank() || baseUrl.isBlank() || authHeader.isBlank()) {
+                Log.w(
+                    TAG,
+                    "Water adjustment skipped: missing required config dateBlank=${date.isBlank()} baseUrlBlank=${baseUrl.isBlank()} authBlank=${authHeader.isBlank()}",
+                )
                 markStatus(context, snapshot, "needsSetup")
                 return
             }
 
             try {
+                Log.i(TAG, "Posting water adjustment amountMl=$amountMl date=$date host=${URL(baseUrl).host}")
                 val response = postWaterAdjustment(baseUrl, authHeader, actionConfig, date, amountMl)
                 val newConsumedMl = response.optDouble(
                     "water_ml",
@@ -147,7 +161,9 @@ class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
                 val updated = snapshot.toString()
                 prefs.edit().putString(PREFS_KEY_SNAPSHOT, updated).commit()
                 refreshWidgetState(context, updated)
+                Log.i(TAG, "Water adjustment succeeded amountMl=$amountMl consumedMl=$newConsumedMl")
             } catch (e: Exception) {
+                Log.e(TAG, "Water adjustment failed amountMl=$amountMl: ${e.message}", e)
                 markStatus(context, snapshot, "failed")
             }
         }
@@ -191,6 +207,7 @@ class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
                 connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
             }
             connection.disconnect()
+            Log.i(TAG, "Water adjustment response status=$status bodyLength=${body.length}")
 
             if (status !in 200..299) {
                 throw IllegalStateException("Water adjustment failed: $status $body")
@@ -239,3 +256,7 @@ class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
         }
     }
 }
+
+class HydrationWidgetMediumReceiver : HydrationWidgetReceiver()
+
+class HydrationWidgetLargeReceiver : HydrationWidgetReceiver()

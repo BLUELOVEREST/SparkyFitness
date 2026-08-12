@@ -36,6 +36,16 @@ const WIDGET_RECEIVERS = [
     label: '@string/sparky_hydration_widget_name',
     provider: '@xml/sparky_hydration_widget_info',
   },
+  {
+    name: `${WIDGET_PACKAGE}.HydrationWidgetMediumReceiver`,
+    label: '@string/sparky_hydration_widget_medium_name',
+    provider: '@xml/sparky_hydration_widget_medium_info',
+  },
+  {
+    name: `${WIDGET_PACKAGE}.HydrationWidgetLargeReceiver`,
+    label: '@string/sparky_hydration_widget_large_name',
+    provider: '@xml/sparky_hydration_widget_large_info',
+  },
 ];
 
 const TEMPLATE_SUFFIX = '.tmpl';
