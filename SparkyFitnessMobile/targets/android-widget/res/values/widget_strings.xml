@@ -4,4 +4,6 @@
     <string name="sparky_widget_description">Daily calorie summary with quick add shortcuts</string>
     <string name="sparky_macro_widget_name">Macros</string>
     <string name="sparky_macro_widget_description">Today\'s protein, carbs, and fat with quick add shortcuts</string>
+    <string name="sparky_hydration_widget_name">Hydration</string>
+    <string name="sparky_hydration_widget_description">Today\'s water progress with quick add controls</string>
 </resources>

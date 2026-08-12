@@ -34,6 +34,10 @@ const nullableOptionalLegacyString = z.preprocess((value) => {
 }, z.string().nullable().optional());
 
 const requiredLegacyNumber = z.preprocess(coerceLegacyNumber, z.number());
+const requiredNonZeroLegacyNumber = z.preprocess(
+  coerceLegacyNumber,
+  z.number().refine((value) => value !== 0, 'water_ml must not be 0')
+);
 
 const optionalLegacyNumber = z.preprocess((value) => {
   if (value === '') {
@@ -65,6 +69,18 @@ export const UpsertWaterIntakeBodySchema = z
   .loose();
 
 export type UpsertWaterIntakeBody = z.infer<typeof UpsertWaterIntakeBodySchema>;
+
+export const AdjustWaterIntakeAmountBodySchema = z
+  .object({
+    entry_date: requiredLegacyString('entry_date'),
+    water_ml: requiredNonZeroLegacyNumber,
+    user_id: optionalLegacyString,
+  })
+  .loose();
+
+export type AdjustWaterIntakeAmountBody = z.infer<
+  typeof AdjustWaterIntakeAmountBodySchema
+>;
 
 export const UpdateWaterIntakeBodySchema = z
   .object({

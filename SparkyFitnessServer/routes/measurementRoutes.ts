@@ -4,6 +4,7 @@ import checkPermissionMiddleware from '../middleware/checkPermissionMiddleware.j
 import measurementService from '../services/measurementService.js';
 import { log } from '../config/logging.js';
 import {
+  AdjustWaterIntakeAmountBodySchema,
   UpsertWaterIntakeBodySchema,
   UpdateWaterIntakeBodySchema,
   UpsertCheckInBodySchema,
@@ -393,6 +394,49 @@ router.post(
         entry_date,
         change_drinks,
         container_id ?? null
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      // @ts-expect-error TS(2571): Object is of type 'unknown'.
+      if (error.message.startsWith('Forbidden')) {
+        // @ts-expect-error TS(2571): Object is of type 'unknown'.
+        return res.status(403).json({ error: error.message });
+      }
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/water-intake/amount',
+  authenticate,
+  checkPermissionMiddleware('checkin'),
+  async (req, res, next) => {
+    const bodyResult = AdjustWaterIntakeAmountBodySchema.safeParse(req.body);
+    if (!bodyResult.success) {
+      return res.status(400).json({
+        error: bodyResult.error.issues.map((i) => i.message).join(', '),
+      });
+    }
+    const { entry_date, water_ml, user_id } = bodyResult.data;
+
+    const targetUserId = user_id || req.userId;
+
+    if (user_id && user_id !== req.userId) {
+      const hasPermission = await { canAccessUserData }.canAccessUserData(
+        user_id,
+        'checkin',
+        req.authenticatedUserId || req.userId
+      );
+      if (!hasPermission) return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    try {
+      const result = await measurementService.adjustWaterIntakeAmount(
+        targetUserId,
+        req.originalUserId || req.userId,
+        entry_date,
+        water_ml
       );
       res.status(200).json(result);
     } catch (error) {

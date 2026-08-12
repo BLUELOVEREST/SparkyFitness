@@ -12,8 +12,7 @@ import type { FoodFormData } from '../components/FoodForm';
 import type { Exercise } from './exercise';
 import type { Meal, MealIngredientDraft } from './meals';
 import type { FoodEntryMeal } from './foodEntryMeals';
-import type { ActiveMealPlanDayMeal } from './mealPlan';
-import type { MealPlanTemplate } from './mealPlan';
+import type { ActiveMealPlanDayMeal, MealPlanTemplate } from './mealPlan';
 import type {
   EquivalentUnit,
   FoodUnitSelectionResult,

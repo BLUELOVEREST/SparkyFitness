@@ -3,6 +3,7 @@ import {
   fetchWaterIntake,
   fetchWaterContainers,
   changeWaterIntake,
+  adjustWaterIntakeAmount,
   upsertCheckIn,
   fetchMostRecentMeasurement,
 } from '../../src/services/api/measurementsApi';
@@ -390,6 +391,49 @@ describe('measurementsApi', () => {
       await expect(
         changeWaterIntake({ entryDate: '2024-06-15', changeDrinks: 1, containerId: 1 })
       ).rejects.toThrow('Server error: 500 - Internal Server Error');
+    });
+  });
+
+  describe('adjustWaterIntakeAmount', () => {
+    const testConfig: ServerConfig = {
+      id: 'test-id',
+      url: 'https://example.com',
+      apiKey: 'test-api-key-12345',
+    };
+
+    test('sends exact ml adjustment to /api/measurements/water-intake/amount', async () => {
+      mockGetActiveServerConfig.mockResolvedValue(testConfig);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            id: '123',
+            water_ml: 1850,
+            entry_date: '2024-06-15',
+          }),
+      });
+
+      await adjustWaterIntakeAmount({
+        entryDate: '2024-06-15',
+        waterMl: 350,
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://example.com/api/measurements/water-intake/amount',
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer test-api-key-12345',
+
+            'X-Meal-Model-Version': '2',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            entry_date: '2024-06-15',
+            water_ml: 350,
+          }),
+        })
+      );
     });
   });
 

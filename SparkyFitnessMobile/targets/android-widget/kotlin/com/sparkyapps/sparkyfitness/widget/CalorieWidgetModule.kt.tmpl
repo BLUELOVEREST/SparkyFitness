@@ -78,6 +78,32 @@ class CalorieWidgetModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun setHydrationSnapshot(json: String, promise: Promise) {
+        val ctx = reactApplicationContext
+        moduleScope.launch {
+            try {
+                val prefs = ctx.getSharedPreferences(
+                    HydrationWidgetReceiver.PREFS_NAME,
+                    Context.MODE_PRIVATE,
+                )
+                if (!prefs.edit().putString(HydrationWidgetReceiver.PREFS_KEY_SNAPSHOT, json).commit()) {
+                    throw IllegalStateException("Failed to persist hydration widget snapshot")
+                }
+
+                val manager = GlanceAppWidgetManager(ctx)
+                manager.getGlanceIds(HydrationWidget::class.java).forEach { id ->
+                    updateAppWidgetState(ctx, id) { state ->
+                        state[HydrationWidget.SNAPSHOT_STATE_KEY] = json
+                    }
+                }
+                promise.resolve(null)
+            } catch (e: Exception) {
+                promise.reject("E_WRITE_FAILED", e)
+            }
+        }
+    }
+
+    @ReactMethod
     fun reloadWidget(promise: Promise) {
         val ctx = reactApplicationContext
         moduleScope.launch {
@@ -85,6 +111,23 @@ class CalorieWidgetModule(reactContext: ReactApplicationContext) :
                 val manager = GlanceAppWidgetManager(ctx)
                 val widget = CalorieWidget()
                 manager.getGlanceIds(CalorieWidget::class.java).forEach { id ->
+                    widget.update(ctx, id)
+                }
+                promise.resolve(null)
+            } catch (e: Exception) {
+                promise.reject("E_RELOAD_FAILED", e)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun reloadHydrationWidget(promise: Promise) {
+        val ctx = reactApplicationContext
+        moduleScope.launch {
+            try {
+                val manager = GlanceAppWidgetManager(ctx)
+                val widget = HydrationWidget()
+                manager.getGlanceIds(HydrationWidget::class.java).forEach { id ->
                     widget.update(ctx, id)
                 }
                 promise.resolve(null)

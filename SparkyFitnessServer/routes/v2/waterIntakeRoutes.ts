@@ -1,5 +1,6 @@
 import express, { RequestHandler } from 'express';
 import {
+  AdjustWaterIntakeAmountBodySchema,
   UpsertWaterIntakeBodySchema,
   UpdateWaterIntakeBodySchema,
   DateParamSchema,
@@ -308,6 +309,37 @@ const upsertWaterIntakeHandler: RequestHandler = async (req, res, next) => {
       entry_date,
       change_drinks,
       container_id ?? null
+    );
+    res.status(200).json(result);
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.startsWith('Forbidden')) {
+      res.status(403).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+};
+
+const adjustWaterIntakeAmountHandler: RequestHandler = async (
+  req,
+  res,
+  next
+) => {
+  try {
+    const bodyResult = AdjustWaterIntakeAmountBodySchema.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({
+        error: 'Invalid request body',
+        details: bodyResult.error.flatten().fieldErrors,
+      });
+      return;
+    }
+    const { entry_date, water_ml } = bodyResult.data;
+    const result = await measurementService.adjustWaterIntakeAmount(
+      req.userId,
+      req.originalUserId || req.userId,
+      entry_date,
+      water_ml
     );
     res.status(200).json(result);
   } catch (error: unknown) {
@@ -715,6 +747,7 @@ const updateWaterIntakeLogTimeHandler: RequestHandler = async (
 router.get('/water-intake/entry/:id', getWaterIntakeEntryHandler);
 router.get('/water-intake/:date/log', getWaterIntakeLogHandler);
 router.get('/water-intake/:date', getWaterIntakeHandler);
+router.post('/water-intake/amount', adjustWaterIntakeAmountHandler);
 router.post('/water-intake', upsertWaterIntakeHandler);
 router.put('/water-intake/:id', updateWaterIntakeHandler);
 router.patch('/water-intake/log/:id', updateWaterIntakeLogTimeHandler);

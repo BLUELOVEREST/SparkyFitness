@@ -1,7 +1,10 @@
 import { vi, beforeEach, describe, expect, it } from 'vitest';
 import measurementService from '../services/measurementService.js';
 import measurementRepository from '../models/measurementRepository.js';
-import { UpsertWaterIntakeBodySchema } from '../schemas/measurementSchemas.js';
+import {
+  AdjustWaterIntakeAmountBodySchema,
+  UpsertWaterIntakeBodySchema,
+} from '../schemas/measurementSchemas.js';
 // Mock the repository functions
 vi.mock('../models/measurementRepository');
 describe('Measurement Service - Water Intake', () => {
@@ -55,6 +58,30 @@ describe('Measurement Service - Water Intake', () => {
         expect(result.success).toBe(false);
         // @ts-expect-error TS(2532): Object is possibly 'undefined'.
         expect(result.error.issues).toHaveLength(2);
+      });
+    });
+    describe('AdjustWaterIntakeAmountBodySchema', () => {
+      it('should accept positive and negative exact ml adjustments', () => {
+        expect(
+          AdjustWaterIntakeAmountBodySchema.safeParse({
+            entry_date: '2023-01-01',
+            water_ml: 350,
+          }).success
+        ).toBe(true);
+        expect(
+          AdjustWaterIntakeAmountBodySchema.safeParse({
+            entry_date: '2023-01-01',
+            water_ml: -250,
+          }).success
+        ).toBe(true);
+      });
+
+      it('should reject zero ml adjustments', () => {
+        const result = AdjustWaterIntakeAmountBodySchema.safeParse({
+          entry_date: '2023-01-01',
+          water_ml: 0,
+        });
+        expect(result.success).toBe(false);
       });
     });
   });
@@ -250,6 +277,84 @@ describe('Measurement Service - Water Intake', () => {
         'Forbidden: You do not have permission to delete this water intake entry.'
       );
       expect(measurementRepository.deleteWaterIntake).not.toHaveBeenCalled();
+    });
+  });
+  describe('adjustWaterIntakeAmount', () => {
+    it('logs positive exact ml amounts and returns the daily total', async () => {
+      const mockUserId = 'test-user-id';
+      const mockEntryDate = '2023-01-01';
+      const mockTotal = { water_ml: 850, entry_date: mockEntryDate };
+      // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+      measurementRepository.insertWaterIntakeLog.mockResolvedValue({
+        id: 'log-1',
+        water_ml: 350,
+      });
+      // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+      measurementRepository.incrementWaterData.mockResolvedValue({});
+      // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+      measurementRepository.getWaterIntakeByDate.mockResolvedValue(mockTotal);
+
+      const result = await measurementService.adjustWaterIntakeAmount(
+        mockUserId,
+        mockUserId,
+        mockEntryDate,
+        350
+      );
+
+      expect(measurementRepository.insertWaterIntakeLog).toHaveBeenCalledWith(
+        mockUserId,
+        mockUserId,
+        mockEntryDate,
+        350,
+        null,
+        null,
+        'manual'
+      );
+      expect(measurementRepository.incrementWaterData).toHaveBeenCalledWith(
+        mockUserId,
+        mockUserId,
+        350,
+        mockEntryDate,
+        'manual'
+      );
+      expect(result).toEqual(mockTotal);
+    });
+
+    it('subtracts exact ml amounts from recent log entries and daily total', async () => {
+      const mockUserId = 'test-user-id';
+      const mockEntryDate = '2023-01-01';
+      const mockTotal = { water_ml: 250, entry_date: mockEntryDate };
+      // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+      measurementRepository.getWaterIntakeLogByDate.mockResolvedValue([
+        { id: 'recent-1', water_ml: 350 },
+        { id: 'recent-2', water_ml: 500 },
+      ]);
+      // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+      measurementRepository.updateWaterIntakeLogAmount.mockResolvedValue({});
+      // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+      measurementRepository.incrementWaterData.mockResolvedValue({});
+      // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message
+      measurementRepository.getWaterIntakeByDate.mockResolvedValue(mockTotal);
+
+      const result = await measurementService.adjustWaterIntakeAmount(
+        mockUserId,
+        mockUserId,
+        mockEntryDate,
+        -250
+      );
+
+      expect(
+        measurementRepository.updateWaterIntakeLogAmount
+      ).toHaveBeenCalledWith('recent-1', mockUserId, 100);
+      expect(measurementRepository.deleteWaterIntakeLog).not.toHaveBeenCalled();
+      expect(measurementRepository.incrementWaterData).toHaveBeenCalledWith(
+        mockUserId,
+        mockUserId,
+        -250,
+        mockEntryDate,
+        'manual'
+      );
+      expect(result).toEqual(mockTotal);
     });
   });
   // ---------------------------------------------------------------------------

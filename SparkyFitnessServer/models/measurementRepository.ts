@@ -1499,6 +1499,23 @@ async function deleteWaterIntakeLog(id: string, userId: string) {
   }
 }
 
+async function updateWaterIntakeLogAmount(
+  id: string,
+  userId: string,
+  waterMl: number
+) {
+  const client = await getClient(userId);
+  try {
+    const result = await client.query(
+      'UPDATE water_intake_entries SET water_ml = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [waterMl, id, userId]
+    );
+    return result.rows[0] || null;
+  } finally {
+    client.release();
+  }
+}
+
 async function getWaterIntakeLogEntryOwnerId(id: string, userId: string) {
   const client = await getClient(userId);
   try {
@@ -1581,6 +1598,7 @@ export default {
   getWaterIntakeLogByDate,
   getWaterIntakeLogsByDates,
   deleteWaterIntakeLog,
+  updateWaterIntakeLogAmount,
   getWaterIntakeLogEntryOwnerId,
   updateWaterIntakeLogTime,
   getWaterTotalsByDateRange,

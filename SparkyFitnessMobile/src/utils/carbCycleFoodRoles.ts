@@ -44,7 +44,7 @@ function roundMacro(value: number): number {
 }
 
 export function inferMacroRole(macros: MacroValues): FoodMacroRole | null {
-  const entries: Array<[FoodMacroRole, number]> = [
+  const entries: [FoodMacroRole, number][] = [
     ['carb', macros.carbs],
     ['protein', macros.protein],
     ['fat', macros.fat],

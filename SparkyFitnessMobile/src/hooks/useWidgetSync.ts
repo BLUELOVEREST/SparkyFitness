@@ -6,8 +6,12 @@ import { Platform } from 'react-native';
 
 import { CalorieWidgetBridge } from '../services/CalorieWidgetBridge';
 import { addLog } from '../services/LogService';
+import { normalizeUrl } from '../services/api/apiClient';
+import { getAuthHeaders } from '../services/api/authService';
+import { getActiveServerConfig, proxyHeadersToRecord } from '../services/storage';
 import type { DailySummary } from '../types/dailySummary';
 import { getTodayDate } from '../utils/dateUtils';
+import { buildHydrationWidgetSnapshot } from '../utils/widgetSnapshots';
 
 const WIDGET_KIND = 'widget';
 const CALORIE_SNAPSHOT_KEY = 'calorieSnapshot';
@@ -23,6 +27,7 @@ export function useWidgetSync(summary: DailySummary | undefined): void {
   const isToday = date === getTodayDate();
   const lastAndroidCalorieSnapshotKeyRef = useRef<string | null>(null);
   const lastAndroidMacroSnapshotKeyRef = useRef<string | null>(null);
+  const lastAndroidHydrationSnapshotKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isToday || !date || !summary) {
@@ -137,26 +142,82 @@ export function useWidgetSync(summary: DailySummary | undefined): void {
         remaining: balance?.remaining,
       };
       const macroSnapshotKey = JSON.stringify(macroSnapshot);
-      if (lastAndroidMacroSnapshotKeyRef.current === macroSnapshotKey) return;
+      if (lastAndroidMacroSnapshotKeyRef.current !== macroSnapshotKey) {
+        lastAndroidMacroSnapshotKeyRef.current = macroSnapshotKey;
+        const macroPayload = {
+          ...macroSnapshot,
+          lastUpdated,
+        };
 
-      lastAndroidMacroSnapshotKeyRef.current = macroSnapshotKey;
-      const macroPayload = {
-        ...macroSnapshot,
+        void (async () => {
+          try {
+            await CalorieWidgetBridge.setMacroSnapshot(
+              JSON.stringify(macroPayload),
+            );
+            await CalorieWidgetBridge.reloadMacroWidget();
+          } catch (error) {
+            if (lastAndroidMacroSnapshotKeyRef.current === macroSnapshotKey) {
+              lastAndroidMacroSnapshotKeyRef.current = null;
+            }
+            addLog(
+              `[useWidgetSync] Android macro widget push failed: ${error}`,
+              'ERROR',
+            );
+          }
+        })();
+      }
+
+      const hydrationBase = {
+        date,
+        consumedMl: summary.waterConsumed,
+        goalMl: summary.waterGoal,
         lastUpdated,
       };
 
       void (async () => {
+        let actionConfig = null;
         try {
-          await CalorieWidgetBridge.setMacroSnapshot(
-            JSON.stringify(macroPayload),
-          );
-          await CalorieWidgetBridge.reloadMacroWidget();
+          const config = await getActiveServerConfig();
+          if (config) {
+            actionConfig = {
+              baseUrl: normalizeUrl(config.url),
+              authHeader: getAuthHeaders(config).Authorization,
+              proxyHeaders: proxyHeadersToRecord(config.proxyHeaders),
+            };
+          }
         } catch (error) {
-          if (lastAndroidMacroSnapshotKeyRef.current === macroSnapshotKey) {
-            lastAndroidMacroSnapshotKeyRef.current = null;
+          addLog(
+            `[useWidgetSync] Android hydration widget config unavailable: ${error}`,
+            'WARNING',
+          );
+        }
+
+        const hydrationPayload = buildHydrationWidgetSnapshot({
+          ...hydrationBase,
+          actionConfig,
+        });
+        const hydrationSnapshotKey = JSON.stringify(hydrationPayload);
+        if (
+          lastAndroidHydrationSnapshotKeyRef.current === hydrationSnapshotKey
+        ) {
+          return;
+        }
+
+        lastAndroidHydrationSnapshotKeyRef.current = hydrationSnapshotKey;
+
+        try {
+          await CalorieWidgetBridge.setHydrationSnapshot(
+            hydrationSnapshotKey,
+          );
+          await CalorieWidgetBridge.reloadHydrationWidget();
+        } catch (error) {
+          if (
+            lastAndroidHydrationSnapshotKeyRef.current === hydrationSnapshotKey
+          ) {
+            lastAndroidHydrationSnapshotKeyRef.current = null;
           }
           addLog(
-            `[useWidgetSync] Android macro widget push failed: ${error}`,
+            `[useWidgetSync] Android hydration widget push failed: ${error}`,
             'ERROR',
           );
         }

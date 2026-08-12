@@ -117,3 +117,19 @@ export const changeWaterIntake = async (params: {
     },
   });
 };
+
+export const adjustWaterIntakeAmount = async (params: {
+  entryDate: string;
+  waterMl: number;
+}): Promise<WaterIntakeResponse> => {
+  return apiFetch<WaterIntakeResponse>({
+    endpoint: '/api/measurements/water-intake/amount',
+    serviceName: 'Measurements API',
+    operation: 'adjust water intake amount',
+    method: 'POST',
+    body: {
+      entry_date: params.entryDate,
+      water_ml: params.waterMl,
+    },
+  });
+};

@@ -609,6 +609,82 @@ async function logWaterIntakeAmount(
     throw error;
   }
 }
+
+async function adjustWaterIntakeAmount(
+  authenticatedUserId: string,
+  actingUserId: string,
+  entryDate: string,
+  waterMl: number
+) {
+  try {
+    if (waterMl > 0) {
+      await logWaterIntakeAmount(
+        authenticatedUserId,
+        actingUserId,
+        entryDate,
+        waterMl,
+        'manual'
+      );
+    } else {
+      const logEntries = await measurementRepository.getWaterIntakeLogByDate(
+        authenticatedUserId,
+        entryDate
+      );
+      let remainingToRemove = Math.abs(waterMl);
+      let actualMlRemoved = 0;
+
+      for (const entry of logEntries) {
+        if (remainingToRemove <= 0) break;
+
+        const entryMl = Number(entry.water_ml) || 0;
+        if (entryMl <= 0) continue;
+
+        const removedFromEntry = Math.min(entryMl, remainingToRemove);
+        const updatedEntryMl = entryMl - removedFromEntry;
+
+        if (updatedEntryMl <= 0) {
+          await measurementRepository.deleteWaterIntakeLog(
+            entry.id,
+            authenticatedUserId
+          );
+        } else {
+          await measurementRepository.updateWaterIntakeLogAmount(
+            entry.id,
+            authenticatedUserId,
+            updatedEntryMl
+          );
+        }
+
+        actualMlRemoved += removedFromEntry;
+        remainingToRemove -= removedFromEntry;
+      }
+
+      if (actualMlRemoved > 0) {
+        await measurementRepository.incrementWaterData(
+          authenticatedUserId,
+          actingUserId,
+          -actualMlRemoved,
+          entryDate,
+          'manual'
+        );
+      }
+    }
+
+    return await measurementRepository.getWaterIntakeByDate(
+      authenticatedUserId,
+      entryDate,
+      // @ts-expect-error TS(2345): Existing repository type does not include source strings.
+      'manual'
+    );
+  } catch (error) {
+    log(
+      'error',
+      `Error adjusting water intake amount for user ${authenticatedUserId} by ${actingUserId}:`,
+      error
+    );
+    throw error;
+  }
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getWaterIntakeEntryById(authenticatedUserId: any, id: any) {
   try {
@@ -1692,6 +1768,7 @@ export { processHealthData };
 export { getWaterIntake };
 export { upsertWaterIntake };
 export { logWaterIntakeAmount };
+export { adjustWaterIntakeAmount };
 export { getWaterIntakeEntryById };
 export { updateWaterIntake };
 export { deleteWaterIntake };
@@ -1819,6 +1896,7 @@ export default {
   getWaterIntake,
   upsertWaterIntake,
   logWaterIntakeAmount,
+  adjustWaterIntakeAmount,
   getWaterIntakeEntryById,
   updateWaterIntake,
   deleteWaterIntake,
