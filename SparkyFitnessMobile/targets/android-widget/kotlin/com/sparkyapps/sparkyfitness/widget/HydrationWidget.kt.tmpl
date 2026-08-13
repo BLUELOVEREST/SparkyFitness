@@ -51,6 +51,7 @@ class HydrationWidget : GlanceAppWidget() {
 
     override val sizeMode: SizeMode = SizeMode.Responsive(
         setOf(
+            DpSize(70.dp, 70.dp),
             DpSize(150.dp, 90.dp),
             DpSize(240.dp, 150.dp),
             DpSize(320.dp, 170.dp),
@@ -74,6 +75,11 @@ class HydrationWidget : GlanceAppWidget() {
         val openAppIntent = Intent(Intent.ACTION_VIEW, Uri.parse("sparkyfitnessmobile://"))
             .setPackage(context.packageName)
 
+        if (size.width < 120.dp && size.height < 120.dp) {
+            QuickAddLayout(context)
+            return
+        }
+
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
@@ -87,6 +93,33 @@ class HydrationWidget : GlanceAppWidget() {
                 size.width < 300.dp -> MediumLayout(context, snapshot)
                 else -> LargeLayout(context, snapshot)
             }
+        }
+    }
+
+    @Composable
+    private fun QuickAddLayout(context: Context) {
+        val intent = Intent(context, HydrationWidgetReceiver::class.java).apply {
+            action = HydrationWidgetReceiver.ACTION_ADJUST_WATER
+            putExtra(HydrationWidgetReceiver.EXTRA_AMOUNT_ML, 250)
+        }
+
+        Box(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .background(HydrationBlue)
+                .appWidgetBackgroundCornerRadius()
+                .clickable(actionSendBroadcast(intent)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "+250",
+                style = TextStyle(
+                    color = ColorProvider(Color.White),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                maxLines = 1,
+            )
         }
     }
 

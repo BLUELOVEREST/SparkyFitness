@@ -106,6 +106,7 @@ open class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
             val manager = AppWidgetManager.getInstance(context)
             return listOf(
                 HydrationWidgetReceiver::class.java,
+                HydrationWidgetQuickAddReceiver::class.java,
                 HydrationWidgetMediumReceiver::class.java,
                 HydrationWidgetLargeReceiver::class.java,
             ).flatMap { receiverClass ->
@@ -310,6 +311,8 @@ open class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
         }
     }
 }
+
+class HydrationWidgetQuickAddReceiver : HydrationWidgetReceiver()
 
 class HydrationWidgetMediumReceiver : HydrationWidgetReceiver()
 

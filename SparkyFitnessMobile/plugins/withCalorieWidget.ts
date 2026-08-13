@@ -37,6 +37,11 @@ const WIDGET_RECEIVERS = [
     provider: '@xml/sparky_hydration_widget_info',
   },
   {
+    name: `${WIDGET_PACKAGE}.HydrationWidgetQuickAddReceiver`,
+    label: '@string/sparky_hydration_widget_quick_add_name',
+    provider: '@xml/sparky_hydration_widget_quick_add_info',
+  },
+  {
     name: `${WIDGET_PACKAGE}.HydrationWidgetMediumReceiver`,
     label: '@string/sparky_hydration_widget_medium_name',
     provider: '@xml/sparky_hydration_widget_medium_info',
