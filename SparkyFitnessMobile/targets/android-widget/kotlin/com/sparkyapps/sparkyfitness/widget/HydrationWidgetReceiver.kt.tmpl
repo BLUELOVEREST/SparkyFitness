@@ -146,7 +146,7 @@ open class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
             }
 
             try {
-                Log.i(TAG, "Posting water adjustment amountMl=$amountMl date=$date host=${URL(baseUrl).host}")
+                Log.i(TAG, "Preparing water adjustment amountMl=$amountMl date=$date base=${safeBaseUrl(baseUrl)}")
                 val response = postWaterAdjustment(baseUrl, authHeader, actionConfig, date, amountMl)
                 val newConsumedMl = response.optDouble(
                     "water_ml",
@@ -175,7 +175,44 @@ open class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
             date: String,
             amountMl: Int,
         ): JSONObject {
-            val url = URL("$baseUrl/api/measurements/water-intake/amount")
+            val primary = postWaterAdjustmentOnce(
+                URL("$baseUrl/api/measurements/water-intake/amount"),
+                authHeader,
+                actionConfig,
+                date,
+                amountMl,
+            )
+            val response = if (primary.status == 404) {
+                Log.w(
+                    TAG,
+                    "Primary water endpoint returned 404, retrying v2 endpoint primary=${primary.endpoint}",
+                )
+                postWaterAdjustmentOnce(
+                    URL("$baseUrl/api/v2/measurements/water-intake/amount"),
+                    authHeader,
+                    actionConfig,
+                    date,
+                    amountMl,
+                )
+            } else {
+                primary
+            }
+
+            if (response.status !in 200..299) {
+                throw IllegalStateException("Water adjustment failed: ${response.status} ${response.body}")
+            }
+            return if (response.body.isBlank()) JSONObject() else JSONObject(response.body)
+        }
+
+        private fun postWaterAdjustmentOnce(
+            url: URL,
+            authHeader: String,
+            actionConfig: JSONObject,
+            date: String,
+            amountMl: Int,
+        ): WaterAdjustmentHttpResponse {
+            val endpoint = url.toExternalForm()
+            Log.i(TAG, "Posting water adjustment endpoint=$endpoint")
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 10_000
@@ -207,12 +244,30 @@ open class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
                 connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
             }
             connection.disconnect()
-            Log.i(TAG, "Water adjustment response status=$status bodyLength=${body.length}")
+            Log.i(TAG, "Water adjustment response endpoint=$endpoint status=$status bodyLength=${body.length}")
 
-            if (status !in 200..299) {
-                throw IllegalStateException("Water adjustment failed: $status $body")
+            return WaterAdjustmentHttpResponse(
+                status = status,
+                body = body,
+                endpoint = endpoint,
+            )
+        }
+
+        private fun safeBaseUrl(baseUrl: String): String {
+            return try {
+                val parsed = URL(baseUrl)
+                val portSuffix = if (parsed.port == -1) "" else ":${parsed.port}"
+                "${parsed.protocol}://${parsed.host}$portSuffix"
+            } catch (e: Exception) {
+                "<invalid>"
             }
-            return if (body.isBlank()) JSONObject() else JSONObject(body)
+        }
+
+        private data class WaterAdjustmentHttpResponse(
+            val status: Int,
+            val body: String,
+            val endpoint: String,
+        )
         }
 
         private suspend fun markStatus(context: Context, snapshot: JSONObject, status: String) {
