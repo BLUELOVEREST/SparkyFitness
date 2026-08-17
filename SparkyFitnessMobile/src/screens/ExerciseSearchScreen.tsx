@@ -23,7 +23,13 @@ import SegmentedControl from '../components/SegmentedControl';
 import { CATEGORY_ICON_MAP, exerciseFromExternalItem } from '../utils/workoutSession';
 import { useExerciseImageSource } from '../hooks/useExerciseImageSource';
 import { useServerConnection, useExternalProviders, useSuggestedExercises, useExerciseSearch, useProfile } from '../hooks';
-import { deriveShareStatus } from '../utils/shareStatus';
+import {
+  deriveShareStatus,
+  filterByOwnership,
+  ownershipFilterEmptyState,
+  ownershipFilterHeaderMenu,
+} from '../utils/shareStatus';
+import { useAppPreferencesStore } from '../stores/appPreferencesStore';
 import ShareStatusBadge from '../components/ShareStatusBadge';
 import { suggestedExercisesQueryKey } from '../hooks/queryKeys';
 import { useExternalExerciseSearch } from '../hooks/useExternalExerciseSearch';
@@ -52,29 +58,6 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'online', label: 'Online' },
 ] as const;
 
-const filterItems = <T extends { user_id?: string | null; userId?: string | null; is_public?: boolean | null; shared_with_public?: boolean | null; sharedWithPublic?: boolean | null }>(
-  items: T[],
-  filter: 'all' | 'mine' | 'family' | 'public',
-  currentUserId?: string
-) => {
-  if (filter === 'all') return items;
-  return items.filter((item) => {
-    const isOwner = !!((item.user_id && item.user_id === currentUserId) || (item.userId && item.userId === currentUserId));
-    const isPublic = !!(item.is_public || item.shared_with_public || item.sharedWithPublic);
-    
-    if (filter === 'mine') {
-      return isOwner;
-    }
-    if (filter === 'family') {
-      return !isOwner && !isPublic && (item.user_id != null || item.userId != null);
-    }
-    if (filter === 'public') {
-      return isPublic;
-    }
-    return true;
-  });
-};
-
 const ExerciseSearchScreen: React.FC<ExerciseSearchScreenProps> = ({ navigation, route }) => {
   const { returnKey } = route.params;
 
@@ -92,7 +75,8 @@ const ExerciseSearchScreen: React.FC<ExerciseSearchScreenProps> = ({ navigation,
   const { isNavigationLocked, runNavigationAction } = useNavigationActionGuard(navigation);
 
   const [activeTab, setActiveTab] = useState<TabKey>('search');
-  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'family' | 'public'>('all');
+  const ownershipFilter = useAppPreferencesStore((s) => s.exerciseSearchOwnershipFilter);
+  const setOwnershipFilter = useAppPreferencesStore((s) => s.setExerciseSearchOwnershipFilter);
   const [searchText, setSearchText] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [importingExerciseId, setImportingExerciseId] = useState<string | null>(null);
@@ -289,9 +273,9 @@ useEffect(() => {
     profile,
   ]);
 
-  const filteredRecentExercises = useMemo(() => filterItems(recentExercises, ownershipFilter, profile?.id), [recentExercises, ownershipFilter, profile?.id]);
-  const filteredTopExercises = useMemo(() => filterItems(topExercises, ownershipFilter, profile?.id), [topExercises, ownershipFilter, profile?.id]);
-  const filteredSearchResults = useMemo(() => filterItems(searchResults, ownershipFilter, profile?.id), [searchResults, ownershipFilter, profile?.id]);
+  const filteredRecentExercises = useMemo(() => filterByOwnership(recentExercises, ownershipFilter, profile?.id), [recentExercises, ownershipFilter, profile?.id]);
+  const filteredTopExercises = useMemo(() => filterByOwnership(topExercises, ownershipFilter, profile?.id), [topExercises, ownershipFilter, profile?.id]);
+  const filteredSearchResults = useMemo(() => filterByOwnership(searchResults, ownershipFilter, profile?.id), [searchResults, ownershipFilter, profile?.id]);
 
   const sections = useMemo(() => {
     const allSections: ExerciseSection[] = [
@@ -302,7 +286,7 @@ useEffect(() => {
   }, [filteredRecentExercises, filteredTopExercises]);
 
   const renderSectionHeader = ({ section }: { section: ExerciseSection }) => (
-    <View className="px-4 py-2 bg-surface">
+    <View className="px-4 py-2 bg-background">
       <Text className="text-text-secondary text-sm font-semibold uppercase tracking-wider">
         {section.title}
       </Text>
@@ -352,17 +336,30 @@ useEffect(() => {
     }
 
     if (filteredSearchResults.length === 0) {
+      if (ownershipFilter !== 'all' && searchResults.length > 0) {
+        return (
+          <StatusView
+            {...ownershipFilterEmptyState({
+              noun: 'exercises',
+              filter: ownershipFilter,
+              onReset: () => setOwnershipFilter('all'),
+            })}
+          />
+        );
+      }
       return <StatusView title="No matching exercises found" />;
     }
 
     return (
-      <FlatList
-        data={filteredSearchResults}
-        keyExtractor={(item) => item.id}
-        renderItem={renderExerciseRow}
-        keyboardShouldPersistTaps="handled"
-        contentContainerClassName="pb-safe-or-4"
-      />
+      <View className="flex-1 bg-surface">
+        <FlatList
+          data={filteredSearchResults}
+          keyExtractor={(item) => item.id}
+          renderItem={renderExerciseRow}
+          keyboardShouldPersistTaps="handled"
+          contentContainerClassName="pb-safe-or-4"
+        />
+      </View>
     );
   };
 
@@ -390,19 +387,32 @@ useEffect(() => {
     }
 
     if (sections.length === 0) {
+      if (ownershipFilter !== 'all' && (recentExercises.length > 0 || topExercises.length > 0)) {
+        return (
+          <StatusView
+            {...ownershipFilterEmptyState({
+              noun: 'exercises',
+              filter: ownershipFilter,
+              onReset: () => setOwnershipFilter('all'),
+            })}
+          />
+        );
+      }
       return <StatusView title="Search for an exercise to get started" />;
     }
 
     return (
-      <SectionList
-        sections={sections}
-        keyExtractor={(item, index) => `${index}-${item.id}`}
-        renderItem={renderExerciseRow}
-        renderSectionHeader={renderSectionHeader}
-        stickySectionHeadersEnabled
-        keyboardShouldPersistTaps="handled"
-        contentContainerClassName="pb-safe-or-4"
-      />
+      <View className="flex-1 bg-surface">
+        <SectionList
+          sections={sections}
+          keyExtractor={(item, index) => `${index}-${item.id}`}
+          renderItem={renderExerciseRow}
+          renderSectionHeader={renderSectionHeader}
+          stickySectionHeadersEnabled
+          keyboardShouldPersistTaps="handled"
+          contentContainerClassName="pb-safe-or-4"
+        />
+      </View>
     );
   };
 
@@ -519,14 +529,16 @@ useEffect(() => {
     }
 
     return (
-      <FlatList
-        data={onlineSearchResults}
-        keyExtractor={(item, index) => `${item.source}-${item.id}-${index}`}
-        renderItem={renderExternalExerciseItem}
-        keyboardShouldPersistTaps="handled"
-        contentContainerClassName="pb-safe-or-4"
-        ListFooterComponent={renderOnlineFooter()}
-      />
+      <View className="flex-1 bg-surface">
+        <FlatList
+          data={onlineSearchResults}
+          keyExtractor={(item, index) => `${item.source}-${item.id}-${index}`}
+          renderItem={renderExternalExerciseItem}
+          keyboardShouldPersistTaps="handled"
+          contentContainerClassName="pb-safe-or-4"
+          ListFooterComponent={renderOnlineFooter()}
+        />
+      </View>
     );
   };
 
@@ -609,6 +621,15 @@ useEffect(() => {
   const header = useScreenHeader({
     title: 'Exercises',
     left: { kind: 'dismiss', onPress: () => navigation.goBack(), identifier: 'exercise-search-cancel' },
+    // The filter only applies to the local library, so the Online tab drops it.
+    right: activeTab === 'search'
+      ? ownershipFilterHeaderMenu({
+          noun: 'exercises',
+          identifier: 'exercise-search-filter',
+          filter: ownershipFilter,
+          onSelect: setOwnershipFilter,
+        })
+      : undefined,
   });
 
   return (
@@ -619,22 +640,6 @@ useEffect(() => {
       <View className="px-4 mt-2">
         <SegmentedControl segments={TABS} activeKey={activeTab} onSelect={setActiveTab} />
       </View>
-
-      {/* Ownership filter */}
-      {activeTab === 'search' && (
-        <View className="px-4 mt-2">
-          <SegmentedControl
-            segments={[
-              { key: 'all', label: 'All' },
-              { key: 'mine', label: 'Mine' },
-              { key: 'family', label: 'Family' },
-              { key: 'public', label: 'Public' },
-            ]}
-            activeKey={ownershipFilter}
-            onSelect={setOwnershipFilter}
-          />
-        </View>
-      )}
 
       {/* Search bar */}
       {renderSearchBar()}

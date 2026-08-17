@@ -1,4 +1,4 @@
-import React, {
+import {
   forwardRef,
   useCallback,
   useImperativeHandle,
@@ -7,49 +7,20 @@ import React, {
   useState,
 } from 'react';
 import { Platform, Pressable, Text, TouchableOpacity, View } from 'react-native';
-import {
-  BottomSheetBackdrop,
-  BottomSheetModal,
-  BottomSheetScrollView,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
-import { FullWindowOverlay } from 'react-native-screens';
-import { useCSSVariable, useUniwind } from 'uniwind';
+import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useCSSVariable } from 'uniwind';
 import DateTimePicker, { type DateType } from 'react-native-ui-datepicker';
 import Toast from 'react-native-toast-message';
 
 import Icon from './Icon';
+import { sheetContainer, useSheetBackdrop } from './ui/sheetChrome';
 import { useEndFast } from '../hooks/useFasting';
-import { formatHoursMinutes } from '../utils/fasting';
+import { formatHoursMinutes, formatDateTime } from '../utils/fasting';
+import { dateTypeToDate } from './TimeSheet';
 import { addLog } from '../services/LogService';
 import type { FastingLog } from '../types/fasting';
 
-// Render the sheet inside an iOS UIWindow so it sits above any native modal
-// presentation. No-op on Android.
-const sheetContainer =
-  Platform.OS === 'ios'
-    ? ({ children }: React.PropsWithChildren) => <FullWindowOverlay>{children}</FullWindowOverlay>
-    : undefined;
-
 /** Normalizes the picker's 6-way `DateType` into a JS `Date`, preserving time. */
-function dateTypeToDate(date: DateType): Date | null {
-  if (!date) return null;
-  if (date instanceof Date) return date;
-  if (typeof date === 'object' && 'toDate' in date) return date.toDate();
-  if (typeof date === 'string') return new Date(date);
-  return new Date(date);
-}
-
-function formatDateTime(date: Date): string {
-  return date.toLocaleString([], {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
 export interface EndFastSheetRef {
   present: (fast: FastingLog) => void;
   dismiss: () => void;
@@ -61,8 +32,6 @@ interface EndFastSheetProps {
 
 const EndFastSheet = forwardRef<EndFastSheetRef, EndFastSheetProps>(({ onEnded }, ref) => {
   const bottomSheetRef = useRef<BottomSheetModal>(null);
-  const { theme } = useUniwind();
-  const isDarkMode = theme === 'dark' || theme === 'amoled';
 
   const [surfaceBg, textMuted, accentPrimary, textPrimary, textSecondary] = useCSSVariable([
     '--color-surface',
@@ -91,17 +60,7 @@ const EndFastSheet = forwardRef<EndFastSheetRef, EndFastSheetProps>(({ onEnded }
     dismiss: () => bottomSheetRef.current?.dismiss(),
   }));
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop
-        {...props}
-        opacity={isDarkMode ? 0.7 : 0.5}
-        disappearsOnIndex={-1}
-        appearsOnIndex={0}
-      />
-    ),
-    [isDarkMode],
-  );
+  const renderBackdrop = useSheetBackdrop();
 
   const handleStartChange = useCallback(({ date }: { date: DateType }) => {
     const js = dateTypeToDate(date);
@@ -272,7 +231,7 @@ const EndFastSheet = forwardRef<EndFastSheetRef, EndFastSheetProps>(({ onEnded }
         {openPicker === 'end' && renderInlinePicker(endDate, handleEndChange)}
 
         {!isValid && (
-          <Text className="text-bg-danger text-sm mt-3 text-center">
+          <Text className="text-text-danger-subtle text-sm mt-3 text-center">
             Start time must be before the end time.
           </Text>
         )}

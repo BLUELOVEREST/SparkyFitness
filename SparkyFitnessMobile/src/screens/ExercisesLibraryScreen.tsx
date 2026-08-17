@@ -5,38 +5,20 @@ import { useCSSVariable } from 'uniwind';
 import LibrarySearchBar from '../components/LibrarySearchBar';
 import PaginatedLibraryFooter from '../components/PaginatedLibraryFooter';
 import StatusView from '../components/StatusView';
-import SegmentedControl from '../components/SegmentedControl';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
 import { useExercisesLibrary, useServerConnection, useProfile } from '../hooks';
-import { deriveShareStatus } from '../utils/shareStatus';
+import {
+  deriveShareStatus,
+  filterByOwnership,
+  ownershipFilterEmptyState,
+  ownershipFilterHeaderMenu,
+} from '../utils/shareStatus';
 import ShareStatusBadge from '../components/ShareStatusBadge';
 import { useNativeIOSHeadersActive } from '../services/nativeTabBarPreference';
 import { useScreenHeader } from '../hooks/useScreenHeader';
+import { useAppPreferencesStore } from '../stores/appPreferencesStore';
 import type { Exercise } from '../types/exercise';
 import type { RootStackScreenProps } from '../types/navigation';
-
-const filterItems = <T extends { user_id?: string | null; userId?: string | null; is_public?: boolean | null; shared_with_public?: boolean | null; sharedWithPublic?: boolean | null }>(
-  items: T[],
-  filter: 'all' | 'mine' | 'family' | 'public',
-  currentUserId?: string
-) => {
-  if (filter === 'all') return items;
-  return items.filter((item) => {
-    const isOwner = !!((item.user_id && item.user_id === currentUserId) || (item.userId && item.userId === currentUserId));
-    const isPublic = !!(item.is_public || item.shared_with_public || item.sharedWithPublic);
-    
-    if (filter === 'mine') {
-      return isOwner;
-    }
-    if (filter === 'family') {
-      return !isOwner && !isPublic && (item.user_id != null || item.userId != null);
-    }
-    if (filter === 'public') {
-      return isPublic;
-    }
-    return true;
-  });
-};
 
 type ExercisesLibraryScreenProps = RootStackScreenProps<'ExercisesLibrary'>;
 
@@ -50,7 +32,8 @@ const ExercisesLibraryScreen: React.FC<ExercisesLibraryScreenProps> = ({ navigat
   ]) as [string, string];
   const scrollBottomPadding = insets.bottom + activeWorkoutBarPadding + 16;
   const [searchText, setSearchText] = useState('');
-  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'family' | 'public'>('all');
+  const ownershipFilter = useAppPreferencesStore((s) => s.exercisesLibraryOwnershipFilter);
+  const setOwnershipFilter = useAppPreferencesStore((s) => s.setExercisesLibraryOwnershipFilter);
 
   const { isConnected, isLoading: isConnectionLoading } = useServerConnection();
   const { profile } = useProfile();
@@ -66,7 +49,7 @@ const ExercisesLibraryScreen: React.FC<ExercisesLibraryScreenProps> = ({ navigat
     loadMore,
     refetch,
   } = useExercisesLibrary(searchText, { enabled: isConnected });
-  const filteredExercises = useMemo(() => filterItems(exercises, ownershipFilter, profile?.id), [exercises, ownershipFilter, profile?.id]);
+  const filteredExercises = useMemo(() => filterByOwnership(exercises, ownershipFilter, profile?.id), [exercises, ownershipFilter, profile?.id]);
 
   const handleExercisePress = useCallback(
     (exercise: Exercise) => {
@@ -76,29 +59,26 @@ const ExercisesLibraryScreen: React.FC<ExercisesLibraryScreenProps> = ({ navigat
   );
 
   const renderEmpty = () => {
-    if (exercises.length > 0 && filteredExercises.length === 0) {
+    if (ownershipFilter !== 'all' && exercises.length > 0 && filteredExercises.length === 0) {
       return (
-        <View className="px-6 py-10 items-center">
-          <Text className="text-text-primary text-base font-medium text-center">
-            No matching exercises found
-          </Text>
-          <Text className="text-text-secondary text-sm mt-2 text-center">
-            Try changing your ownership filter.
-          </Text>
-        </View>
+        <StatusView
+          inline
+          {...ownershipFilterEmptyState({
+            noun: 'exercises',
+            filter: ownershipFilter,
+            onReset: () => setOwnershipFilter('all'),
+          })}
+        />
       );
     }
     return (
-      <View className="px-6 py-10 items-center">
-        <Text className="text-text-primary text-base font-medium text-center">
-          {searchText.trim().length > 0 ? 'No matching exercises found' : 'No exercises found'}
-        </Text>
-        <Text className="text-text-secondary text-sm mt-2 text-center">
-          {searchText.trim().length > 0
-            ? 'Try a different search term to find saved exercises.'
-            : 'Exercises you save or log will appear here.'}
-        </Text>
-      </View>
+      <StatusView
+        inline
+        title={searchText.trim().length > 0 ? 'No matching exercises found' : 'No exercises found'}
+        subtitle={searchText.trim().length > 0
+          ? 'Try a different search term to find saved exercises.'
+          : 'Exercises you save or log will appear here.'}
+      />
     );
   };
 
@@ -130,7 +110,7 @@ const ExercisesLibraryScreen: React.FC<ExercisesLibraryScreenProps> = ({ navigat
       return (
         <StatusView
           icon="cloud-offline"
-          iconColor="#9CA3AF"
+          iconTone="muted"
           iconSize={64}
           title="No server configured"
           subtitle="Configure your server connection in Settings to view your exercise library."
@@ -151,7 +131,7 @@ const ExercisesLibraryScreen: React.FC<ExercisesLibraryScreenProps> = ({ navigat
       return (
         <StatusView
           icon="alert-circle"
-          iconColor="#EF4444"
+          iconTone="danger"
           iconSize={64}
           title="Failed to load exercises"
           subtitle="Please check your connection and try again."
@@ -199,32 +179,27 @@ const ExercisesLibraryScreen: React.FC<ExercisesLibraryScreenProps> = ({ navigat
     );
   };
 
-  const header = useScreenHeader({ title: 'Exercises', left: { kind: 'back' } });
+  const header = useScreenHeader({
+    title: 'Exercises',
+    left: { kind: 'back' },
+    right: ownershipFilterHeaderMenu({
+      noun: 'exercises',
+      identifier: 'exercises-library-filter',
+      filter: ownershipFilter,
+      onSelect: setOwnershipFilter,
+    }),
+  });
 
   return (
     <View className="flex-1 bg-background" style={usesNativeHeader ? undefined : { paddingTop: insets.top }}>
       {header}
       {isConnected ? (
-        <>
-          <LibrarySearchBar
-            value={searchText}
-            onChangeText={setSearchText}
-            placeholder="Search exercises..."
-            isSearching={isSearching}
-          />
-          <View className="px-4 pb-2 border-b border-border-subtle">
-            <SegmentedControl
-              segments={[
-                { key: 'all', label: 'All' },
-                { key: 'mine', label: 'Mine' },
-                { key: 'family', label: 'Family' },
-                { key: 'public', label: 'Public' },
-              ]}
-              activeKey={ownershipFilter}
-              onSelect={setOwnershipFilter}
-            />
-          </View>
-        </>
+        <LibrarySearchBar
+          value={searchText}
+          onChangeText={setSearchText}
+          placeholder="Search exercises..."
+          isSearching={isSearching}
+        />
       ) : null}
       {renderContent()}
     </View>

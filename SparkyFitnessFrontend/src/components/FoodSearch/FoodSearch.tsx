@@ -47,7 +47,11 @@ import {
   searchNutritionixOptions,
 } from '@/hooks/Foods/useNutrionix.ts';
 import { DEFAULT_NUTRIENTS } from '@/constants/nutrients.ts';
-import { convertNutritionixToFood } from '@/utils/foodSearch.ts';
+import { visibleCustomNutrients } from '@/utils/nutrientUtils.ts';
+import {
+  convertNutritionixToFood,
+  pinDefaultVariantToServing,
+} from '@/utils/foodSearch.ts';
 import { dedupeAppend } from '@/utils/dedupeAppend.ts';
 import {
   mergeRecent,
@@ -1206,13 +1210,24 @@ const EnhancedFoodSearch = ({
             providerId
           )
         );
+        // Keep the serving the search card displayed as the default so the
+        // edit form doesn't silently switch to the provider's default serving.
+        const pinnedFood = pinDefaultVariantToServing(
+          detailedFood,
+          food.default_variant
+        );
         setEditingProduct({
-          ...detailedFood,
-          provider_type: detailedFood.provider_type ?? food.provider_type,
+          ...pinnedFood,
+          provider_type: pinnedFood.provider_type ?? food.provider_type,
           provider_external_id:
-            detailedFood.provider_external_id ?? food.provider_external_id,
+            pinnedFood.provider_external_id ?? food.provider_external_id,
           provider_verified:
-            detailedFood.provider_verified ?? food.provider_verified,
+            pinnedFood.provider_verified ?? food.provider_verified,
+          // The details endpoint doesn't always echo the photo back, so fall
+          // back to the one the search card already showed.
+          image_url: pinnedFood.image_url ?? food.image_url,
+          image_source_url:
+            pinnedFood.image_source_url ?? food.image_source_url,
         });
         setShowEditDialog(true);
       } catch {
@@ -1240,15 +1255,31 @@ const EnhancedFoodSearch = ({
       (p) => p.view_group === 'quick_info' && p.platform === 'desktop'
     );
 
+  // Custom nutrients are gated by the food_database view group, the group the
+  // settings page adds them to by default — supplement-scoped nutrients are
+  // deliberately absent from it and must not become columns on every result card.
+  const foodDatabasePreferences =
+    nutrientDisplayPreferences.find(
+      (p) => p.view_group === 'food_database' && p.platform === platform
+    ) ||
+    nutrientDisplayPreferences.find(
+      (p) => p.view_group === 'food_database' && p.platform === 'desktop'
+    );
+
   const visibleNutrients = useMemo(() => {
     const base = quickInfoPreferences
       ? quickInfoPreferences.visible_nutrients
       : DEFAULT_NUTRIENTS;
 
-    const allKeys = [...base, ...(customNutrients?.map((cn) => cn.name) || [])];
+    const allKeys = [
+      ...base,
+      ...visibleCustomNutrients(customNutrients, foodDatabasePreferences).map(
+        (cn) => cn.name
+      ),
+    ];
 
     return Array.from(new Set(allKeys));
-  }, [quickInfoPreferences, customNutrients]);
+  }, [quickInfoPreferences, foodDatabasePreferences, customNutrients]);
 
   const nutrientConfig = {
     visibleNutrients,
@@ -1371,8 +1402,8 @@ const EnhancedFoodSearch = ({
         )}
       </div>
 
-      <div className="flex space-x-2 items-center">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[12rem]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder={t(
@@ -1439,7 +1470,7 @@ const EnhancedFoodSearch = ({
               setManualProviderId(value);
             }}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue
                 placeholder={t(
                   'enhancedFoodSearch.selectProvider',

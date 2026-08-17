@@ -87,6 +87,7 @@ jest.mock('@kingstinct/react-native-healthkit', () => ({
 jest.mock('react-native-health-connect', () => ({
   initialize: jest.fn().mockResolvedValue(true),
   requestPermission: jest.fn().mockResolvedValue([]),
+  getGrantedPermissions: jest.fn().mockResolvedValue([]),
   readRecords: jest.fn().mockResolvedValue({ records: [] }),
   aggregateRecord: jest.fn().mockResolvedValue({}),
   aggregateGroupByDuration: jest.fn().mockResolvedValue([]),
@@ -281,7 +282,20 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => {
 jest.mock('react-native-reanimated', () => {
   const React = require('react');
   const { View, ScrollView } = require('react-native');
-  const createAnimationMock = () => ({ duration: () => createAnimationMock() });
+  const createAnimationMock = () => {
+    const chain = {};
+    for (const method of [
+      'duration',
+      'delay',
+      'springify',
+      'easing',
+      'withInitialValues',
+      'withCallback',
+    ]) {
+      chain[method] = () => chain;
+    }
+    return chain;
+  };
   return {
     __esModule: true,
     default: { View, ScrollView, createAnimatedComponent: (Component) => Component },
@@ -332,6 +346,7 @@ jest.mock('react-native-reanimated', () => {
     FadeInDown: createAnimationMock(),
     FadeOut: createAnimationMock(),
     FadeOutUp: createAnimationMock(),
+    ZoomIn: createAnimationMock(),
     LinearTransition: createAnimationMock(),
   };
 });

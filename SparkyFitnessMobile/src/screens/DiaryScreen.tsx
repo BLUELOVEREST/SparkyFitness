@@ -1,11 +1,10 @@
 import React, { useState, useCallback, useRef, useMemo, useEffect, useLayoutEffect } from 'react';
-import { View, Text, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, RefreshControl } from 'react-native';
 import Button from '../components/ui/Button';
 import { Gesture, GestureDetector, Directions } from 'react-native-gesture-handler';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCSSVariable } from 'uniwind';
-import Icon from '../components/Icon';
 import DateNavigator from '../components/DateNavigator';
 import FoodSummary from '../components/FoodSummary';
 import ExerciseSummary from '../components/ExerciseSummary';
@@ -23,9 +22,12 @@ import {
   useDailySummary,
   useNutrientDisplayPreferences,
   useLogActiveMealPlanMeal,
+  useMealTypes,
   useServerConnection,
 } from '../hooks';
 import { useMeasurements } from '../hooks/useMeasurements';
+import { useCustomMeasurementsByDate } from '../hooks/useCustomMeasurements';
+import { isManualSource } from '../utils/customMeasurementsForm';
 import { usePreferences } from '../hooks/usePreferences';
 import { useExerciseImageSource } from '../hooks/useExerciseImageSource';
 import {
@@ -37,6 +39,8 @@ import { useActiveWorkoutStore } from '../stores/activeWorkoutStore';
 import { useDiaryDateStore } from '../stores/diaryDateStore';
 import type { MealTypeKey } from '../utils/mealNutrition';
 import type { ActiveMealPlanDayMeal } from '../types/mealPlan';
+import { getHistoricalMealTypeLabel, getMealTypeDisplayLabel } from '../utils/mealNutrition';
+import type { FoodEntry } from '../types/foodEntries';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -136,9 +140,24 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
   ), [goToPreviousDay, goToNextDay]);
 
   const handleCalendarSelect = useCallback((date: string) => setSelectedDate(date), [setSelectedDate]);
-  const openMealTypeDetail = useCallback((mealType: MealTypeKey) => {
-    navigation.navigate('MealTypeDetail', { date: selectedDate, mealType });
-  }, [navigation, selectedDate]);
+  const { mealTypes } = useMealTypes();
+  const openMealTypeDetail = useCallback(
+    (mealTypeId: string | null, mealTypeName: string, entries: FoodEntry[]) => {
+      // Resolve the label from the canonical definition (ownership-aware); for
+      // a deleted/hidden type fall back to the literal historical name.
+      const definition = mealTypes.find((mt) => mt.id === mealTypeId) ?? null;
+      const mealLabel = definition
+        ? getMealTypeDisplayLabel(definition)
+        : getHistoricalMealTypeLabel(mealTypeName);
+      navigation.navigate('MealTypeDetail', {
+        date: selectedDate,
+        mealTypeId: mealTypeId ?? undefined,
+        mealType: mealTypeName,
+        mealLabel,
+      });
+    },
+    [navigation, selectedDate, mealTypes],
+  );
 
   const openPlannedMealDetail = useCallback((meal: ActiveMealPlanDayMeal) => {
     navigation.navigate('MealTypeDetail', {
@@ -159,7 +178,12 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
   const { getImageSource } = useExerciseImageSource();
 
   const { isConnected, isLoading: isConnectionLoading } = useServerConnection();
-  const { summary, isLoading, isError, refetch } = useDailySummary({
+  const {
+    summary,
+    isLoading,
+    isError,
+    refetch,
+  } = useDailySummary({
     date: selectedDate,
     enabled: isConnected,
   });
@@ -180,17 +204,35 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
     if (!meal.mealTypeId) return;
     logPlannedMeal({ date: selectedDate, mealTypeId: meal.mealTypeId });
   }, [logPlannedMeal, selectedDate]);
-  const { measurements, refetch: refetchMeasurements } = useMeasurements({
+  const {
+    measurements,
+    refetch: refetchMeasurements,
+  } = useMeasurements({
     date: selectedDate,
     enabled: isConnected,
   });
-  const { customNutrients } = useCustomNutrients({ enabled: isConnected });
-  const { preferences: nutrientPrefs } = useNutrientDisplayPreferences({ enabled: isConnected });
+  const {
+    data: customMeasurements,
+    refetch: refetchCustomMeasurements,
+  } = useCustomMeasurementsByDate(selectedDate, { enabled: isConnected });
+  const {
+    customNutrients,
+    refetch: refetchCustomNutrients,
+  } = useCustomNutrients({ enabled: isConnected });
+  const {
+    preferences: nutrientPrefs,
+    refetch: refetchNutrientPrefs,
+  } = useNutrientDisplayPreferences({ enabled: isConnected });
   const diaryNutrientRow = nutrientPrefs.find(
     (p) => p.view_group === 'diary' && p.platform === 'mobile',
   );
   const customNutrientKeys = (diaryNutrientRow?.visible_nutrients ?? []).slice(0, 4);
   const hasAnyMeasurement = useMemo(() => {
+    // Only MANUAL custom entries make the Measurements section meaningful — a
+    // user with pages of health-synced custom entries should not see the
+    // section flash on their behalf.
+    const manualCustom = customMeasurements?.filter((e) => isManualSource(e.source)) ?? [];
+    if (manualCustom.length > 0) return true;
     if (!measurements) return false;
     return (
       measurements.weight != null ||
@@ -201,22 +243,54 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
       measurements.hips != null ||
       measurements.steps != null
     );
-  }, [measurements]);
+  }, [measurements, customMeasurements]);
+
+  // Manual-only custom entries for the Diary tiles: health-synced entries are
+  // filtered here (before presentation) so MeasurementsSummary never receives
+  // them; the component itself re-filters defensively too.
+  const manualCustomMeasurements = useMemo(
+    () => (customMeasurements ?? []).filter((e) => isManualSource(e.source)),
+    [customMeasurements],
+  );
 
   const [refreshing, setRefreshing] = useState(false);
   const activeWorkoutBarPadding = useActiveWorkoutBarPadding();
   const onRefresh = useCallback(async () => {
+    if (!isConnected) return;
     setRefreshing(true);
-    await Promise.all([refetch(), refetchMeasurements(), refetchActiveMealPlanDay()]);
-    setRefreshing(false);
-  }, [refetch, refetchActiveMealPlanDay, refetchMeasurements]);
+    // Error-isolated refresh: one failing query must not prevent the others
+    // from completing nor produce an unhandled rejection. The spinner is torn
+    // down in `finally` regardless of individual query outcomes.
+    try {
+      await Promise.allSettled([
+        refetch(),
+        refetchMeasurements(),
+        refetchCustomMeasurements(),
+        refetchCustomNutrients(),
+        refetchNutrientPrefs(),
+        refetchActiveMealPlanDay(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [
+    isConnected,
+    refetch,
+    refetchMeasurements,
+    refetchCustomMeasurements,
+    refetchCustomNutrients,
+    refetchNutrientPrefs,
+    refetchActiveMealPlanDay,
+  ]);
+
+  const isRefreshing = refreshing;
 
   const renderContent = () => {
     if (!isConnectionLoading && !isConnected) {
       return (
         <StatusView
           icon="cloud-offline"
-          iconColor="#9CA3AF"
+          iconTone="muted"
           iconSize={64}
           title="No server configured"
           subtitle="Configure your server connection in Settings to view your diary."
@@ -226,32 +300,19 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
     }
 
     if (isLoading || isConnectionLoading) {
-      return (
-        <View className="flex-1 items-center justify-center p-8 shadow-sm">
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text className="text-text-muted text-base mt-4">Loading diary...</Text>
-        </View>
-      );
+      return <StatusView loading title="Loading diary..." />;
     }
 
     if (isError) {
       return (
-        <View className="flex-1 items-center justify-center p-8 shadow-sm">
-          <Icon name="alert-circle" size={64} color="#EF4444" />
-          <Text className="text-text-muted text-lg text-center mt-4">
-            Failed to load diary
-          </Text>
-          <Text className="text-text-muted text-sm text-center mt-2">
-            Please check your connection and try again.
-          </Text>
-          <Button
-            variant="primary"
-            className="px-6 mt-6"
-            onPress={() => refetch()}
-          >
-            Retry
-          </Button>
-        </View>
+        <StatusView
+          icon="alert-circle"
+          iconTone="danger"
+          iconSize={64}
+          title="Failed to load diary"
+          subtitle="Please check your connection and try again."
+          action={{ label: 'Retry', onPress: () => refetch(), variant: 'primary' }}
+        />
       );
     }
 
@@ -276,7 +337,7 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
         contentInsetAdjustmentBehavior={usesNativeTabs ? 'automatic' : 'never'}
         automaticallyAdjustsScrollIndicatorInsets={usesNativeTabs}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={accentColor} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={accentColor} />
         }
       >
         {(effectiveSummary.foodEntries.length > 0 || effectiveSummary.exerciseEntries.length > 0 || effectiveSummary.calorieGoal > 0) && (
@@ -302,6 +363,7 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
           <>
             <FoodSummary
               foodEntries={effectiveSummary.foodEntries}
+              mealTypes={mealTypes}
               goals={effectiveSummary.goals}
               calorieGoal={effectiveSummary.calorieGoal}
               plannedMeals={plannedMeals}
@@ -335,6 +397,7 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
             />
             <MeasurementsSummary
               measurements={measurements}
+              customMeasurements={manualCustomMeasurements}
               weightMode={weightMode}
               bodyUnit={bodyUnit}
               heightMode={heightMode}

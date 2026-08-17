@@ -22,10 +22,16 @@ import {
 } from './storage';
 import { queryClient } from '../hooks/queryClient';
 import { refreshHealthSyncCache } from '../hooks/refreshHealthSyncCache';
+import { isBackfillRunning, markSyncInFlight } from './autoSyncCoordinator';
 import { listMedications, listEntries } from './api/medicationsApi';
 import { reconcileMedicationReminders } from './medicationReminderService';
 import { getTodayDate } from '../utils/dateUtils';
 import { useAppPreferencesStore } from '../stores/appPreferencesStore';
+import {
+  BACKGROUND_TELEMETRY_BUDGET,
+  createTelemetryRunContext,
+  type TelemetryRunContext,
+} from './shared/telemetryBudget';
 
 const isAppActive = (): boolean => AppState.currentState === 'active';
 
@@ -67,16 +73,49 @@ export const performBackgroundSync = async (taskId: string): Promise<void> => {
     return inflightSync;
   }
 
+  const syncDone = markSyncInFlight();
   inflightSync = performBackgroundSyncInternal(taskId).finally(() => {
     inflightSync = null;
+    syncDone();
   });
   return inflightSync;
 };
 
+/**
+ * taskId 'manual-sync' is triggerManualSync — a user explicitly tapping a
+ * button while looking at the app (currently only the Dev Tools "Trigger
+ * Sync" action). Everything else that reaches this function (the real OS
+ * background task, and the iOS 'healthkit-observer' silent-delivery callback)
+ * runs with no user present and must stay capped/non-interactive: a route
+ * consent dialog cannot be shown headless, and an unbounded per-workout
+ * telemetry read has no time budget to respect.
+ */
+const isForegroundTriggeredSync = (taskId: string): boolean =>
+  taskId === 'manual-sync';
+
 const performBackgroundSyncInternal = async (taskId: string): Promise<void> => {
-  console.log('[BackgroundSync] taskId', taskId);
+  if (isBackfillRunning()) {
+    addLog(`[Background Sync] Skipping ${taskId} — history import is running`, 'INFO');
+    return;
+  }
+
   addLog(`[Background Sync] Starting background sync task: ${taskId}`, 'INFO');
 
+  // Limits are carried per run rather than via module state so a capped
+  // headless run overlapping a foreground sync cannot strip the foreground
+  // run's budget or its route-consent UI; see telemetryBudget.ts. Foreground
+  // triggers get no cap and may show UI (the user is present to answer a route
+  // consent prompt); everything else is capped and headless.
+  const telemetry = isForegroundTriggeredSync(taskId)
+    ? createTelemetryRunContext()
+    : createTelemetryRunContext({
+        budget: BACKGROUND_TELEMETRY_BUDGET,
+        interactive: false,
+      });
+  await runBackgroundSync(taskId, telemetry);
+};
+
+const runBackgroundSync = async (taskId: string, telemetry: TelemetryRunContext): Promise<void> => {
   const lastSyncedTimeStr = await loadLastSyncedTime();
   addLog(`[Background Sync] Last synced: ${lastSyncedTimeStr ?? 'never (defaulting to 24h ago)'}`, 'INFO');
 
@@ -111,6 +150,7 @@ const performBackgroundSyncInternal = async (taskId: string): Promise<void> => {
 
   const outcomes = await collectHealthData(healthReadProvider, enabledMetrics, windows, {
     timeoutLabelPrefix: 'Background query',
+    telemetry,
   });
 
   for (const outcome of outcomes) {
@@ -124,7 +164,12 @@ const performBackgroundSyncInternal = async (taskId: string): Promise<void> => {
       );
     } else if (outcome.status === 'fulfilled') {
       if (outcome.data.length > 0) {
-        allData.push(...outcome.data);
+        // Per-record push: spreading a day of per-sample records (e.g.
+        // continuous heart rate) into one call can exceed the engine's
+        // argument limit and throw RangeError.
+        for (const record of outcome.data) {
+          allData.push(record);
+        }
         collectedCounts.push(`${metric.id}: ${outcome.data.length}`);
       }
       if (outcome.error) {

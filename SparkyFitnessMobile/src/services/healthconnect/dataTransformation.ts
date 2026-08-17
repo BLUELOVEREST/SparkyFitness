@@ -1,4 +1,5 @@
 import { addLog } from '../LogService';
+import { attachWorkoutTelemetry } from '../shared/workoutTelemetryPayload';
 import {
   TransformedExerciseSession,
   TransformedNutritionEntry,
@@ -547,15 +548,17 @@ const DIRECT_TRANSFORMERS: Record<string, DirectTransformer> = {
   },
 
   HeartRate: (rec, _record, metricConfig, output) => {
-    const samples = rec.samples as { beatsPerMinute: number }[] | undefined;
+    const samples = rec.samples as { time?: string; beatsPerMinute: number }[] | undefined;
     if (!rec.startTime || !samples) return;
 
     const { unit, type } = metricConfig;
-    const date = getDateString(rec.startTime);
-    if (!date) return;
 
     for (const sample of samples) {
       if (sample.beatsPerMinute != null && !isNaN(sample.beatsPerMinute)) {
+        // Series records can span local midnight, so each sample buckets to
+        // its own day rather than the record's start day.
+        const date = getDateString(sample.time ?? rec.startTime);
+        if (!date) continue;
         output.push({ value: sample.beatsPerMinute, type, date, unit, source: HEALTH_CONNECT_SOURCE });
       }
     }
@@ -692,7 +695,7 @@ const DIRECT_TRANSFORMERS: Record<string, DirectTransformer> = {
       source_id: metadata?.id,
       ...extractTimezoneMetadata(rec),
     };
-    output.push(exerciseSession);
+    output.push(attachWorkoutTelemetry(exerciseSession, rec));
   },
 
   MenstruationPeriod: (rec, _record, metricConfig, output) => {
@@ -719,13 +722,14 @@ const DIRECT_TRANSFORMERS: Record<string, DirectTransformer> = {
   },
 
   CyclingPedalingCadence: (rec, _record, metricConfig, output) => {
-    const samples = rec.samples as { revolutionsPerMinute: number }[] | undefined;
+    const samples = rec.samples as { time?: string; revolutionsPerMinute: number }[] | undefined;
     if (!rec.startTime || !samples) return;
 
     const { unit, type } = metricConfig;
-    const date = toLocalDateString(rec.startTime as string);
 
     samples.forEach(sample => {
+      const date = getDateString(sample.time ?? rec.startTime);
+      if (!date) return;
       output.push({
         value: sample.revolutionsPerMinute,
         type,
@@ -737,13 +741,14 @@ const DIRECT_TRANSFORMERS: Record<string, DirectTransformer> = {
   },
 
   StepsCadence: (rec, _record, metricConfig, output) => {
-    const samples = rec.samples as { rate: number }[] | undefined;
+    const samples = rec.samples as { time?: string; rate: number }[] | undefined;
     if (!rec.startTime || !samples) return;
 
     const { unit, type } = metricConfig;
-    const date = toLocalDateString(rec.startTime as string);
 
     samples.forEach(sample => {
+      const date = getDateString(sample.time ?? rec.startTime);
+      if (!date) return;
       output.push({
         value: sample.rate,
         type,

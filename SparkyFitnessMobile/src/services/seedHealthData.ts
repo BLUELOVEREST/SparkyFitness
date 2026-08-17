@@ -3,6 +3,7 @@ import {
   requestPermission,
 } from 'react-native-health-connect';
 import { addLog } from './LogService';
+import { initHealthConnect } from './healthconnect/index';
 
 // ============================================================================
 // Types
@@ -49,7 +50,7 @@ type SamplesSeedConfig = {
 type CustomSeedConfig = {
   recordType: string;
   seedType: 'custom';
-  seeder: (days: number) => Promise<number>;
+  seeder: (dates: Date[]) => Promise<number>;
 };
 
 type SeedConfig = IntervalSeedConfig | InstantSeedConfig | SamplesSeedConfig | CustomSeedConfig;
@@ -86,6 +87,18 @@ const getPastDates = (days: number): Date[] => {
   for (let i = 0; i < days; i++) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
+    date.setHours(12, 0, 0, 0);
+    dates.push(date);
+  }
+  return dates;
+};
+
+const getDatesEndingDaysAgo = (endDaysAgo: number, count: number): Date[] => {
+  const dates: Date[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i++) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - (endDaysAgo + i));
     date.setHours(12, 0, 0, 0);
     dates.push(date);
   }
@@ -216,9 +229,8 @@ const buildMultiRecordDay = (
 
 const seedIntervalRecords = async (
   config: IntervalSeedConfig,
-  days: number
+  dates: Date[]
 ): Promise<number> => {
-  const dates = getPastDates(days);
   const records = dates.flatMap((date) => {
     if (!config.recordsPerDay) {
       const startHour = getSafeHour(date, 8);
@@ -243,9 +255,8 @@ const seedIntervalRecords = async (
 
 const seedInstantRecords = async (
   config: InstantSeedConfig,
-  days: number
+  dates: Date[]
 ): Promise<number> => {
-  const dates = getPastDates(days);
   const records = dates.map((date) => {
     const hour = getSafeHour(date, 7);
     const time = new Date(date);
@@ -260,9 +271,8 @@ const seedInstantRecords = async (
 
 const seedSamplesRecords = async (
   config: SamplesSeedConfig,
-  days: number
+  dates: Date[]
 ): Promise<number> => {
-  const dates = getPastDates(days);
   const records = dates.map((date) => {
     const startHour = getSafeHour(date, 8);
     const startTime = new Date(date);
@@ -310,8 +320,7 @@ const EXERCISE_TYPES = [
   { type: 37, name: 'Hiking', durationMin: 30, durationMax: 120 },
 ];
 
-const seedHeartRate = async (days: number): Promise<number> => {
-  const dates = getPastDates(days);
+const seedHeartRate = async (dates: Date[]): Promise<number> => {
   let totalRecords = 0;
 
   for (const date of dates) {
@@ -345,8 +354,7 @@ const seedHeartRate = async (days: number): Promise<number> => {
   return totalRecords;
 };
 
-const seedWeight = async (days: number): Promise<number> => {
-  const dates = getPastDates(days);
+const seedWeight = async (dates: Date[]): Promise<number> => {
   const baseWeight = randomInt(60, 90);
 
   const records = dates.map((date, index) => {
@@ -371,8 +379,7 @@ const seedWeight = async (days: number): Promise<number> => {
   return records.length;
 };
 
-const seedBloodPressure = async (days: number): Promise<number> => {
-  const dates = getPastDates(days);
+const seedBloodPressure = async (dates: Date[]): Promise<number> => {
   const records = [];
 
   for (const date of dates) {
@@ -418,8 +425,7 @@ const seedBloodPressure = async (days: number): Promise<number> => {
   return records.length;
 };
 
-const seedHydration = async (days: number): Promise<number> => {
-  const dates = getPastDates(days);
+const seedHydration = async (dates: Date[]): Promise<number> => {
   const records = [];
 
   for (const date of dates) {
@@ -451,8 +457,302 @@ const seedHydration = async (days: number): Promise<number> => {
   return records.length;
 };
 
-const seedExerciseSessions = async (days: number): Promise<number> => {
-  const dates = getPastDates(days);
+/**
+ * Seeds one Walking ExerciseSession with everything the mobile telemetry sync
+ * actually reads: an embedded GPS route, a HeartRate record whose samples span
+ * the exact session window, a Speed record likewise, and two laps. Unlike
+ * seedExerciseSessions (which seeds a bare session) and the day-wide SEED_CONFIGS
+ * generators (whose HeartRate/Speed samples land at random times across the
+ * whole day, with no guarantee they overlap any one session), this exists to
+ * give collectSessionTelemetry something real to correlate and downsample —
+ * the Health Connect Toolbox app can't produce this because it inserts one
+ * record type at a time and has no way to align them to a shared window.
+ */
+export const seedRichWorkout = async (): Promise<SeedResult> => {
+  try {
+    // Every other seeder in this file assumes Health Connect was already
+    // initialized elsewhere (e.g. by a prior sync this session) — that's a
+    // real gap, not just untested here: a fresh app launch that goes straight
+    // to Dev Tools hits "Health Connect client is not initialized" without it.
+    const initialized = await initHealthConnect();
+    if (!initialized) {
+      return {
+        success: false,
+        recordsInserted: 0,
+        error: 'Health Connect is not available on this device.',
+      };
+    }
+
+    await requestPermission([
+      { accessType: 'write', recordType: 'ExerciseSession' },
+      // Distinct from ExerciseSession write access — writing a route on the
+      // session throws a SecurityException without this too.
+      { accessType: 'write', recordType: 'ExerciseRoute' },
+      { accessType: 'write', recordType: 'HeartRate' },
+      { accessType: 'write', recordType: 'Speed' },
+      { accessType: 'write', recordType: 'Distance' },
+      { accessType: 'write', recordType: 'ActiveCaloriesBurned' },
+    ] as Parameters<typeof requestPermission>[0]);
+
+    const durationMinutes = 12;
+    const sampleCount = 40; // ~1 sample every 18s, well above the downsampler's cap
+    const startTime = new Date();
+    startTime.setMinutes(startTime.getMinutes() - durationMinutes);
+    const endTime = new Date();
+
+    const stepMs = (durationMinutes * 60_000) / sampleCount;
+    // Short out-and-back walk so the route visibly bends on the map instead of
+    // being a straight line — easier to eyeball as "real" telemetry.
+    const baseLat = 37.7749;
+    const baseLon = -122.4194;
+
+    const route = Array.from({ length: sampleCount }, (_, i) => {
+      const t = new Date(startTime.getTime() + i * stepMs);
+      const progress = i / (sampleCount - 1);
+      const bend = Math.sin(progress * Math.PI) * 0.0015;
+      return {
+        time: t.toISOString(),
+        latitude: baseLat + progress * 0.004,
+        longitude: baseLon + bend,
+        altitude: { value: 15 + Math.sin(progress * Math.PI * 2) * 5, unit: 'meters' as const },
+        // The native module reads altitude/horizontalAccuracy/verticalAccuracy
+        // unconditionally per route point (ReactExerciseSessionRecord.kt) even
+        // though the TS types mark them optional — omitting any one throws
+        // "Length is not valid" instead of defaulting.
+        horizontalAccuracy: { value: 5, unit: 'meters' as const },
+        verticalAccuracy: { value: 5, unit: 'meters' as const },
+      };
+    });
+
+    const heartRateSamples = Array.from({ length: sampleCount }, (_, i) => {
+      const t = new Date(startTime.getTime() + i * stepMs);
+      // Ramp up, hold, ramp down — gives the HR chart and zone bars real shape
+      // instead of a flat line.
+      const progress = i / (sampleCount - 1);
+      const ramp =
+        progress < 0.2
+          ? progress / 0.2
+          : progress > 0.8
+            ? (1 - progress) / 0.2
+            : 1;
+      const bpm = Math.round(95 + ramp * 35 + randomInt(-3, 3));
+      return { time: t.toISOString(), beatsPerMinute: bpm };
+    });
+
+    const speedSamples = Array.from({ length: sampleCount }, (_, i) => {
+      const t = new Date(startTime.getTime() + i * stepMs);
+      return {
+        time: t.toISOString(),
+        speed: { value: randomFloat(0.9, 1.6), unit: 'metersPerSecond' as const },
+      };
+    });
+
+    const midTime = new Date(startTime.getTime() + (durationMinutes * 60_000) / 2);
+
+    // Health Connect's own idempotency key: writing the same clientRecordId
+    // again with a higher clientRecordVersion replaces the prior record in
+    // place instead of creating a new one. Without this, every tap of this
+    // button would leave behind a permanent, undeleted duplicate — Health
+    // Connect has no dedup of its own, same as HealthKit.
+    const version = Date.now();
+    const clientRecordId = (suffix: string) => ({
+      clientRecordId: `sparkyfitness-seed-rich-walk-${suffix}`,
+      clientRecordVersion: version,
+    });
+
+    // insertRecords rejects a mixed-type array ("All records must have the
+    // same type") — one call per record type, matching every other seeder
+    // in this file.
+    await insertRecords([
+      {
+        recordType: 'ExerciseSession' as const,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        exerciseType: 79, // Walking — see EXERCISE_TYPES above
+        title: 'Seeded Rich Walk',
+        exerciseRoute: { route },
+        metadata: clientRecordId('session'),
+        // The write-side native parser (ReactExerciseSessionRecord.kt) reads
+        // laps AND segments from a JS key literally called "samples", not
+        // "laps" — a mismatch against the library's own TS types (which only
+        // exist for the read side). A `laps` key here is silently dropped, no
+        // error, laps just come back empty.
+        samples: [
+          {
+            startTime: startTime.toISOString(),
+            endTime: midTime.toISOString(),
+            length: { value: 350, unit: 'meters' as const },
+          },
+          {
+            startTime: midTime.toISOString(),
+            endTime: endTime.toISOString(),
+            length: { value: 400, unit: 'meters' as const },
+          },
+        ],
+      } as Parameters<typeof insertRecords>[0][number],
+    ]);
+
+    await insertRecords([
+      {
+        recordType: 'HeartRate' as const,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        samples: heartRateSamples,
+        metadata: clientRecordId('heartrate'),
+      },
+    ]);
+
+    await insertRecords([
+      {
+        recordType: 'Speed' as const,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        samples: speedSamples,
+        metadata: clientRecordId('speed'),
+      },
+    ]);
+
+    await insertRecords([
+      {
+        recordType: 'Distance' as const,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        distance: { value: 750, unit: 'meters' as const },
+        metadata: clientRecordId('distance'),
+      },
+    ]);
+
+    await insertRecords([
+      {
+        recordType: 'ActiveCaloriesBurned' as const,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        energy: { value: 55, unit: 'kilocalories' as const },
+        metadata: clientRecordId('calories'),
+      },
+    ]);
+
+    return { success: true, recordsInserted: sampleCount * 2 + 3 };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    addLog(`[seedHealthData] Failed to seed rich workout: ${message}`, 'ERROR');
+    return { success: false, recordsInserted: 0, error: message };
+  }
+};
+
+/**
+ * Seeds one Strength Training ExerciseSession with a correlated, spiky HR
+ * pattern (up during a set, down during rest) — no route/speed/distance,
+ * matching what a real watch actually reports for lifting.
+ *
+ * Deliberately does NOT attempt to seed reps/weight per set: neither
+ * HealthKit nor Health Connect exposes that at all (see the sets: [...]
+ * literal in dataTransformation.ts on both platforms — always exactly one
+ * synthetic duration-only set, for every activity type, on every real
+ * device). This exists to verify activity-type -> modality/category
+ * classification ('weight_reps'/'Strength') and diary rendering for a
+ * strength session, not to fabricate data no device can ever send.
+ */
+export const seedRichStrengthWorkout = async (): Promise<SeedResult> => {
+  try {
+    const initialized = await initHealthConnect();
+    if (!initialized) {
+      return {
+        success: false,
+        recordsInserted: 0,
+        error: 'Health Connect is not available on this device.',
+      };
+    }
+
+    await requestPermission([
+      { accessType: 'write', recordType: 'ExerciseSession' },
+      { accessType: 'write', recordType: 'HeartRate' },
+      { accessType: 'write', recordType: 'ActiveCaloriesBurned' },
+    ] as Parameters<typeof requestPermission>[0]);
+
+    const durationMinutes = 35;
+    const setCount = 8; // e.g. 4 exercises x 2 sets, alternating work/rest
+    const startTime = new Date();
+    startTime.setMinutes(startTime.getMinutes() - durationMinutes);
+    const endTime = new Date();
+
+    const totalMs = durationMinutes * 60_000;
+    const heartRateSamples: { time: string; beatsPerMinute: number }[] = [];
+    for (let set = 0; set < setCount; set++) {
+      const setStartMs = (set / setCount) * totalMs;
+      const setEndMs = ((set + 0.6) / setCount) * totalMs; // ~60% work, ~40% rest
+      const workSamples = 6;
+      for (let i = 0; i <= workSamples; i++) {
+        const t = new Date(
+          startTime.getTime() + setStartMs + (i / workSamples) * (setEndMs - setStartMs)
+        );
+        // Ramps up sharply during the set (exertion), matching real lifting HR shape.
+        const bpm = Math.round(100 + (i / workSamples) * 45 + randomInt(-4, 4));
+        heartRateSamples.push({ time: t.toISOString(), beatsPerMinute: bpm });
+      }
+      const restStartMs = setEndMs;
+      const restEndMs = ((set + 1) / setCount) * totalMs;
+      const restSamples = 4;
+      for (let i = 0; i <= restSamples; i++) {
+        const t = new Date(
+          startTime.getTime() + restStartMs + (i / restSamples) * (restEndMs - restStartMs)
+        );
+        // Decays back down during rest between sets.
+        const bpm = Math.round(145 - (i / restSamples) * 35 + randomInt(-4, 4));
+        heartRateSamples.push({ time: t.toISOString(), beatsPerMinute: bpm });
+      }
+    }
+
+    // See seedRichWorkout's comment: fixed clientRecordId + rising version
+    // makes each tap replace the same logical record instead of piling up a
+    // new one.
+    const version = Date.now();
+    const clientRecordId = (suffix: string) => ({
+      clientRecordId: `sparkyfitness-seed-rich-strength-${suffix}`,
+      clientRecordVersion: version,
+    });
+
+    // insertRecords rejects a mixed-type array — one call per record type.
+    await insertRecords([
+      {
+        recordType: 'ExerciseSession' as const,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        exerciseType: 70, // Strength Training
+        title: 'Seeded Rich Strength Workout',
+        metadata: clientRecordId('session'),
+      },
+    ]);
+
+    await insertRecords([
+      {
+        recordType: 'HeartRate' as const,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        samples: heartRateSamples,
+        metadata: clientRecordId('heartrate'),
+      },
+    ]);
+
+    await insertRecords([
+      {
+        recordType: 'ActiveCaloriesBurned' as const,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        energy: { value: 220, unit: 'kilocalories' as const },
+        metadata: clientRecordId('calories'),
+      },
+    ]);
+
+    return { success: true, recordsInserted: heartRateSamples.length + 2 };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    addLog(`[seedHealthData] Failed to seed rich strength workout: ${message}`, 'ERROR');
+    return { success: false, recordsInserted: 0, error: message };
+  }
+};
+
+const seedExerciseSessions = async (dates: Date[]): Promise<number> => {
   let totalRecords = 0;
 
   for (const date of dates) {
@@ -500,8 +800,7 @@ const SLEEP_STAGES = [
   { stage: 6, name: 'REM' },
 ];
 
-const seedSleepSession = async (days: number): Promise<number> => {
-  const dates = getPastDates(days);
+const seedSleepSession = async (dates: Date[]): Promise<number> => {
   let totalRecords = 0;
 
   for (const date of dates) {
@@ -553,8 +852,7 @@ const seedSleepSession = async (days: number): Promise<number> => {
   return totalRecords;
 };
 
-const seedNutrition = async (days: number): Promise<number> => {
-  const dates = getPastDates(days);
+const seedNutrition = async (dates: Date[]): Promise<number> => {
   const records = [];
 
   for (const date of dates) {
@@ -758,6 +1056,39 @@ export const seedHistoricalSteps = async (): Promise<SeedResult> => {
   }
 };
 
+const seedAllForDates = async (dates: Date[]): Promise<number> => {
+  let totalRecords = 0;
+
+  for (const config of SEED_CONFIGS) {
+    try {
+      let count: number;
+
+      switch (config.seedType) {
+        case 'custom':
+          count = await config.seeder(dates);
+          break;
+        case 'interval':
+          count = await seedIntervalRecords(config, dates);
+          break;
+        case 'instant':
+          count = await seedInstantRecords(config, dates);
+          break;
+        case 'samples':
+          count = await seedSamplesRecords(config, dates);
+          break;
+      }
+
+      totalRecords += count;
+      addLog(`[SeedHealthData] Seeded ${config.recordType}`, 'INFO');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addLog(`[SeedHealthData] Failed to seed ${config.recordType}: ${message}`, 'WARNING');
+    }
+  }
+
+  return totalRecords;
+};
+
 export const seedHealthData = async (days: number = 7): Promise<SeedResult> => {
   addLog(`[SeedHealthData] Starting to seed ${days} days of health data...`, 'INFO');
 
@@ -771,34 +1102,7 @@ export const seedHealthData = async (days: number = 7): Promise<SeedResult> => {
       };
     }
 
-    let totalRecords = 0;
-
-    for (const config of SEED_CONFIGS) {
-      try {
-        let count: number;
-
-        switch (config.seedType) {
-          case 'custom':
-            count = await config.seeder(days);
-            break;
-          case 'interval':
-            count = await seedIntervalRecords(config, days);
-            break;
-          case 'instant':
-            count = await seedInstantRecords(config, days);
-            break;
-          case 'samples':
-            count = await seedSamplesRecords(config, days);
-            break;
-        }
-
-        totalRecords += count;
-        addLog(`[SeedHealthData] Seeded ${config.recordType}`, 'INFO');
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        addLog(`[SeedHealthData] Failed to seed ${config.recordType}: ${message}`, 'WARNING');
-      }
-    }
+    const totalRecords = await seedAllForDates(getPastDates(days));
 
     addLog(`[SeedHealthData] Successfully seeded ${totalRecords} records`, 'INFO');
 
@@ -814,5 +1118,52 @@ export const seedHealthData = async (days: number = 7): Promise<SeedResult> => {
       recordsInserted: 0,
       error: message,
     };
+  }
+};
+
+// Cluster placement for old-data seeding: a few full days just past normal
+// sync's 365-day maximum reach, another cluster two years back, and a
+// steps-only floor anchor three years back — so the history-import probe
+// floor, empty-window fast-forward, and multi-window walks all get exercised
+// without inserting thousands of records.
+const OLD_SEED_CLUSTERS = [
+  { endDaysAgo: 425, days: 3 },
+  { endDaysAgo: 735, days: 3 },
+];
+const OLD_SEED_ANCHOR_DAYS_AGO = 1100;
+
+export const seedOldHealthData = async (): Promise<SeedResult> => {
+  addLog('[SeedOldHealthData] Seeding historical clusters (1-3 years back)...', 'INFO');
+
+  try {
+    const permissionsGranted = await requestWritePermissions();
+    if (!permissionsGranted) {
+      return {
+        success: false,
+        recordsInserted: 0,
+        error: 'Write permissions not granted. Please grant permissions in Health Connect settings.',
+      };
+    }
+
+    let totalRecords = 0;
+    for (const cluster of OLD_SEED_CLUSTERS) {
+      totalRecords += await seedAllForDates(getDatesEndingDaysAgo(cluster.endDaysAgo, cluster.days));
+    }
+
+    const stepsConfig = SEED_CONFIGS.find(config => config.recordType === 'Steps');
+    if (stepsConfig?.seedType === 'interval') {
+      totalRecords += await seedIntervalRecords(
+        stepsConfig,
+        getDatesEndingDaysAgo(OLD_SEED_ANCHOR_DAYS_AGO, 1),
+      );
+    }
+
+    addLog(`[SeedOldHealthData] Done — ${totalRecords} records seeded across 1-3 years back`, 'INFO');
+
+    return { success: true, recordsInserted: totalRecords };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    addLog(`[SeedOldHealthData] Error: ${message}`, 'ERROR');
+    return { success: false, recordsInserted: 0, error: message };
   }
 };

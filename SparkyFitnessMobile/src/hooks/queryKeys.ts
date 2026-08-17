@@ -67,6 +67,9 @@ export const foodVariantsQueryKey = (foodId: string) => ['foodVariants', foodId]
 export const measurementsRangeQueryKey = (startDate: string, endDate: string) =>
   ['measurementsRange', startDate, endDate] as const;
 
+export const customCategoriesQueryKey = ['customCategories'] as const;
+export const customMeasurementsByDateQueryKey = (date: string) => ['customMeasurements', date] as const;
+
 export const exerciseHistoryQueryKey = ['exerciseHistory'] as const;
 
 /** Per-exercise filtered history; extends the root so prefix invalidation covers it. */
@@ -137,7 +140,6 @@ export const cycleInsightsQueryKey = ['cycleInsights'] as const;
 export const cycleFertilityQueryKey = ['cycleFertility'] as const;
 export const cycleTestsQueryKey = ['cycleTests'] as const;
 export const cycleCorrelationsQueryKey = ['cycleCorrelations'] as const;
-export const cycleDisplayPreferencesQueryKey = ['cycleDisplayPreferences'] as const;
 
 export const pregnancyCurrentQueryKey = ['pregnancyCurrent'] as const;
 export const pregnancyOverviewQueryKey = ['pregnancyOverview'] as const;

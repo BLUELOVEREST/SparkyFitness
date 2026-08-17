@@ -5,6 +5,11 @@ import {
   ActivityDetailMetric,
   ActivityDetailsResponse,
 } from '@/types/exercises';
+import {
+  ExerciseEntries,
+  ExerciseEntryResponse,
+  GpsTrackPoint,
+} from '@workspace/shared';
 import { ChartDataPoint } from '@/types/reports';
 
 interface MetricDescriptor {
@@ -38,59 +43,87 @@ export const extractElevationGain = (
  * Handles provider-specific type keys (Garmin, Strava, Fitbit, Polar, Withings).
  * Falls back to 🏃 for unknown types.
  */
-export const getActivityIcon = (typeKey: string | undefined | null): string => {
-  if (!typeKey) return '🏃';
-  const key = typeKey.toLowerCase();
+export const getActivityIcon = (
+  typeKey: string | undefined | null,
+  activityName?: string | undefined | null
+): string => {
+  const textToSearch = `${typeKey || ''} ${activityName || ''}`
+    .toLowerCase()
+    .trim();
+  if (!textToSearch) return '🏃';
 
   if (
-    key.includes('cycling') ||
-    key.includes('biking') ||
-    key === 'ride' ||
-    key === 'virtualride' ||
-    key === 'ebikeride' ||
-    key === 'handcycle'
+    textToSearch.includes('swim') ||
+    textToSearch.includes('swimming') ||
+    textToSearch.includes('water')
+  )
+    return '🏊';
+  if (
+    textToSearch.includes('cycling') ||
+    textToSearch.includes('biking') ||
+    textToSearch.includes('bike') ||
+    textToSearch.includes('ride') ||
+    textToSearch.includes('virtualride') ||
+    textToSearch.includes('ebikeride') ||
+    textToSearch.includes('handcycle')
   )
     return '🚴';
   if (
-    key.includes('running') ||
-    key === 'run' ||
-    key === 'virtualrun' ||
-    key === 'trail_run' ||
-    key === 'trailrun'
+    textToSearch.includes('running') ||
+    textToSearch.includes('run') ||
+    textToSearch.includes('virtualrun') ||
+    textToSearch.includes('trail_run') ||
+    textToSearch.includes('trailrun') ||
+    textToSearch.includes('treadmill') ||
+    textToSearch.includes('jogging')
   )
     return '🏃';
-  if (key.includes('swimming') || key === 'swim') return '🏊';
-  if (key.includes('soccer') || key === 'football') return '⚽';
-  if (key.includes('basketball')) return '🏀';
-  if (key.includes('tennis')) return '🎾';
-  if (key.includes('golf')) return '⛳';
+  if (textToSearch.includes('soccer') || textToSearch.includes('football'))
+    return '⚽';
+  if (textToSearch.includes('basketball')) return '🏀';
+  if (textToSearch.includes('tennis')) return '🎾';
+  if (textToSearch.includes('golf')) return '⛳';
   if (
-    key.includes('hiking') ||
-    key.includes('walking') ||
-    key === 'walk' ||
-    key === 'hike'
+    textToSearch.includes('hiking') ||
+    textToSearch.includes('walking') ||
+    textToSearch.includes('walk') ||
+    textToSearch.includes('hike')
   )
     return '🚶';
   if (
-    key.includes('strength') ||
-    key.includes('weight') ||
-    key === 'weighttraining'
+    textToSearch.includes('strength') ||
+    textToSearch.includes('weight') ||
+    textToSearch.includes('weighttraining') ||
+    textToSearch.includes('barbell') ||
+    textToSearch.includes('dumbbell')
   )
     return '🏋️';
-  if (key.includes('yoga')) return '🧘';
-  if (key.includes('rowing') || key === 'rowing') return '🚣';
-  if (key.includes('skiing') || key === 'alpineski' || key === 'nordicski')
+  if (textToSearch.includes('yoga')) return '🧘';
+  if (textToSearch.includes('rowing') || textToSearch.includes('row'))
+    return '🚣';
+  if (
+    textToSearch.includes('skiing') ||
+    textToSearch.includes('alpineski') ||
+    textToSearch.includes('nordicski')
+  )
     return '⛷️';
-  if (key.includes('snowboard')) return '🏂';
-  if (key.includes('volleyball')) return '🏐';
-  if (key.includes('hockey')) return '🏒';
-  if (key.includes('rugby') || key.includes('americanfootball')) return '🏈';
-  if (key.includes('boxing') || key.includes('martialarts')) return '🥊';
-  if (key.includes('cardio') || key.includes('aerobic')) return '💪';
-  if (key.includes('elliptical')) return '🔄';
-  if (key.includes('stair') || key.includes('step')) return '🪜';
-  if (key.includes('surf')) return '🏄';
-  if (key.includes('climb')) return '🧗';
+  if (textToSearch.includes('snowboard')) return '🏂';
+  if (textToSearch.includes('volleyball')) return '🏐';
+  if (textToSearch.includes('hockey')) return '🏒';
+  if (
+    textToSearch.includes('rugby') ||
+    textToSearch.includes('americanfootball')
+  )
+    return '🏈';
+  if (textToSearch.includes('boxing') || textToSearch.includes('martialarts'))
+    return '🥊';
+  if (textToSearch.includes('cardio') || textToSearch.includes('aerobic'))
+    return '💪';
+  if (textToSearch.includes('elliptical')) return '🔄';
+  if (textToSearch.includes('stair') || textToSearch.includes('step'))
+    return '🪜';
+  if (textToSearch.includes('surf')) return '🏄';
+  if (textToSearch.includes('climb')) return '🧗';
 
   return '🏃';
 };
@@ -111,6 +144,84 @@ export const getEventTypeLabel = (eventType: unknown): string | null => {
 
   if (!label || label.toLowerCase() === 'uncategorized') return null;
   return label;
+};
+
+/**
+ * Providers whose raw `exercise_entries.source` string cannot just be
+ * capitalized into a display name — either the source itself is a brand
+ * mismatch (`healthkit` is Apple's API name, not what it calls the app;
+ * `Apple Health`), or it's an internal alias that must collapse onto another
+ * provider's label (`garmin_fit`, the FIT-file import path, is still Garmin
+ * to the user, not its own brand). Every other provider — garmin, strava,
+ * "Health Connect", a future Fitbit/Oura/Polar/Withings/Hevy integration —
+ * needs no entry here: capitalizeWords already turns their raw source string
+ * into the correct display name (verified: this app hardcodes "Garmin" as
+ * plain text in several other places too, e.g. externalProviderService.ts —
+ * there's no canonical provider-display-name table to defer to instead).
+ *
+ * `key` is present only where the label is worth resolving through
+ * useTranslation() — i.e. a real product name (Apple Health), not an
+ * internal alias like garmin_fit, which just needs the same plain string
+ * "garmin" itself resolves to.
+ *
+ * Keys of this map are lowercased `exercise_entries.source` values; this is a
+ * plain util, not a component, so it cannot call useTranslation() itself —
+ * resolve with t(key, fallback) at the render boundary.
+ */
+const PROVIDER_LABEL_EXCEPTIONS: Record<
+  string,
+  { key?: string; fallback: string }
+> = {
+  garmin_fit: { fallback: 'Garmin' },
+  healthkit: {
+    key: 'reports.activityReport.provider.appleHealth',
+    fallback: 'Apple Health',
+  },
+};
+
+/** "health connect" / "garmin_fit" -> "Health Connect" / "Garmin Fit". */
+const capitalizeWords = (value: string): string =>
+  value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+export interface ProviderLabel {
+  /** Pass to t() when isTranslationKey is true; render as-is otherwise. */
+  label: string;
+  /** false for a provider with no known display name — label is the raw provider_name. */
+  isTranslationKey: boolean;
+  /** English text to pass as t()'s default; unused when isTranslationKey is false. */
+  fallback: string;
+}
+
+/**
+ * Resolves a provider_name to either a translation key (the small set of
+ * providers in PROVIDER_LABEL_EXCEPTIONS) or a capitalized version of the raw
+ * provider name (everything else) — never a hardcoded display string, so the
+ * caller must resolve it with t() before rendering.
+ *
+ * Never pass provider_name (or this result) back into a query: it's matched
+ * against `exercise_entry_activity_details.provider_name` in the database, so
+ * anything other than the original raw value silently returns nothing.
+ */
+export const providerLabel = (
+  providerName?: string | null
+): ProviderLabel | null => {
+  if (!providerName) return null;
+  const entry = PROVIDER_LABEL_EXCEPTIONS[providerName.toLowerCase()];
+  if (entry) {
+    return entry.key
+      ? { label: entry.key, isTranslationKey: true, fallback: entry.fallback }
+      : {
+          label: entry.fallback,
+          isTranslationKey: false,
+          fallback: entry.fallback,
+        };
+  }
+  const capitalized = capitalizeWords(providerName);
+  return { label: capitalized, isTranslationKey: false, fallback: capitalized };
 };
 
 export const processChartData = (
@@ -320,6 +431,42 @@ export const processChartData = (
   }));
 };
 
+export const processGpsPointsToChartData = (
+  // The workout's trackpoint array (ExerciseEntryGpsPoints.points), not the
+  // wrapping row -- callers pass gpsData?.points.
+  points: GpsTrackPoint[] | undefined,
+  convertDistance: (
+    value: number,
+    from: DistanceUnit,
+    to: DistanceUnit
+  ) => number,
+  distanceUnit: DistanceUnit
+): ChartDataPoint[] => {
+  if (!points || points.length === 0) return [];
+  const firstPt = points[0];
+  if (!firstPt) return [];
+  const startTs = new Date(firstPt.t).getTime();
+  const initialDist = firstPt.dist ?? 0;
+
+  return points.map((pt) => {
+    const currentTs = new Date(pt.t).getTime();
+    const speed = pt.speed ?? 0;
+    const paceMinutesPerKm = speed > 0 ? 1000 / (speed * 60) : 0;
+    const relDistance = (pt.dist ?? 0) - initialDist;
+
+    return {
+      timestamp: currentTs,
+      activityDuration: (currentTs - startTs) / 60000,
+      distance: convertDistance(relDistance / 1000, 'km', distanceUnit),
+      speed: speed ? parseFloat(speed.toFixed(2)) : 0,
+      pace: paceMinutesPerKm > 0 ? parseFloat(paceMinutesPerKm.toFixed(2)) : 0,
+      heartRate: pt.hr ?? null,
+      runCadence: pt.cad ?? 0,
+      elevation: pt.alt ?? null,
+    };
+  });
+};
+
 export interface ActivityStats {
   /** km */
   distance: number | null;
@@ -338,6 +485,23 @@ export interface ActivityStats {
   waterEstimated: number | null;
   activityName: string | null;
   activityTypeKey: string | null;
+  /** seconds */
+  movingTimeSeconds: number | null;
+  /** seconds */
+  elapsedTimeSeconds: number | null;
+  /** seconds; strength-session "work time" (active set time, excludes rest/warm-up) */
+  workTimeSeconds: number | null;
+  restingCalories: number | null;
+  activeCalories: number | null;
+  /** m/s */
+  avgMovingSpeedMps: number | null;
+  /** metres */
+  minElevation: number | null;
+  /** metres */
+  maxElevation: number | null;
+  weatherTempCelsius: number | null;
+  weatherCondition: string | null;
+  gearName: string | null;
 }
 
 /**
@@ -360,10 +524,143 @@ export interface ActivityStats {
  *   ascent     – Garmin: activity.totalAscent | activity.elevationGain
  *                Strava:  activity.total_elevation_gain
  */
-export function readActivityStats(
-  activityData: ActivityDetailsResponse
+export function readActivityStatsFromRelational(
+  entry:
+    | Partial<ExerciseEntries>
+    | Partial<ExerciseEntryResponse>
+    | Record<string, unknown>
+    | undefined
+    | null
 ): ActivityStats {
-  const a = activityData?.activity?.activity ?? {};
+  if (!entry) {
+    return {
+      distance: null,
+      duration: null,
+      calories: null,
+      heartRate: null,
+      cadence: null,
+      pace: null,
+      ascent: null,
+      waterEstimated: null,
+      activityName: null,
+      activityTypeKey: null,
+      movingTimeSeconds: null,
+      elapsedTimeSeconds: null,
+      workTimeSeconds: null,
+      restingCalories: null,
+      activeCalories: null,
+      avgMovingSpeedMps: null,
+      minElevation: null,
+      maxElevation: null,
+      weatherTempCelsius: null,
+      weatherCondition: null,
+      gearName: null,
+    };
+  }
+
+  const pos = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  // Some columns (e.g. min_elevation_meters) can legitimately be 0 or negative
+  // (below sea level); `pos` would incorrectly drop those.
+  const num = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const e = entry as Record<string, unknown>;
+  const distance = pos(e['distance']);
+  const duration = pos(e['duration_minutes']);
+  const calories = pos(e['calories_burned']);
+  const heartRate = pos(e['avg_heart_rate']);
+  const cadence = pos(e['avg_cadence']);
+  const avgSpeedMs = pos(e['avg_speed_mps']);
+  const pace =
+    avgSpeedMs != null && avgSpeedMs > 0
+      ? 1000 / (avgSpeedMs * 60)
+      : distance && duration
+        ? duration / distance
+        : null;
+  const ascent = pos(e['elevation_gain_meters']);
+  const rawWater = e['water_estimated'] ?? e['water_estimated_ml'];
+  const waterEstimated = pos(rawWater);
+  const activityName = (e['exercise_name'] as string) ?? null;
+  const activityTypeKey = (e['category'] as string) ?? activityName ?? null;
+
+  return {
+    distance,
+    duration,
+    calories,
+    heartRate,
+    cadence,
+    pace,
+    ascent,
+    waterEstimated,
+    activityName,
+    activityTypeKey,
+    movingTimeSeconds: pos(e['moving_time_seconds']),
+    elapsedTimeSeconds: pos(e['elapsed_time_seconds']),
+    workTimeSeconds: pos(e['work_time_seconds']),
+    restingCalories: pos(e['resting_calories']),
+    activeCalories: pos(e['active_calories']),
+    avgMovingSpeedMps: pos(e['avg_moving_speed_mps']),
+    minElevation: num(e['min_elevation_meters']),
+    maxElevation: num(e['max_elevation_meters']),
+    weatherTempCelsius: num(e['weather_temp_celsius']),
+    weatherCondition: (e['weather_condition'] as string) ?? null,
+    gearName: (e['gear_name'] as string) ?? null,
+  };
+}
+
+/**
+ * Read summary stats from an activity detail record or relational exercise entry in a provider-agnostic way.
+ */
+export function readActivityStats(
+  activityData:
+    | ActivityDetailsResponse
+    | Partial<ExerciseEntries>
+    | Partial<ExerciseEntryResponse>
+    | undefined
+    | null
+): ActivityStats {
+  if (!activityData) {
+    return {
+      distance: null,
+      duration: null,
+      calories: null,
+      heartRate: null,
+      cadence: null,
+      pace: null,
+      ascent: null,
+      waterEstimated: null,
+      activityName: null,
+      activityTypeKey: null,
+      movingTimeSeconds: null,
+      elapsedTimeSeconds: null,
+      workTimeSeconds: null,
+      restingCalories: null,
+      activeCalories: null,
+      avgMovingSpeedMps: null,
+      minElevation: null,
+      maxElevation: null,
+      weatherTempCelsius: null,
+      weatherCondition: null,
+      gearName: null,
+    };
+  }
+
+  if (
+    'duration_minutes' in activityData ||
+    'exercise_name' in activityData ||
+    'calories_burned' in activityData
+  ) {
+    return readActivityStatsFromRelational(
+      activityData as Partial<ExerciseEntries>
+    );
+  }
+
+  const a = (activityData as ActivityDetailsResponse)?.activity?.activity ?? {};
 
   const pos = (v: unknown): number | null => {
     const n = Number(v);
@@ -371,8 +668,6 @@ export function readActivityStats(
   };
 
   // distance – Garmin stores km (converted server-side); Strava stores metres.
-  // Detect provider by presence of Strava-specific fields so we don't rely on a
-  // fragile magnitude heuristic that breaks for long activities (e.g. > 200 km).
   const isStrava =
     a['sport_type'] != null ||
     a['moving_time'] != null ||
@@ -386,8 +681,6 @@ export function readActivityStats(
       : null;
 
   // duration – Garmin: minutes (converted server-side); Strava: seconds; Fitbit: ms.
-  // Use provider-specific fields to detect units rather than magnitude thresholds.
-  // Fitbit is identified by its unique camelCase field names absent from other providers.
   const isFitbit =
     a['activeDuration'] != null ||
     a['averageHeartRate'] != null ||
@@ -395,22 +688,17 @@ export function readActivityStats(
   const rawDur = a['duration'] as number | undefined;
   const rawMoving = a['moving_time'] as number | undefined;
   const rawElapsed = a['elapsed_time'] as number | undefined;
-  const rawFitbitDur = a['activeDuration'] as number | undefined; // Fitbit: ms
+  const rawFitbitDur = a['activeDuration'] as number | undefined;
   let duration: number | null = null;
   if (rawFitbitDur != null && rawFitbitDur > 0) {
-    // Fitbit activeDuration: milliseconds
     duration = rawFitbitDur / 60000;
   } else if (isFitbit && rawDur != null && rawDur > 0) {
-    // Fitbit duration: also milliseconds (fallback when activeDuration absent)
     duration = rawDur / 60000;
   } else if (rawMoving != null && rawMoving > 0) {
-    // Strava: moving_time in seconds
     duration = rawMoving / 60;
   } else if (rawElapsed != null && rawElapsed > 0) {
-    // Strava fallback: elapsed_time in seconds
     duration = rawElapsed / 60;
   } else if (rawDur != null && rawDur > 0) {
-    // Garmin: already in minutes after server conversion
     duration = rawDur;
   }
 
@@ -426,7 +714,6 @@ export function readActivityStats(
     pos(a['averageRunCadence']) ??
     pos(a['average_cadence']);
 
-  // pace – Garmin: min/km; derive from speed if missing
   const rawPace = pos(a['averagePace']);
   const avgSpeedMs = pos(a['averageSpeed']) ?? pos(a['average_speed']);
   const derivedPace =
@@ -440,7 +727,6 @@ export function readActivityStats(
 
   const waterEstimated = pos(a['waterEstimated']);
 
-  // activity name / type
   const activityName =
     (a['activityName'] as string | undefined) ??
     (a['name'] as string | undefined) ??
@@ -450,6 +736,7 @@ export function readActivityStats(
     (a['activityType'] as { typeKey?: string } | undefined)?.typeKey ??
     (a['sport_type'] as string | undefined) ??
     (a['type'] as string | undefined) ??
+    activityName ??
     null;
 
   return {
@@ -463,6 +750,19 @@ export function readActivityStats(
     waterEstimated,
     activityName,
     activityTypeKey,
+    // Only populated from the relational path (readActivityStatsFromRelational above) —
+    // no equivalent field exists in the raw provider blob parsed below.
+    movingTimeSeconds: null,
+    elapsedTimeSeconds: null,
+    workTimeSeconds: null,
+    restingCalories: null,
+    activeCalories: null,
+    avgMovingSpeedMps: null,
+    minElevation: null,
+    maxElevation: null,
+    weatherTempCelsius: null,
+    weatherCondition: null,
+    gearName: null,
   };
 }
 

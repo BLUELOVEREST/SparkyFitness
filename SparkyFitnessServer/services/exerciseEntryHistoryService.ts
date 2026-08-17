@@ -14,6 +14,7 @@ import {
 
 import { getClient } from '../db/poolManager.js';
 import { log } from '../config/logging.js';
+import { EXERCISE_ENTRY_TELEMETRY_COLUMNS } from '../models/exerciseEntry.js';
 
 /** Convert a pg date value to a YYYY-MM-DD string, or return null. */
 function _dateToString(value: unknown): string | null {
@@ -62,6 +63,27 @@ interface ActivityDetailRow {
   detail_data: unknown;
 }
 
+// Raw provider sync dumps (Garmin's full_activity_data/full_workout_data) are large
+// (can include thousands of GPS points) and are meant to be fetched on demand for a
+// single entry, never inlined into a list/history response — see
+// activityDetailsRepository.getActivityDetailsSummaryForEntriesAndPresets, which this
+// mirrors for the hand-written queries in this file.
+const RAW_PROVIDER_DUMP_DETAIL_TYPES = [
+  'full_activity_data',
+  'full_workout_data',
+];
+
+/** Telemetry columns that hold free text rather than a measurement. */
+const TELEMETRY_TEXT_COLUMNS: ReadonlySet<string> = new Set([
+  'weather_condition',
+  'gear_name',
+  'gear_external_id',
+]);
+
+const ACTIVITY_DETAIL_COLUMNS_MASKED = `id, exercise_entry_id, exercise_preset_entry_id, provider_name, detail_type,
+       created_by_user_id, created_at,
+       CASE WHEN detail_type = ANY($2::text[]) THEN NULL ELSE detail_data END AS detail_data`;
+
 const SETS_SUBQUERY = `COALESCE(
   (SELECT json_agg(set_data ORDER BY set_data.set_number)
    FROM (
@@ -105,6 +127,17 @@ function _buildExerciseEntryWithSnapshot(
     ...entryData
   } = row;
 
+  const telemetryNumbers: Record<string, number | null> = {};
+  const telemetryText: Record<string, string | null> = {};
+  for (const column of EXERCISE_ENTRY_TELEMETRY_COLUMNS) {
+    const value = entryData[column];
+    if (TELEMETRY_TEXT_COLUMNS.has(column)) {
+      telemetryText[column] = (value as string | null | undefined) ?? null;
+    } else {
+      telemetryNumbers[column] = (value as number | null | undefined) ?? null;
+    }
+  }
+
   return {
     id: entryData.id as string,
     exercise_id: entryData.exercise_id as string,
@@ -120,6 +153,12 @@ function _buildExerciseEntryWithSnapshot(
     source: (source as string) ?? null,
     image_url: (entryData.image_url as string) ?? null,
     sets: ((entryData.sets as unknown[]) ?? []) as ExerciseEntrySetResponse[],
+    // Wearable telemetry: entryData carries every exercise_entries column (the
+    // query behind this builder is SELECT ee.*), but nothing above copies these
+    // ~40 columns onto the response, so they were silently dropped even though
+    // the DB and the response schema both have them.
+    ...telemetryNumbers,
+    ...telemetryText,
     exercise_snapshot: {
       id: entryData.exercise_id as string,
       name: exercise_name as string,
@@ -271,13 +310,15 @@ async function getExerciseEntryHistorySessions(
         })
     );
 
-    // Preset-level activity details
+    // Preset-level activity details (raw provider dumps stripped of payload — see
+    // RAW_PROVIDER_DUMP_DETAIL_TYPES)
     batchQueries.push(
       client
         .query(
-          `SELECT * FROM exercise_entry_activity_details
+          `SELECT ${ACTIVITY_DETAIL_COLUMNS_MASKED}
+           FROM exercise_entry_activity_details
            WHERE exercise_preset_entry_id = ANY($1::uuid[])`,
-          [presetIds]
+          [presetIds, RAW_PROVIDER_DUMP_DETAIL_TYPES]
         )
         .then((r: { rows: ActivityDetailRow[] }) => {
           for (const row of r.rows) {
@@ -316,12 +357,14 @@ async function getExerciseEntryHistorySessions(
 
   await Promise.all(batchQueries);
 
-  // Entry-level activity details (for both preset children and individuals)
+  // Entry-level activity details (for both preset children and individuals; raw
+  // provider dumps stripped of payload — see RAW_PROVIDER_DUMP_DETAIL_TYPES)
   if (allExerciseEntryIds.length > 0) {
     const adResult = await client.query(
-      `SELECT * FROM exercise_entry_activity_details
+      `SELECT ${ACTIVITY_DETAIL_COLUMNS_MASKED}
+       FROM exercise_entry_activity_details
        WHERE exercise_entry_id = ANY($1::uuid[])`,
-      [allExerciseEntryIds]
+      [allExerciseEntryIds, RAW_PROVIDER_DUMP_DETAIL_TYPES]
     );
     const entryActivityMap = new Map<string, ActivityDetailRow[]>();
     for (const row of adResult.rows as ActivityDetailRow[]) {
@@ -533,13 +576,15 @@ async function _getExerciseEntriesByDateWithClient(
 
   const activityQueries: Promise<void>[] = [];
 
+  // Raw provider dumps stripped of payload — see RAW_PROVIDER_DUMP_DETAIL_TYPES.
   if (allEntryIds.length > 0) {
     activityQueries.push(
       client
         .query(
-          `SELECT * FROM exercise_entry_activity_details
+          `SELECT ${ACTIVITY_DETAIL_COLUMNS_MASKED}
+           FROM exercise_entry_activity_details
            WHERE exercise_entry_id = ANY($1::uuid[])`,
-          [allEntryIds]
+          [allEntryIds, RAW_PROVIDER_DUMP_DETAIL_TYPES]
         )
         .then((r: { rows: ActivityDetailRow[] }) => {
           for (const row of r.rows) {
@@ -557,9 +602,10 @@ async function _getExerciseEntriesByDateWithClient(
     activityQueries.push(
       client
         .query(
-          `SELECT * FROM exercise_entry_activity_details
+          `SELECT ${ACTIVITY_DETAIL_COLUMNS_MASKED}
+           FROM exercise_entry_activity_details
            WHERE exercise_preset_entry_id = ANY($1::uuid[])`,
-          [presetIds]
+          [presetIds, RAW_PROVIDER_DUMP_DETAIL_TYPES]
         )
         .then((r: { rows: ActivityDetailRow[] }) => {
           for (const row of r.rows) {

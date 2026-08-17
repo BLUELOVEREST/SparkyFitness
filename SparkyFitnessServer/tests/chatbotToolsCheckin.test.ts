@@ -107,6 +107,65 @@ describe('log_biometrics', () => {
     );
   });
 
+  it('stores smart-scale composition, converting masses by weight_unit', async () => {
+    vi.mocked(measurementService.upsertCheckInMeasurements).mockResolvedValue({
+      id: 'ci-1',
+    });
+
+    const result = await tools.sparky_manage_checkin.execute!(
+      {
+        action: 'log_biometrics',
+        entry_date: '2026-06-01',
+        muscle_mass: 80,
+        bone_mass: 8,
+        body_water: 55.4,
+        weight_unit: 'lbs',
+      },
+      opts
+    );
+
+    expect(result).toBe(
+      '✅ Biometrics logged for 2026-06-01 (muscle mass: 80lbs, bone mass: 8lbs, body water: 55.4%).'
+    );
+    expect(measurementService.upsertCheckInMeasurements).toHaveBeenCalledWith(
+      'user-1',
+      'user-1',
+      '2026-06-01',
+      {
+        muscle_mass_kg: 80 * 0.45359237,
+        bone_mass_kg: 8 * 0.45359237,
+        // A percentage is never unit-converted.
+        body_water_percentage: 55.4,
+      }
+    );
+  });
+
+  it('defaults smart-scale masses to kg when no weight_unit is given', async () => {
+    vi.mocked(measurementService.upsertCheckInMeasurements).mockResolvedValue({
+      id: 'ci-1',
+    });
+
+    const result = await tools.sparky_manage_checkin.execute!(
+      {
+        action: 'log_biometrics',
+        entry_date: '2026-06-01',
+        muscle_mass: 34.2,
+        bone_mass: 3.1,
+      },
+      opts
+    );
+
+    expect(result).toBe(
+      '✅ Biometrics logged for 2026-06-01 (muscle mass: 34.2kg, bone mass: 3.1kg).'
+    );
+    expect(measurementService.upsertCheckInMeasurements).toHaveBeenCalledWith(
+      'user-1',
+      'user-1',
+      '2026-06-01',
+      { muscle_mass_kg: 34.2, bone_mass_kg: 3.1 }
+    );
+  });
+
   it("converts the 'lb' and 'ft' alias units for storage", async () => {
     vi.mocked(measurementService.upsertCheckInMeasurements).mockResolvedValue({
       id: 'ci-1',
@@ -138,7 +197,7 @@ describe('log_biometrics', () => {
     );
   });
 
-  it("falls back to the user's preferred units for conversion (text still defaults to kg)", async () => {
+  it("falls back to the user's preferred units for both conversion and text", async () => {
     vi.mocked(preferenceService.getUserPreferences).mockResolvedValue({
       default_weight_unit: 'lbs',
     });
@@ -151,7 +210,11 @@ describe('log_biometrics', () => {
       opts
     );
 
-    expect(result).toBe('✅ Biometrics logged for 2026-06-01 (weight: 180kg).');
+    // The value is interpreted as lbs (the user's preference), so the text has
+    // to say lbs. Reporting 'kg' here told the user a unit that was never used.
+    expect(result).toBe(
+      '✅ Biometrics logged for 2026-06-01 (weight: 180lbs).'
+    );
     expect(measurementService.upsertCheckInMeasurements).toHaveBeenCalledWith(
       'user-1',
       'user-1',
@@ -230,6 +293,42 @@ describe('log_custom_metric', () => {
       category_id: 'c1',
       value: '120',
       entry_date: '2026-06-01',
+      notes: undefined,
+    });
+  });
+
+  it('logs custom metric successfully for non-daily frequency category', async () => {
+    vi.mocked(measurementService.getCustomCategories).mockResolvedValue([
+      {
+        id: 'c2',
+        name: 'Blood Pressure Systolic',
+        frequency: 'Unlimited',
+      },
+    ]);
+    vi.mocked(
+      measurementService.upsertCustomMeasurementEntry
+    ).mockResolvedValue({ id: 'm2' });
+
+    const result = await tools.sparky_manage_checkin.execute!(
+      {
+        action: 'log_custom_metric',
+        category_name: 'Blood Pressure Systolic',
+        value: 118,
+        unit: 'mmHg',
+        entry_date: '2026-08-10',
+      },
+      opts
+    );
+
+    expect(result).toBe(
+      '✅ Custom metric "Blood Pressure Systolic" logged: 118 mmHg on 2026-08-10.'
+    );
+    expect(
+      measurementService.upsertCustomMeasurementEntry
+    ).toHaveBeenCalledWith('user-1', 'user-1', {
+      category_id: 'c2',
+      value: '118',
+      entry_date: '2026-08-10',
       notes: undefined,
     });
   });
@@ -535,6 +634,67 @@ describe('log_sleep', () => {
         source: 'manual',
       }
     );
+  });
+
+  it('stamps record_utc_offset_minutes from an explicit-offset caller timestamp', async () => {
+    vi.mocked(measurementService.processSleepEntry).mockResolvedValue({
+      id: 's1',
+    });
+
+    await tools.sparky_manage_checkin.execute!(
+      {
+        action: 'log_sleep',
+        entry_date: '2026-06-01',
+        bedtime: '2026-05-31T22:00:00+05:30',
+      },
+      opts
+    );
+
+    expect(measurementService.processSleepEntry).toHaveBeenCalledWith(
+      'user-1',
+      'user-1',
+      expect.objectContaining({ record_utc_offset_minutes: 330 })
+    );
+  });
+
+  it('falls back to the wake_time offset when bedtime carries none', async () => {
+    vi.mocked(measurementService.processSleepEntry).mockResolvedValue({
+      id: 's1',
+    });
+
+    await tools.sparky_manage_checkin.execute!(
+      {
+        action: 'log_sleep',
+        entry_date: '2026-06-01',
+        wake_time: '2026-06-01T06:00:00-04:00',
+      },
+      opts
+    );
+
+    expect(measurementService.processSleepEntry).toHaveBeenCalledWith(
+      'user-1',
+      'user-1',
+      expect.objectContaining({ record_utc_offset_minutes: -240 })
+    );
+  });
+
+  it('leaves the stamp unset for Z-suffixed and generated timestamps', async () => {
+    vi.mocked(measurementService.processSleepEntry).mockResolvedValue({
+      id: 's1',
+    });
+
+    await tools.sparky_manage_checkin.execute!(
+      {
+        action: 'log_sleep',
+        entry_date: '2026-06-01',
+        bedtime: '2026-05-31T22:00:00.000Z',
+      },
+      opts
+    );
+
+    const payload = vi.mocked(measurementService.processSleepEntry).mock
+      .calls[0][2];
+    expect(payload.record_utc_offset_minutes).toBeUndefined();
   });
 });
 

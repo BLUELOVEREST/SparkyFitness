@@ -11,7 +11,16 @@ import MealCard from './MealCard';
 import ExerciseCard from './ExerciseCard';
 import DiaryWidgetGrid, { type DiaryWidget } from './DiaryWidgetGrid';
 import { mealWidgetKey } from '@/utils/dashboardLayout';
-import { Flame, Salad, Droplet, UtensilsCrossed, Dumbbell } from 'lucide-react';
+import {
+  Flame,
+  Salad,
+  Droplet,
+  UtensilsCrossed,
+  Dumbbell,
+  HeartPulse,
+} from 'lucide-react';
+import { DailyHealthMetricsCard } from '@/components/Health/DailyHealthMetricsCard';
+import { useDailyHealthMetrics } from '@/hooks/useGenericHealth';
 import EditFoodEntryDialog from './EditFoodEntryDialog';
 import FoodUnitSelector from '@/components/FoodUnitSelector';
 import CopyFoodEntryDialog from '@/pages/Diary/CopyFoodEntryDialog';
@@ -101,6 +110,8 @@ const Diary = () => {
   const { data: goals, isLoading: goalsLoading } = useDiaryGoals(selectedDate);
   const { data: activeMealPlanDay, isLoading: activeMealPlanDayLoading } =
     useActiveMealPlanDay(selectedDate);
+  const { data: healthMetricsData, isLoading: loadingHealthMetrics } =
+    useDailyHealthMetrics(selectedDate);
   const { data: summaryData, isLoading: summaryLoading } =
     useDailySummary(selectedDate);
   const { data: fetchedFoodEntries, isLoading: foodEntriesLoading } =
@@ -377,6 +388,21 @@ const Diary = () => {
     await logPlannedMeal({ date: selectedDate, mealTypeId });
   };
 
+  // Some Garmin sync fields (e.g. lactate_threshold, fitness_age) can create a
+  // daily_health_metrics row for a date even when none of the metrics this
+  // card actually displays came back populated (no real wearable, FIT-only
+  // import, etc.). Only show the widget when there's something real to show,
+  // rather than an empty shell.
+  const todaysHealthMetrics = healthMetricsData?.[0];
+  const hasDisplayableHealthMetrics = Boolean(
+    todaysHealthMetrics &&
+    (todaysHealthMetrics.body_battery_highest != null ||
+      todaysHealthMetrics.avg_stress_level != null ||
+      todaysHealthMetrics.resting_heart_rate != null ||
+      todaysHealthMetrics.vo2_max != null ||
+      todaysHealthMetrics.training_readiness_score != null)
+  );
+
   // Build the ordered widget registry: energy, nutrition, water, one card per
   // visible meal type, then exercise. Keys match buildWidgetKeys() so the saved
   // grid layout reconciles cleanly against the user's current meal types.
@@ -416,6 +442,23 @@ const Diary = () => {
         render: () => <WaterIntake selectedDate={selectedDate} />,
       },
     ];
+
+    if (hasDisplayableHealthMetrics) {
+      list.push({
+        key: 'healthMetrics',
+        title: t(
+          'diary.wearableHealthSummary',
+          'Daily Wearable Health Summary'
+        ),
+        icon: HeartPulse,
+        render: () => (
+          <DailyHealthMetricsCard
+            metrics={todaysHealthMetrics}
+            isLoading={loadingHealthMetrics}
+          />
+        ),
+      });
+    }
 
     const mealCards = isCarbCycleDiary
       ? activeMealPlanDay.meals.map((plannedMeal) => ({
@@ -512,6 +555,9 @@ const Diary = () => {
     exercisesToLogFromPreset,
     openFoodSearchForMealType,
     loggingPlannedMeal,
+    hasDisplayableHealthMetrics,
+    todaysHealthMetrics,
+    loadingHealthMetrics,
     t,
   ]);
 
@@ -520,8 +566,11 @@ const Diary = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b">
         <div />
-        <div className="flex items-center gap-2 sm:ml-auto">
-          <div ref={setToolbarContainer} className="flex items-center gap-2" />
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:ml-auto">
+          <div
+            ref={setToolbarContainer}
+            className="flex min-w-0 flex-wrap items-center gap-2"
+          />
           <DayNavigator
             selectedDate={selectedDate}
             onDateChange={(dateString) => {

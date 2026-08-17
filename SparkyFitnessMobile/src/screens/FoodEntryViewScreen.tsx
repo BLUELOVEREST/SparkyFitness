@@ -24,7 +24,10 @@ import TimeSheet, { type TimeSheetRef } from '../components/TimeSheet';
 import { toHourMinute } from '@workspace/shared';
 import { formatTimeLabel } from '../utils/entryTimeDisplay';
 import { normalizeDate, formatDateLabel } from '../utils/dateUtils';
-import { getMealTypeLabel } from '../constants/meals';
+import {
+  getFoodEntryMealTypeLabel,
+  getMealTypeDisplayLabel,
+} from '../utils/mealNutrition';
 import { useMealTypes, usePreferences, useServerConnection, useCustomNutrients } from '../hooks';
 import { useFoodVariants } from '../hooks/useFoodVariants';
 import { useDeleteFoodEntry } from '../hooks/useDeleteFoodEntry';
@@ -52,6 +55,7 @@ import {
   formatVariantLabel,
   resolveLocalPickerVariantId,
   unitVariantToDisplayValues,
+  nextQuantity,
 } from '../utils/foodDetails';
 import { DECIMAL_INPUT_REGEX, parseDecimalInput } from '../utils/numericInput';
 import VerifiedBadge from '../components/VerifiedBadge';
@@ -368,7 +372,7 @@ const FoodEntryViewScreen: React.FC<FoodEntryViewScreenProps> = ({
   const servingSizeRef = useRef(displayValues.servingSize);
 
   const mealPickerOptions = mealTypes.map((mealType) => ({
-    label: getMealTypeLabel(mealType.name),
+    label: getMealTypeDisplayLabel(mealType),
     value: mealType.id,
   }));
 
@@ -507,15 +511,9 @@ const FoodEntryViewScreen: React.FC<FoodEntryViewScreenProps> = ({
   };
 
   const adjustQuantity = (delta: number) => {
-    const step = displayValues.servingSize;
-    const increment = step * 0.5 || 1;
-    const boundary =
-      delta > 0
-        ? Math.ceil(quantity / increment) * increment
-        : Math.floor(quantity / increment) * increment;
-    const next =
-      boundary !== quantity ? boundary : quantity + delta * increment;
-    updateEdit({ quantityText: String(Math.max(increment, next)) });
+    updateEdit({
+      quantityText: String(nextQuantity(quantity, delta, displayValues.servingSize)),
+    });
   };
 
   const navigateToNutritionForm = () => {
@@ -1126,7 +1124,7 @@ const FoodEntryViewScreen: React.FC<FoodEntryViewScreenProps> = ({
                     className="flex-row items-center"
                   >
                     <Text className="text-text-primary text-base font-medium">
-                      {getMealTypeLabel(selectedMealType.name)}
+                      {getMealTypeDisplayLabel(selectedMealType)}
                     </Text>
                     <Icon
                       name="chevron-down"
@@ -1140,7 +1138,7 @@ const FoodEntryViewScreen: React.FC<FoodEntryViewScreenProps> = ({
               />
             ) : (
               <Text className="text-text-primary text-base font-medium">
-                {getMealTypeLabel(entry.meal_type)}
+                {getFoodEntryMealTypeLabel(entry, mealTypes)}
               </Text>
             )}
           </View>
@@ -1188,11 +1186,10 @@ const FoodEntryViewScreen: React.FC<FoodEntryViewScreenProps> = ({
 
         <Animated.View layout={LinearTransition.duration(300)}>
           <Button
-            variant="ghost"
+            variant="destructive"
             onPress={confirmAndDelete}
             disabled={isDeletePending}
             className="mt-2"
-            textClassName="text-bg-danger font-medium"
           >
             {isDeletePending ? 'Deleting...' : 'Delete Entry'}
           </Button>

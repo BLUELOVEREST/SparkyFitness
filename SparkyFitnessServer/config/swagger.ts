@@ -958,6 +958,18 @@ const options = {
             duration_in_seconds: { type: 'integer' },
             source: { type: 'string' },
             sleep_score: { type: 'integer', nullable: true },
+            record_timezone: {
+              type: 'string',
+              nullable: true,
+              description:
+                'IANA timezone the entry was recorded in. NULL falls back to record_utc_offset_minutes, then the profile timezone.',
+            },
+            record_utc_offset_minutes: {
+              type: 'integer',
+              nullable: true,
+              description:
+                'UTC offset in minutes at recording time; used when record_timezone is absent.',
+            },
             created_at: { type: 'string', format: 'date-time' },
             updated_at: { type: 'string', format: 'date-time' },
           },
@@ -1020,7 +1032,7 @@ const options = {
         WaterContainer: {
           type: 'object',
           properties: {
-            id: { type: 'string', format: 'uuid' },
+            id: { type: 'integer' },
             user_id: { type: 'string', format: 'uuid' },
             name: { type: 'string' },
             volume: { type: 'number', description: 'Volume in specified unit' },
@@ -1045,6 +1057,9 @@ const options = {
             steps: { type: 'number', nullable: true },
             height: { type: 'number', nullable: true },
             body_fat_percentage: { type: 'number', nullable: true },
+            muscle_mass_kg: { type: 'number', nullable: true },
+            bone_mass_kg: { type: 'number', nullable: true },
+            body_water_percentage: { type: 'number', nullable: true },
             created_at: { type: 'string', format: 'date-time' },
             updated_at: { type: 'string', format: 'date-time' },
           },

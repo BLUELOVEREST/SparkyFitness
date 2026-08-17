@@ -48,6 +48,27 @@ const garminMeasurementMapping = {
     dataType: 'integer',
     measurementType: 'count',
   },
+  active_calories: {
+    targetType: 'custom',
+    name: 'Active Calories',
+    dataType: 'numeric',
+    measurementType: 'kcal',
+    frequency: 'Daily',
+  },
+  bmr_calories: {
+    targetType: 'custom',
+    name: 'basal_metabolic_rate',
+    dataType: 'numeric',
+    measurementType: 'kcal',
+    frequency: 'Daily',
+  },
+  total_calories: {
+    targetType: 'custom',
+    name: 'total_calories',
+    dataType: 'numeric',
+    measurementType: 'kcal',
+    frequency: 'Daily',
+  },
   bmi: {
     targetType: 'custom',
     name: 'BMI',
@@ -55,26 +76,26 @@ const garminMeasurementMapping = {
     measurementType: 'N/A',
     frequency: 'Daily',
   },
+  // Smart-scale composition writes to check_in_measurements columns, matching
+  // weight and body fat above. The Python service already converts the raw
+  // gram values to kg (grams_to_kg in service.py) before they get here.
   body_water_percentage: {
-    targetType: 'custom',
-    name: 'Body Water Percentage',
+    targetType: 'check_in',
+    field: 'body_water_percentage',
     dataType: 'numeric',
     measurementType: '%',
-    frequency: 'Daily',
   },
   bone_mass: {
-    targetType: 'custom',
-    name: 'Bone Mass',
+    targetType: 'check_in',
+    field: 'bone_mass_kg',
     dataType: 'numeric',
     measurementType: 'kg',
-    frequency: 'Daily',
   },
   muscle_mass: {
-    targetType: 'custom',
-    name: 'Muscle Mass',
+    targetType: 'check_in',
+    field: 'muscle_mass_kg',
     dataType: 'numeric',
     measurementType: 'kg',
-    frequency: 'Daily',
   },
   hydration: {
     targetType: 'check_in',

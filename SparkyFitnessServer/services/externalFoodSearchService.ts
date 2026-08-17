@@ -28,25 +28,13 @@ import {
   searchNorishFoods,
 } from './foodIntegrationService.js';
 
-export const VALID_PROVIDER_TYPES = [
-  'openfoodfacts',
-  'usda',
-  'fatsecret',
-  'mealie',
-  'tandoor',
-  'yazio',
-  'norish',
-  'swissfood',
-  'china-food-composition',
-  'boohee',
-  'grocy',
-] as const;
+import type { ProviderType } from '../constants/foodProviders.js';
 
-export type ProviderType = (typeof VALID_PROVIDER_TYPES)[number];
-
-export function isValidProviderType(value: string): value is ProviderType {
-  return (VALID_PROVIDER_TYPES as readonly string[]).includes(value);
-}
+export {
+  VALID_PROVIDER_TYPES,
+  isValidProviderType,
+} from '../constants/foodProviders.js';
+export type { ProviderType } from '../constants/foodProviders.js';
 
 export interface ProviderCredentials {
   app_id?: string;
@@ -236,6 +224,10 @@ function applyDetailToItem(
       ...item,
       default_variant: mappedDetail.default_variant,
       variants: mappedDetail.variants,
+      // foods.search carries no photo, so the enrichment call is the only
+      // place a FatSecret search result can get one. Keep any existing value
+      // if the detail response has none.
+      image_url: mappedDetail.image_url ?? item.image_url ?? null,
     };
   }
   return item;

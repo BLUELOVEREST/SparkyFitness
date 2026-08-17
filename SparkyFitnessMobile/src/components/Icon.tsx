@@ -68,6 +68,7 @@ const ICON_MAP = {
   'help-circle': { sf: 'questionmark.circle', ion: 'help-circle-outline' },
   'wrench': { sf: 'wrench', ion: 'build-outline' },
   'globe': { sf: 'globe', ion: 'globe-outline' },
+  'people': { sf: 'person.2.fill', ion: 'people' },
   'wifi': { sf: 'wifi', ion: 'wifi-outline' },
 
   // Food
@@ -82,6 +83,7 @@ const ICON_MAP = {
 
   // Exercise
   'timer': { sf: 'timer', ion: 'timer-outline' },
+  'clock': { sf: 'clock', ion: 'time-outline' },
   'history': { sf: 'clock.arrow.circlepath', ion: 'time-outline' },
   'calendar': { sf: 'calendar', ion: 'calendar-outline' },
   'trophy': { sf: 'trophy.fill', ion: 'trophy' },

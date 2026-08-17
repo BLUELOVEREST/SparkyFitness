@@ -1,11 +1,12 @@
 import React, { useRef } from 'react';
-import { View, Text, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCSSVariable } from 'uniwind';
 
 import Icon from '../components/Icon';
 import Button from '../components/ui/Button';
 import ProgressRing from '../components/ProgressRing';
+import StatusView from '../components/StatusView';
 import FastingProtocolSheet, {
   type FastingProtocolSheetRef,
 } from '../components/FastingProtocolSheet';
@@ -14,7 +15,7 @@ import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
 import { useCurrentFast, useFastingStats } from '../hooks/useFasting';
 import { useFastingTimer } from '../hooks/useFastingTimer';
 import { useHeaderActionColors } from '../hooks/useHeaderActionColors';
-import { formatFastingStats } from '../utils/fasting';
+import { formatFastingStats, formatTime } from '../utils/fasting';
 import { formatDateLabel, toLocalDateString } from '../utils/dateUtils';
 import {
   METABOLIC_STAGES,
@@ -27,10 +28,6 @@ import type { RootStackScreenProps } from '../types/navigation';
 type Props = RootStackScreenProps<'FastingDetail'>;
 
 const RING_SIZE = 240;
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
 
 const DetailRow: React.FC<{ label: string; value: string; isLast?: boolean }> = ({
   label,
@@ -159,9 +156,7 @@ const FastingDetailScreen: React.FC<Props> = ({ navigation }) => {
     return (
       <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         {header}
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color={accentPrimary} />
-        </View>
+        <StatusView loading />
       </View>
     );
   }
@@ -256,7 +251,7 @@ const FastingDetailScreen: React.FC<Props> = ({ navigation }) => {
                 accessibilityRole="button"
                 accessibilityLabel="End fast"
               >
-                <Text className="text-base font-semibold text-bg-danger">End Fast</Text>
+                <Text className="text-base font-semibold text-icon-danger">End Fast</Text>
               </Pressable>
             </View>
 

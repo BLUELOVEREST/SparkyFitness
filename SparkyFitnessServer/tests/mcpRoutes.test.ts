@@ -2,10 +2,13 @@ import { vi, beforeEach, describe, expect, it } from 'vitest';
 // @ts-expect-error TS(7016): no types for supertest
 import request from 'supertest';
 import express from 'express';
+import type { Request } from 'express';
 // @ts-expect-error TS(7016): no types for cookie-parser
 import cookieParser from 'cookie-parser';
 import { todayInZone } from '@workspace/shared';
+import { log } from '../config/logging.js';
 import mcpRoutes from '../routes/mcpRoutes.js';
+import { requestLogger } from '../middleware/requestLogger.js';
 import { buildChatbotTools } from '../ai/tools/index.js';
 import { buildDevTools } from '../ai/tools/devTools.js';
 import goalService from '../services/goalService.js';
@@ -72,6 +75,8 @@ const DEV_TOOL_NAMES = [
   'sparky_inspect_schema',
   'sparky_get_user_info',
   'sparky_get_db_stats',
+  'sparky_query_table',
+  'sparky_execute_read_only_sql',
 ];
 
 const TEST_USER = 'mcp-test-user';
@@ -112,6 +117,7 @@ function fakeAuthenticate(req: any, res: any, next: any) {
 const app = express();
 app.use(
   '/mcp',
+  requestLogger({ logCompletion: true }),
   express.json({ limit: '1mb' }),
   cookieParser(),
   fakeAuthenticate,
@@ -263,6 +269,100 @@ describe('POST /mcp', () => {
     expect(goalService.getUserGoals).not.toHaveBeenCalled();
   });
 
+  it('logs the incoming request even when auth fails (the chain must log itself — the global logger is mounted below /mcp and never sees it)', async () => {
+    const res = await request(app)
+      .post('/mcp')
+      .set(MCP_HEADERS)
+      .send({ jsonrpc: '2.0', id: 3, method: 'tools/list' });
+
+    expect(res.status).toBe(401);
+    expect(log).toHaveBeenCalledWith(
+      'info',
+      'Incoming request: POST /mcp (Path: /)'
+    );
+  });
+
+  it('logs status, duration, and the JSON-RPC tool name when the response finishes', async () => {
+    vi.mocked(goalService.getUserGoals).mockResolvedValue({ calories: 2000 });
+
+    const res = await request(app)
+      .post('/mcp')
+      .set(MCP_HEADERS)
+      .set('Authorization', 'Bearer valid')
+      .send({
+        jsonrpc: '2.0',
+        id: 9,
+        method: 'tools/call',
+        params: { name: 'sparky_get_goal_snapshot', arguments: {} },
+      });
+
+    expect(res.status).toBe(200);
+    expect(log).toHaveBeenCalledWith(
+      'info',
+      expect.stringMatching(
+        /^Request finished: POST \/mcp 200 in \d+ms \[tools\/call sparky_get_goal_snapshot\]$/
+      )
+    );
+  });
+
+  it('neutralizes control characters in JSON-RPC fields so a crafted body cannot forge log lines', async () => {
+    const res = await request(app)
+      .post('/mcp')
+      .set(MCP_HEADERS)
+      .set('Authorization', 'Bearer valid')
+      .send({
+        jsonrpc: '2.0',
+        id: 11,
+        method: 'tools/call',
+        params: {
+          name: 'evil\n[2026-01-01] [INFO] forged line',
+          arguments: {},
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(log).toHaveBeenCalledWith(
+      'info',
+      expect.stringMatching(
+        /^Request finished: POST \/mcp 200 in \d+ms \[tools\/call evil\?\[2026-01-01\] \[INFO\] forged line\]$/
+      )
+    );
+  });
+
+  it('logs a warn line when the connection dies before the response finishes', async () => {
+    // The real chain always responds, so a local app whose handler kills the
+    // socket stands in for a client abort mid-request.
+    const abortApp = express();
+    abortApp.use(
+      '/mcp',
+      requestLogger({ logCompletion: true }),
+      express.json({ limit: '1mb' }),
+      (req: Request) => {
+        req.socket.destroy();
+      }
+    );
+
+    await request(abortApp)
+      .post('/mcp')
+      .set(MCP_HEADERS)
+      .send({
+        jsonrpc: '2.0',
+        id: 10,
+        method: 'tools/call',
+        params: { name: 'sparky_get_goal_snapshot', arguments: {} },
+      })
+      .catch(() => undefined);
+
+    await vi.waitFor(() => {
+      expect(log).toHaveBeenCalledWith(
+        'warn',
+        expect.stringMatching(
+          /^Request aborted: POST \/mcp after \d+ms \[tools\/call sparky_get_goal_snapshot\]$/
+        )
+      );
+    });
+  });
+
   it('rejects bodies over the route-local 1mb limit with 413', async () => {
     const padding = 'x'.repeat(1024 * 1024 + 100);
     const res = await request(app)
@@ -306,7 +406,7 @@ describe('POST /mcp', () => {
 
     expect(res.status).toBe(200);
     const names = res.body.result.tools.map((t: { name: string }) => t.name);
-    expect(res.body.result.tools).toHaveLength(39);
+    expect(res.body.result.tools).toHaveLength(41);
     for (const devTool of DEV_TOOL_NAMES) {
       expect(names).toContain(devTool);
     }

@@ -1,11 +1,28 @@
 import { log } from '../config/logging.js';
 import measurementRepository from '../models/measurementRepository.js';
 import exerciseDb from '../models/exercise.js';
-import exerciseEntryDb from '../models/exerciseEntry.js';
+import exerciseEntryDb, {
+  EXERCISE_ENTRY_TELEMETRY_COLUMNS,
+} from '../models/exerciseEntry.js';
 import activityDetailsRepository from '../models/activityDetailsRepository.js';
 import foodRepository from '../models/foodRepository.js';
 import moodRepository from '../models/moodRepository.js';
-import { BUILT_IN_MOODS } from '@workspace/shared';
+import waterContainerRepository from '../models/waterContainerRepository.js';
+import * as workoutTelemetryRepo from '../models/workoutTelemetryRepository.js';
+import { resolveActivityMapping } from './workoutActivityMapping.js';
+import {
+  computeHrZones,
+  resolveMaxHr,
+  type HrSample,
+} from './hrZoneCalculator.js';
+import {
+  deriveLaps,
+  deriveWorkoutTelemetry,
+  type LapWindow,
+  type TelemetryGpsPoint,
+} from './workoutTelemetryDerivation.js';
+import { upsertSamplesByDay } from './healthMetricSampleWriter.js';
+import { BUILT_IN_MOODS, instantToDay } from '@workspace/shared';
 
 /**
  * Per-type handlers for processHealthData. Each handler owns the validation
@@ -602,7 +619,12 @@ function prepareCheckInMeasurement(
     }
     case 'neck':
     case 'waist':
-    case 'hips': {
+    case 'hips':
+    case 'muscle_mass_kg':
+    case 'bone_mass_kg': {
+      // The smart-scale masses (muscle/bone) are always stored in kg;
+      // providers normalize before dispatch — Garmin via grams_to_kg in the
+      // Python service, Withings via its kg-denominated measure types.
       const numericValue = parseFloat(entry.value);
       if (isNaN(numericValue) || numericValue <= 0) {
         return {
@@ -611,8 +633,17 @@ function prepareCheckInMeasurement(
       }
       return { measurements: { [canonical]: numericValue } };
     }
+    case 'body_water_percentage': {
+      const numericValue = parseFloat(entry.value);
+      if (isNaN(numericValue) || numericValue <= 0 || numericValue > 100) {
+        return {
+          error: `Invalid value for ${entry.type}. Must be greater than 0 and at most 100.`,
+        };
+      }
+      return { measurements: { body_water_percentage: numericValue } };
+    }
     default:
-      // Unreachable: only the four check-in handlers route here.
+      // Unreachable: only the check-in handlers route here.
       return { error: `Unsupported check-in measurement type: ${entry.type}` };
   }
 }
@@ -713,9 +744,104 @@ const waterHandler: HealthTypeHandler = {
       ctx.actingUserId,
       waterValue,
       ctx.parsedDate,
-      source // Use the provided source (e.g., 'fitbit', 'garmin', 'apple_health')
+      source
     );
     return { status: 'success', data: result };
+  },
+
+  async handleBatch(entries, ctx) {
+    const outcomes: HandlerOutcome[] = new Array(entries.length);
+    if (entries.length === 0) return outcomes;
+
+    // Group entries by source; each source is upserted independently.
+    const entriesBySource = new Map<
+      string,
+      Array<{
+        index: number;
+        entry: PreparedHealthEntry['entry'];
+        parsedDate: string;
+        waterMl: number;
+      }>
+    >();
+    for (let i = 0; i < entries.length; i++) {
+      const item = entries[i];
+      const source = (item.entry.source as string) || 'manual';
+      const waterValue = Number(item.entry.value);
+      // Match handle()'s validation (accepts 0 and negative integers, rejects
+      // non-integers) so the same payload behaves identically on both paths.
+      if (!Number.isInteger(waterValue)) {
+        outcomes[i] = {
+          status: 'error',
+          error: 'Invalid value for water. Must be an integer.',
+        };
+        continue;
+      }
+      const existing = entriesBySource.get(source) || [];
+      existing.push({
+        index: i,
+        entry: item.entry,
+        parsedDate: item.parsedDate,
+        waterMl: waterValue,
+      });
+      entriesBySource.set(source, existing);
+    }
+
+    // Synced entries log against the user's default container, same as manual entries.
+    const primaryContainer =
+      await waterContainerRepository.getPrimaryWaterContainerByUserId(
+        ctx.userId
+      );
+    const primaryContainerId = primaryContainer?.id ?? null;
+    const primaryContainerName = primaryContainer?.name || 'Default';
+
+    for (const [source, group] of entriesBySource) {
+      if (group.length === 0) continue;
+
+      const samples = group.map((g) => ({
+        entryDate: g.parsedDate,
+        waterMl: g.waterMl,
+        containerId: primaryContainerId,
+        containerName: primaryContainerName,
+        source,
+        sourceId: (g.entry.source_id as string) || null,
+        loggedAt:
+          (g.entry.timestamp as string) ||
+          (g.entry.startTime as string) ||
+          null,
+      }));
+
+      try {
+        // Idempotent per-record upsert keyed on (user, source, sourceId).
+        // Keyed samples never delete entries outside this batch, so
+        // partial/incremental sync batches can't wipe out earlier same-day
+        // entries; unkeyed non-manual samples (older apps, CSV imports)
+        // replace their day's unkeyed rows instead so re-sends don't
+        // duplicate.
+        const written = await measurementRepository.upsertWaterIntakeSamples(
+          ctx.userId,
+          ctx.actingUserId,
+          samples
+        );
+        group.forEach((g, pos) => {
+          const row = written?.[pos];
+          outcomes[g.index] = row
+            ? { status: 'success', data: row }
+            : { status: 'error', error: 'Water sample was not persisted' };
+        });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        log(
+          'error',
+          `[waterHandler.handleBatch] upsertWaterIntakeSamples failed for source '${source}' (${group.length} record(s)): ${msg}`,
+          error
+        );
+        group.forEach((g) => {
+          outcomes[g.index] = { status: 'error', error: msg };
+        });
+      }
+    }
+
+    return outcomes;
   },
 };
 
@@ -781,6 +907,24 @@ const hipsHandler: HealthTypeHandler = {
   handleBatch: checkInHandleBatch,
 };
 
+// Smart-scale composition. Shares the check-in write path so provider-synced
+// values land in check_in_measurements alongside weight and body fat, rather
+// than falling through to per-provider custom_measurements categories.
+const muscleMassHandler: HealthTypeHandler = {
+  handle: handleCheckInEntry,
+  handleBatch: checkInHandleBatch,
+};
+
+const boneMassHandler: HealthTypeHandler = {
+  handle: handleCheckInEntry,
+  handleBatch: checkInHandleBatch,
+};
+
+const bodyWaterHandler: HealthTypeHandler = {
+  handle: handleCheckInEntry,
+  handleBatch: checkInHandleBatch,
+};
+
 const sleepSessionHandler: HealthTypeHandler = {
   async handle(entry, ctx) {
     const { source = 'manual', timestamp } = entry;
@@ -808,6 +952,8 @@ const sleepSessionHandler: HealthTypeHandler = {
         light_sleep_seconds: Number(entry.light_sleep_seconds) || 0,
         rem_sleep_seconds: Number(entry.rem_sleep_seconds) || 0,
         awake_sleep_seconds: Number(entry.awake_sleep_seconds) || 0,
+        record_timezone: entry.record_timezone,
+        record_utc_offset_minutes: entry.record_utc_offset_minutes,
       };
       const sleepEntryResult = await ctx.processSleepEntry(
         ctx.userId,
@@ -1037,6 +1183,273 @@ const moodHandler: HealthTypeHandler = {
   },
 };
 
+/**
+ * Columns the client is allowed to set directly via `telemetry`.
+ *
+ * avg_heart_rate is not part of EXERCISE_ENTRY_TELEMETRY_COLUMNS — it predates
+ * that array and is written as its own base column — so it is added explicitly
+ * here. Anything outside this set is dropped: the payload is spread into the
+ * repository's column list, so an unfiltered spread would be a write primitive
+ * for arbitrary columns.
+ */
+const WORKOUT_TELEMETRY_ALLOWLIST: ReadonlySet<string> = new Set<string>([
+  ...EXERCISE_ENTRY_TELEMETRY_COLUMNS,
+  'avg_heart_rate',
+]);
+
+/** Telemetry columns that hold free text rather than a measurement. */
+const TELEMETRY_TEXT_COLUMNS: ReadonlySet<string> = new Set([
+  'weather_condition',
+  'gear_name',
+  'gear_external_id',
+]);
+
+/**
+ * Narrows a client-supplied telemetry object to known columns with values of the
+ * right kind, dropping everything else. NaN/Infinity are rejected along with
+ * unknown keys — Number.isFinite covers both, and a non-finite value would
+ * otherwise reach the numeric columns as NaN.
+ */
+function sanitizeTelemetry(
+  raw: unknown
+): Record<string, number | string | null> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, number | string | null> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!WORKOUT_TELEMETRY_ALLOWLIST.has(key)) continue;
+    if (value === null) {
+      out[key] = null;
+    } else if (TELEMETRY_TEXT_COLUMNS.has(key)) {
+      if (typeof value === 'string') out[key] = value;
+    } else if (typeof value === 'number' && Number.isFinite(value)) {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * Chronological comparator for ISO timestamp strings. Lexicographic order
+ * (localeCompare) only agrees with chronological order when every string uses
+ * the same UTC offset — a mix of `Z` and `+02:00` instants, or fractional vs
+ * whole seconds, sorts wrong even though Date.parse handles both fine.
+ */
+const byInstant = (a: string, b: string): number =>
+  Date.parse(a) - Date.parse(b);
+
+/**
+ * Min/max over a possibly-large array of epoch-ms instants without spreading
+ * into Math.min/Math.max — a long session at 1s sampling can produce tens of
+ * thousands of points, and one argument per element risks
+ * "RangeError: Maximum call stack size exceeded".
+ */
+function minMax(instantsMs: number[]): { startMs: number; endMs: number } {
+  let startMs = instantsMs[0];
+  let endMs = instantsMs[0];
+  for (const ms of instantsMs) {
+    if (ms < startMs) startMs = ms;
+    if (ms > endMs) endMs = ms;
+  }
+  return { startMs, endMs };
+}
+
+/** A client-supplied sensor reading, or null when it is missing or unusable. */
+const finiteOrNull = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+/**
+ * Keeps only well-formed trackpoints; a point without a fix is unusable.
+ *
+ * Every optional sensor reading is narrowed to a finite number or null, because
+ * these land in numeric columns and a JSONB round-trip: a string, NaN, or
+ * Infinity from the wire would otherwise be stored verbatim.
+ */
+function sanitizeGpsPoints(raw: unknown): TelemetryGpsPoint[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (p): p is TelemetryGpsPoint =>
+        !!p &&
+        typeof p === 'object' &&
+        typeof (p as TelemetryGpsPoint).t === 'string' &&
+        Number.isFinite((p as TelemetryGpsPoint).lat) &&
+        Number.isFinite((p as TelemetryGpsPoint).lon) &&
+        Number.isFinite(Date.parse((p as TelemetryGpsPoint).t))
+    )
+    .map((p) => ({
+      t: p.t,
+      lat: p.lat,
+      lon: p.lon,
+      alt: finiteOrNull(p.alt),
+      speed: finiteOrNull(p.speed),
+      hr: finiteOrNull(p.hr),
+      cad: finiteOrNull(p.cad),
+      power: finiteOrNull(p.power),
+      dist: finiteOrNull(p.dist),
+      hacc: finiteOrNull(p.hacc),
+      vacc: finiteOrNull(p.vacc),
+      course: finiteOrNull(p.course),
+    }))
+    .sort((a, b) => byInstant(a.t, b.t));
+}
+
+/** Keeps only well-formed bpm readings. */
+function sanitizeHrSamples(raw: unknown): HrSample[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (s): s is HrSample =>
+        !!s &&
+        typeof s === 'object' &&
+        typeof (s as HrSample).t === 'string' &&
+        Number.isFinite((s as HrSample).bpm) &&
+        Number.isFinite(Date.parse((s as HrSample).t))
+    )
+    .sort((a, b) => byInstant(a.t, b.t));
+}
+
+/** Keeps only laps with a usable window, renumbering to a dense 1-based index. */
+function sanitizeLaps(raw: unknown): LapWindow[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (l): l is LapWindow =>
+        !!l &&
+        typeof l === 'object' &&
+        typeof (l as LapWindow).start_time === 'string' &&
+        typeof (l as LapWindow).end_time === 'string' &&
+        Number.isFinite(Date.parse((l as LapWindow).start_time)) &&
+        Number.isFinite(Date.parse((l as LapWindow).end_time))
+    )
+    .sort((a, b) => byInstant(a.start_time, b.start_time))
+    .map((lap, index) => ({ ...lap, lap_index: index + 1 }));
+}
+
+/**
+ * Persists the relational telemetry that hangs off an exercise entry: the GPS
+ * track, lap splits, time-in-zone, and the intraday heart-rate series.
+ *
+ * Isolated from the entry write and individually guarded: a workout whose
+ * summary saved fine must not be reported as failed because one optional
+ * telemetry table rejected a row.
+ */
+async function persistWorkoutTelemetry(
+  entry: Record<string, unknown>,
+  ctx: HealthEntryContext,
+  exerciseEntryId: string,
+  source: string,
+  gpsPoints: TelemetryGpsPoint[],
+  hrSamples: HrSample[]
+): Promise<void> {
+  const entryDate = ctx.parsedDate;
+
+  if (gpsPoints.length > 0) {
+    await workoutTelemetryRepo.bulkInsertExerciseEntryGpsPoints(
+      ctx.userId,
+      ctx.actingUserId,
+      gpsPoints.map((p) => ({
+        user_id: ctx.userId,
+        exercise_entry_id: exerciseEntryId,
+        entry_date: entryDate,
+        timestamp: new Date(p.t),
+        latitude: p.lat,
+        longitude: p.lon,
+        altitude_meters: p.alt ?? null,
+        speed_mps: p.speed ?? null,
+        heart_rate_bpm: p.hr ?? null,
+        cadence: p.cad ?? null,
+        power_watts: p.power ?? null,
+        distance_meters: p.dist ?? null,
+        horizontal_accuracy_meters: p.hacc ?? null,
+        vertical_accuracy_meters: p.vacc ?? null,
+        course_degrees: p.course ?? null,
+      }))
+    );
+  }
+
+  const laps = deriveLaps(sanitizeLaps(entry.laps), gpsPoints, hrSamples);
+  if (laps.length > 0) {
+    await workoutTelemetryRepo.bulkInsertExerciseEntryLaps(
+      ctx.userId,
+      ctx.actingUserId,
+      laps.map((lap) => ({
+        user_id: ctx.userId,
+        exercise_entry_id: exerciseEntryId,
+        entry_date: entryDate,
+        lap_index: lap.lap_index,
+        start_time: new Date(lap.start_time),
+        end_time: new Date(lap.end_time),
+        duration_seconds: lap.duration_seconds,
+        distance_meters: lap.distance_meters,
+        calories: lap.calories,
+        avg_heart_rate: lap.avg_heart_rate,
+        max_heart_rate: lap.max_heart_rate,
+        avg_speed_mps: lap.avg_speed_mps,
+        max_speed_mps: lap.max_speed_mps,
+        avg_cadence: lap.avg_cadence,
+        avg_power_watts: lap.avg_power_watts,
+        elevation_gain_meters: lap.elevation_gain_meters,
+        elevation_loss_meters: lap.elevation_loss_meters,
+      }))
+    );
+  }
+
+  // Zones need the whole series, so fall back to the HR carried on the
+  // trackpoints when no dedicated series was sent.
+  const zoneSamples: HrSample[] = hrSamples.length
+    ? hrSamples
+    : gpsPoints
+        .filter((p) => typeof p.hr === 'number' && Number.isFinite(p.hr))
+        .map((p) => ({ t: p.t, bpm: p.hr as number }));
+
+  if (zoneSamples.length > 1) {
+    const { userProfile } = await ctx.getSleepContext();
+    const { maxHr } = resolveMaxHr(userProfile?.date_of_birth, zoneSamples);
+    const zones = computeHrZones(zoneSamples, maxHr);
+    if (zones.length > 0) {
+      await workoutTelemetryRepo.bulkInsertExerciseEntryHrZones(
+        ctx.userId,
+        ctx.actingUserId,
+        zones.map((zone) => ({
+          user_id: ctx.userId,
+          exercise_entry_id: exerciseEntryId,
+          entry_date: entryDate,
+          zone_index: zone.zone_index,
+          zone_lower_bpm: zone.zone_lower_bpm,
+          zone_upper_bpm: zone.zone_upper_bpm,
+          seconds_in_zone: zone.seconds_in_zone,
+        }))
+      );
+    }
+  }
+
+  if (hrSamples.length > 0) {
+    const { tz } = await ctx.getSleepContext();
+    const times = hrSamples.map((s) => Date.parse(s.t));
+    await upsertSamplesByDay(
+      ctx.userId,
+      ctx.actingUserId,
+      'heart_rate',
+      source,
+      hrSamples.map((s) => ({
+        // Bucket by the user's local day, not UTC, so a workout that runs past
+        // midnight splits across the same two days the diary shows.
+        entry_date: instantToDay(s.t, tz),
+        timestamp: new Date(s.t),
+        ex: exerciseEntryId,
+        bpm: Math.round(s.bpm),
+      })),
+      {
+        // health_metric_samples holds ONE row per (user, metric, day, provider).
+        // Replacing it here would delete the rest of the day's readings, so only
+        // the span this workout covers is swapped out.
+        mode: 'merge',
+        window: minMax(times),
+      }
+    );
+  }
+}
+
 const workoutHandler: HealthTypeHandler = {
   async handle(entry, ctx) {
     const { type, source = 'manual' } = entry;
@@ -1050,6 +1463,10 @@ const workoutHandler: HealthTypeHandler = {
         source_id,
       } = entry;
       const exerciseName = activityType || `${source} Exercise`;
+      const { category, modality } = resolveActivityMapping(
+        activityType,
+        entry.modality
+      );
       let exercise = await exerciseDb.findExerciseByNameAndUserId(
         exerciseName,
         ctx.userId
@@ -1061,7 +1478,10 @@ const workoutHandler: HealthTypeHandler = {
           is_custom: true,
           shared_with_public: false,
           source: source,
-          category: 'Cardio',
+          // Modality is snapshotted from this row when the entry is created, so
+          // it has to be right here; setting it on the entry has no effect.
+          category,
+          modality,
           calories_per_hour: caloriesBurned
             ? caloriesBurned / (duration / 3600)
             : 0,
@@ -1089,6 +1509,16 @@ const workoutHandler: HealthTypeHandler = {
                   : set.duration,
           }))
         : rawSets;
+      // Wearable telemetry (X-Workout-Model-Version 3+). All optional: a client
+      // that sends none of it takes exactly the pre-telemetry path.
+      const gpsPoints = sanitizeGpsPoints(entry.gps_points);
+      const hrSamples = sanitizeHrSamples(entry.hr_samples);
+      const telemetry = {
+        // Values the device reported win; the series only backfills what is
+        // missing, so a watch's own averages are never overwritten by ours.
+        ...deriveWorkoutTelemetry(gpsPoints, hrSamples),
+        ...sanitizeTelemetry(entry.telemetry),
+      };
       const exerciseEntry = await exerciseEntryDb.createExerciseEntry(
         ctx.userId,
         {
@@ -1100,10 +1530,35 @@ const workoutHandler: HealthTypeHandler = {
           distance: distance,
           sets, // Pass sets if present for mobile workout sync
           source_id: source_id || null,
+          ...telemetry,
         },
         ctx.actingUserId,
         source
       );
+      if (gpsPoints.length > 0 || hrSamples.length > 0 || entry.laps) {
+        try {
+          await persistWorkoutTelemetry(
+            entry,
+            ctx,
+            exerciseEntry.id,
+            source,
+            gpsPoints,
+            hrSamples
+          );
+        } catch (telemetryError) {
+          // The workout itself is saved; losing the map or the zone chart is a
+          // degraded result, not a failed import, and reporting it as an error
+          // would make the client re-send the whole session.
+          const message =
+            telemetryError instanceof Error
+              ? telemetryError.message
+              : String(telemetryError);
+          log(
+            'error',
+            `[processHealthData] Saved workout ${exerciseEntry.id} but failed to persist its telemetry: ${message}`
+          );
+        }
+      }
       if (raw_data) {
         await activityDetailsRepository.createActivityDetail(ctx.userId, {
           exercise_entry_id: exerciseEntry.id,
@@ -1295,6 +1750,9 @@ export const HEALTH_TYPE_HANDLERS: Record<string, HealthTypeHandler> = {
   neck: neckHandler,
   waist: waistHandler,
   hips: hipsHandler,
+  muscle_mass_kg: muscleMassHandler,
+  bone_mass_kg: boneMassHandler,
+  body_water_percentage: bodyWaterHandler,
   SleepSession: sleepSessionHandler,
   Stress: stressHandler,
   Workout: workoutHandler,
@@ -1311,6 +1769,12 @@ export const TYPE_ALIASES: Record<string, string> = {
   'Active Calories': 'active_calories',
   ActiveCaloriesBurned: 'active_calories',
   body_fat_percentage: 'body_fat',
+  // Health Connect spellings for bone mass; both already arrive in kg.
+  // LeanBodyMass is deliberately absent — it is not muscle mass and stays a
+  // custom measurement.
+  bone_mass: 'bone_mass_kg',
+  BoneMass: 'bone_mass_kg',
+  muscle_mass: 'muscle_mass_kg',
   Height: 'height',
   ExerciseSession: 'Workout',
   mood: 'Mood',

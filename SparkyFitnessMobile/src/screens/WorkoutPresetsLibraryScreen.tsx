@@ -5,38 +5,20 @@ import { useCSSVariable } from 'uniwind';
 import LibrarySearchBar from '../components/LibrarySearchBar';
 import PaginatedLibraryFooter from '../components/PaginatedLibraryFooter';
 import StatusView from '../components/StatusView';
-import SegmentedControl from '../components/SegmentedControl';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
 import { useServerConnection, useWorkoutPresetsLibrary, useProfile } from '../hooks';
-import { deriveShareStatus } from '../utils/shareStatus';
+import {
+  deriveShareStatus,
+  filterByOwnership,
+  ownershipFilterEmptyState,
+  ownershipFilterHeaderMenu,
+} from '../utils/shareStatus';
 import ShareStatusBadge from '../components/ShareStatusBadge';
 import { useNativeIOSHeadersActive } from '../services/nativeTabBarPreference';
 import { useScreenHeader } from '../hooks/useScreenHeader';
+import { useAppPreferencesStore } from '../stores/appPreferencesStore';
 import type { WorkoutPreset } from '../types/workoutPresets';
 import type { RootStackScreenProps } from '../types/navigation';
-
-const filterItems = <T extends { user_id?: string | null; userId?: string | null; is_public?: boolean | null; shared_with_public?: boolean | null; sharedWithPublic?: boolean | null }>(
-  items: T[],
-  filter: 'all' | 'mine' | 'family' | 'public',
-  currentUserId?: string
-) => {
-  if (filter === 'all') return items;
-  return items.filter((item) => {
-    const isOwner = !!((item.user_id && item.user_id === currentUserId) || (item.userId && item.userId === currentUserId));
-    const isPublic = !!(item.is_public || item.shared_with_public || item.sharedWithPublic);
-    
-    if (filter === 'mine') {
-      return isOwner;
-    }
-    if (filter === 'family') {
-      return !isOwner && !isPublic && (item.user_id != null || item.userId != null);
-    }
-    if (filter === 'public') {
-      return isPublic;
-    }
-    return true;
-  });
-};
 
 type WorkoutPresetsLibraryScreenProps = RootStackScreenProps<'WorkoutPresetsLibrary'>;
 
@@ -50,7 +32,8 @@ const WorkoutPresetsLibraryScreen: React.FC<WorkoutPresetsLibraryScreenProps> = 
   ]) as [string, string];
   const scrollBottomPadding = insets.bottom + activeWorkoutBarPadding + 16;
   const [searchText, setSearchText] = useState('');
-  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'family' | 'public'>('all');
+  const ownershipFilter = useAppPreferencesStore((s) => s.workoutPresetsLibraryOwnershipFilter);
+  const setOwnershipFilter = useAppPreferencesStore((s) => s.setWorkoutPresetsLibraryOwnershipFilter);
 
   const { isConnected, isLoading: isConnectionLoading } = useServerConnection();
   const { profile } = useProfile();
@@ -65,7 +48,7 @@ const WorkoutPresetsLibraryScreen: React.FC<WorkoutPresetsLibraryScreenProps> = 
     loadMore,
     refetch,
   } = useWorkoutPresetsLibrary(searchText, { enabled: isConnected });
-  const filteredPresets = useMemo(() => filterItems(presets, ownershipFilter, profile?.id), [presets, ownershipFilter, profile?.id]);
+  const filteredPresets = useMemo(() => filterByOwnership(presets, ownershipFilter, profile?.id), [presets, ownershipFilter, profile?.id]);
 
   const handlePresetPress = useCallback(
     (preset: WorkoutPreset) => {
@@ -75,29 +58,26 @@ const WorkoutPresetsLibraryScreen: React.FC<WorkoutPresetsLibraryScreenProps> = 
   );
 
   const renderEmpty = () => {
-    if (presets.length > 0 && filteredPresets.length === 0) {
+    if (ownershipFilter !== 'all' && presets.length > 0 && filteredPresets.length === 0) {
       return (
-        <View className="px-6 py-10 items-center">
-          <Text className="text-text-primary text-base font-medium text-center">
-            No matching presets found
-          </Text>
-          <Text className="text-text-secondary text-sm mt-2 text-center">
-            Try changing your ownership filter.
-          </Text>
-        </View>
+        <StatusView
+          inline
+          {...ownershipFilterEmptyState({
+            noun: 'presets',
+            filter: ownershipFilter,
+            onReset: () => setOwnershipFilter('all'),
+          })}
+        />
       );
     }
     return (
-      <View className="px-6 py-10 items-center">
-        <Text className="text-text-primary text-base font-medium text-center">
-          {searchText.trim().length > 0 ? 'No matching presets found' : 'No workout presets yet'}
-        </Text>
-        <Text className="text-text-secondary text-sm mt-2 text-center">
-          {searchText.trim().length > 0
-            ? 'Try a different search term to find a workout preset.'
-            : 'Workout presets you create will appear here.'}
-        </Text>
-      </View>
+      <StatusView
+        inline
+        title={searchText.trim().length > 0 ? 'No matching presets found' : 'No workout presets yet'}
+        subtitle={searchText.trim().length > 0
+          ? 'Try a different search term to find a workout preset.'
+          : 'Workout presets you create will appear here.'}
+      />
     );
   };
 
@@ -128,7 +108,7 @@ const WorkoutPresetsLibraryScreen: React.FC<WorkoutPresetsLibraryScreenProps> = 
       return (
         <StatusView
           icon="cloud-offline"
-          iconColor="#9CA3AF"
+          iconTone="muted"
           iconSize={64}
           title="No server configured"
           subtitle="Configure your server connection in Settings to view your workout presets."
@@ -149,7 +129,7 @@ const WorkoutPresetsLibraryScreen: React.FC<WorkoutPresetsLibraryScreenProps> = 
       return (
         <StatusView
           icon="alert-circle"
-          iconColor="#EF4444"
+          iconTone="danger"
           iconSize={64}
           title="Failed to load workout presets"
           subtitle="Please check your connection and try again."
@@ -193,32 +173,27 @@ const WorkoutPresetsLibraryScreen: React.FC<WorkoutPresetsLibraryScreenProps> = 
     );
   };
 
-  const header = useScreenHeader({ title: 'Workout presets', left: { kind: 'back' } });
+  const header = useScreenHeader({
+    title: 'Workout presets',
+    left: { kind: 'back' },
+    right: ownershipFilterHeaderMenu({
+      noun: 'workout presets',
+      identifier: 'workout-presets-library-filter',
+      filter: ownershipFilter,
+      onSelect: setOwnershipFilter,
+    }),
+  });
 
   return (
     <View className="flex-1 bg-background" style={usesNativeHeader ? undefined : { paddingTop: insets.top }}>
       {header}
       {isConnected ? (
-        <>
-          <LibrarySearchBar
-            value={searchText}
-            onChangeText={setSearchText}
-            placeholder="Search workout presets..."
-            isSearching={isSearching}
-          />
-          <View className="px-4 pb-2 border-b border-border-subtle">
-            <SegmentedControl
-              segments={[
-                { key: 'all', label: 'All' },
-                { key: 'mine', label: 'Mine' },
-                { key: 'family', label: 'Family' },
-                { key: 'public', label: 'Public' },
-              ]}
-              activeKey={ownershipFilter}
-              onSelect={setOwnershipFilter}
-            />
-          </View>
-        </>
+        <LibrarySearchBar
+          value={searchText}
+          onChangeText={setSearchText}
+          placeholder="Search workout presets..."
+          isSearching={isSearching}
+        />
       ) : null}
       {renderContent()}
     </View>

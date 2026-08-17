@@ -11,6 +11,7 @@ import { bridgeBearerAuthHeader } from './utils/bearerAuthBridge.js';
 import { endPool } from './db/poolManager.js';
 import { log } from './config/logging.js';
 import { authenticate } from './middleware/authMiddleware.js';
+import { requestLogger } from './middleware/requestLogger.js';
 import { applySignOutCookieCleanup } from './middleware/signOutCookieCleanup.js';
 import foodRoutes from './routes/foodRoutes.js';
 import favoritesRoutes from './routes/favoritesRoutes.js';
@@ -40,6 +41,7 @@ import mealPlanTemplateRoutes from './routes/mealPlanTemplateRoutes.js';
 import exerciseRoutes from './routes/exerciseRoutes.js';
 import exerciseEntryRoutes from './routes/exerciseEntryRoutes.js';
 import exercisePresetEntryRoutes from './routes/exercisePresetEntryRoutes.js';
+import exerciseStatsRoutes from './routes/exerciseStatsRoutes.js';
 import freeExerciseDBRoutes from './routes/freeExerciseDBRoutes.js';
 import healthDataRoutes from './integrations/healthData/healthDataRoutes.js';
 import sleepRoutes from './routes/sleepRoutes.js';
@@ -114,6 +116,7 @@ import { deleteExpiredTickets } from './services/passkeyTicketService.js';
 import withingsServiceCentral from './services/withingsService.js';
 import { upsertEnvOidcProvider } from './utils/oidcEnvConfig.js';
 import userRepository from './models/userRepository.js';
+import genericHealthRoutes from './routes/genericHealthRoutes.js';
 
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
@@ -178,9 +181,11 @@ app.use(
 // before the global 50mb parser so its route-local 1mb parser wins (the global
 // parser would set req._body first and no-op the local one). cookieParser is
 // local because the global one also runs after the 50mb parser, and
-// authenticate reads req.cookies.
+// authenticate reads req.cookies. requestLogger is local because the global
+// one also runs after this mount, so /mcp requests would never reach it.
 app.use(
   '/mcp',
+  requestLogger({ logCompletion: true }),
   express.json({ limit: '1mb' }),
   cookieParser(),
   authenticate,
@@ -250,13 +255,7 @@ app.use(async (req, res, next) => {
   next();
 });
 // Log all incoming requests - AFTER auth to see what falls through
-app.use((req, _res, next) => {
-  log(
-    'info',
-    `Incoming request: ${req.method} ${req.originalUrl} (Path: ${req.path})`
-  );
-  next();
-});
+app.use(requestLogger());
 // Serve static files from the 'uploads' directory
 const UPLOADS_BASE_DIR = process.env.SPARKY_FITNESS_CUSTOM_UPLOADS_DIRECTORY
   ? path.resolve(process.env.SPARKY_FITNESS_CUSTOM_UPLOADS_DIRECTORY)
@@ -512,8 +511,10 @@ app.use('/api/meal-plan-templates', mealPlanTemplateRoutes);
 app.use('/api/exercises', exerciseRoutes);
 app.use('/api/exercise-entries', exerciseEntryRoutes);
 app.use('/api/exercise-preset-entries', exercisePresetEntryRoutes);
+app.use('/api/exercise-stats', exerciseStatsRoutes);
 app.use('/api/freeexercisedb', freeExerciseDBRoutes);
 app.use('/api/health-data', healthDataRoutes);
+app.use('/api/generic-health', genericHealthRoutes);
 app.use('/api/sleep', sleepRoutes);
 app.use('/api/sleep-science', sleepScienceRoutes);
 app.use('/api/auth', (req, res, next) => authRoutes(req, res, next));

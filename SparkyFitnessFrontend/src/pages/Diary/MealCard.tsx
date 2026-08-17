@@ -64,6 +64,9 @@ import AllergenBadges from '@/components/AllergenBadges';
 import type { CarbCycleMealTarget } from '@/types/goals';
 import type { ActiveMealPlanDayMeal } from '@/types/meal';
 import { translateWithVars } from '@/utils/i18n';
+import { diaryEntryImages, usableFoodImages } from '@/utils/foodImages';
+import { useImageLightbox } from '@/hooks/Foods/useImageLightbox';
+import ImageLightbox from '@/components/FoodSearch/ImageLightbox';
 
 const MOBILE_ENTRY_NUTRIENT_LIMIT = 4;
 
@@ -143,6 +146,8 @@ const MealCard = ({
   const selectedDateRelation = getDateRelationToToday(selectedDate);
 
   const [internalFoodSearchOpen, setInternalFoodSearchOpen] = useState(false);
+  // One viewer for the whole card; the clicked row supplies its own images.
+  const { lightboxProps, openLightbox } = useImageLightbox();
 
   // Check if food search is open to handle state changes
   const isFoodSearchOpen = shouldOpenFoodSearch || internalFoodSearchOpen;
@@ -277,7 +282,7 @@ const MealCard = ({
                     <Utensils className="w-4 h-4" />
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>
                       {translateWithVars(
@@ -479,6 +484,19 @@ const MealCard = ({
                 const entryIsHighlighted =
                   'food_id' in item &&
                   (item as FoodEntry).food_id === highlightFoodId;
+                // Food entries: per-entry override, else the food's own image.
+                // Logged meals: the meal template's image.
+                const entryImages = isFoodEntry
+                  ? diaryEntryImages(item as FoodEntry)
+                  : (() => {
+                      const override = usableFoodImages(
+                        (item as FoodEntryMeal).images
+                      );
+                      return override.length > 0
+                        ? override
+                        : usableFoodImages((item as FoodEntryMeal).meal_images);
+                    })();
+                const entryImageSrc = entryImages[0] ?? null;
 
                 // Determine glycemic index directly from the entryNutrition object
                 const giValue: GlycemicIndex | undefined | null =
@@ -703,6 +721,27 @@ const MealCard = ({
                       entryIsHighlighted && 'border-2 border-blue-500'
                     )}
                   >
+                    {entryImageSrc && (
+                      <button
+                        type="button"
+                        className="flex-shrink-0 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onClick={() =>
+                          openLightbox(entryImages, 0, entryName ?? undefined)
+                        }
+                        aria-label={t('food.viewImages', 'View images')}
+                      >
+                        <img
+                          src={entryImageSrc}
+                          alt={entryName ?? ''}
+                          className="w-12 h-12 object-cover rounded-md cursor-zoom-in"
+                          loading="lazy"
+                          onError={(e) => {
+                            // A dead provider link shouldn't leave a broken icon.
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </button>
+                    )}
                     <div className="flex-1">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1">
                         <span className="font-medium">{entryName}</span>
@@ -885,6 +924,7 @@ const MealCard = ({
           </DialogContent>
         </Dialog>
       )}
+      <ImageLightbox {...lightboxProps} />
     </>
   );
 };

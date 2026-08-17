@@ -56,6 +56,96 @@ export function pxToRows(px: number): number {
 }
 
 /**
+ * Widths below this are treated as jitter rather than a real resize. Comfortably
+ * above any classic scrollbar (~15-17px) so a scrollbar toggle cannot move the
+ * grid, but small enough that a real drag-resize of the window still lands.
+ */
+export const GRID_WIDTH_JITTER_PX = 24;
+
+/**
+ * The breakpoint react-grid-layout selects for a container width: the largest
+ * breakpoint whose threshold the width reaches.
+ */
+export function breakpointForWidth(width: number): Breakpoint {
+  const ordered = (Object.keys(GRID_BREAKPOINTS) as Breakpoint[]).sort(
+    (a, b) => GRID_BREAKPOINTS[b] - GRID_BREAKPOINTS[a]
+  );
+  for (const bp of ordered) {
+    if (width >= GRID_BREAKPOINTS[bp]) return bp;
+  }
+  return ordered[ordered.length - 1] as Breakpoint;
+}
+
+/**
+ * Damp the container width fed to the grid.
+ *
+ * Tile heights are content-measured, so the grid's total height depends on its
+ * width -- and the page's width depends on whether that height summons a
+ * scrollbar. Near a breakpoint threshold the ~15px scrollbar delta alone can
+ * flip lg<->md, swapping in a different saved layout, changing the height, and
+ * oscillating forever (#2056). Ignoring sub-jitter changes that would also flip
+ * the breakpoint gives the loop the hysteresis it needs to settle.
+ *
+ * A change large enough to be a real resize, or one that stays inside the
+ * current breakpoint, is always accepted so normal resizing still tracks.
+ */
+export function stabilizeGridWidth(prev: number, next: number): number {
+  if (!Number.isFinite(next) || next <= 0) return prev;
+  if (!Number.isFinite(prev) || prev <= 0) return next;
+  const delta = Math.abs(next - prev);
+  if (delta >= GRID_WIDTH_JITTER_PX) return next;
+  return breakpointForWidth(next) === breakpointForWidth(prev) ? next : prev;
+}
+
+/** Rolling window used to tell a measurement feedback loop from real changes. */
+export const MEASURE_WINDOW_MS = 1000;
+
+/**
+ * Height changes allowed per widget per window before we treat it as a loop. A
+ * settled widget changes height a handful of times (mount, data load, font
+ * load) and legitimate later changes are seconds apart, so only a runaway
+ * measure -> layout -> measure cycle can reach this in one second.
+ */
+export const MAX_MEASURE_CHANGES_PER_WINDOW = 12;
+
+export interface MeasureGuard {
+  windowStart: number;
+  changes: number;
+  /** Tallest height seen in this window; what we settle on when thrashing. */
+  maxRows: number;
+}
+
+/**
+ * Decide whether to accept a freshly measured height for one widget.
+ *
+ * Returns the height to apply (`null` to ignore) plus the guard state to carry
+ * forward. Under a loop we settle on the tallest height seen in the window --
+ * never clipping content -- and then stop applying anything, which starves the
+ * cycle of the re-render that keeps it going. The window expires on its own, so
+ * a genuine content change later is picked up normally: this is a rate limit,
+ * not a permanent cap.
+ */
+export function evaluateMeasurement(
+  guard: MeasureGuard | undefined,
+  rows: number,
+  now: number
+): { guard: MeasureGuard; apply: number | null } {
+  const expired = !guard || now - guard.windowStart > MEASURE_WINDOW_MS;
+  const next: MeasureGuard = expired
+    ? { windowStart: now, changes: 1, maxRows: rows }
+    : {
+        windowStart: guard.windowStart,
+        changes: guard.changes + 1,
+        maxRows: Math.max(guard.maxRows, rows),
+      };
+
+  if (next.changes > MAX_MEASURE_CHANGES_PER_WINDOW) {
+    return { guard: next, apply: next.maxRows };
+  }
+  return { guard: next, apply: rows };
+}
+
+/**
  * Value-equality for two layout maps (ignores object identity). Used to avoid
  * the controlled react-grid-layout feedback loop: onLayoutChange -> setState ->
  * new prop identity -> onLayoutChange -> ... If the layout did not actually
@@ -188,11 +278,18 @@ export const mealTypeIdFromKey = (key: string) =>
  * Build the ordered list of widget keys for the current user state:
  * fixed top widgets, then one per visible meal type, then exercise.
  */
-export function buildWidgetKeys(visibleMealTypeIds: string[]): string[] {
+export function buildWidgetKeys(
+  visibleMealTypeIds: string[],
+  // Diary.tsx only renders the health-metrics widget when there is wearable
+  // data to show; reserving its key unconditionally left a hole in the grid
+  // for users with none.
+  hasDisplayableHealthMetrics = true
+): string[] {
   return [
     'energy',
     'nutrition',
     'water',
+    ...(hasDisplayableHealthMetrics ? ['healthMetrics'] : []),
     ...visibleMealTypeIds.map(mealWidgetKey),
     'exercise',
   ];
@@ -210,8 +307,9 @@ export function generateDefaultLayouts(mealKeys: string[]): DashboardLayouts {
     { i: 'energy', x: 0, y: 0, w: 3, h: 10, minW: 2, minH: 6 },
     { i: 'nutrition', x: 3, y: 0, w: 6, h: 10, minW: 3, minH: 6 },
     { i: 'water', x: 9, y: 0, w: 3, h: 10, minW: 2, minH: 6 },
+    { i: 'healthMetrics', x: 0, y: 10, w: 12, h: 6, minW: 3, minH: 4 },
   ];
-  let lgY = 10;
+  let lgY = 16;
   for (const key of mealKeys) {
     lg.push({ i: key, x: 0, y: lgY, w: 12, h: 4, minW: 3, minH: 3 });
     lgY += 4;
@@ -223,8 +321,9 @@ export function generateDefaultLayouts(mealKeys: string[]): DashboardLayouts {
     { i: 'energy', x: 0, y: 0, w: 4, h: 10, minW: 2, minH: 6 },
     { i: 'nutrition', x: 4, y: 0, w: 6, h: 10, minW: 3, minH: 6 },
     { i: 'water', x: 0, y: 10, w: 10, h: 6, minW: 2, minH: 4 },
+    { i: 'healthMetrics', x: 0, y: 16, w: 10, h: 6, minW: 3, minH: 4 },
   ];
-  let mdY = 16;
+  let mdY = 22;
   for (const key of mealKeys) {
     md.push({ i: key, x: 0, y: mdY, w: 10, h: 4, minW: 3, minH: 3 });
     mdY += 4;
@@ -243,6 +342,7 @@ export function generateDefaultLayouts(mealKeys: string[]): DashboardLayouts {
     push('energy', 10, 6);
     push('nutrition', 10, 6);
     push('water', 8, 5);
+    push('healthMetrics', 6, 4);
     for (const key of mealKeys) push(key, 4, 3);
     push('exercise', 4, 3);
     return out;

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import Animated, { LinearTransition } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +15,7 @@ import TimeSheet, { type TimeSheetRef } from '../components/TimeSheet';
 import { toHourMinute } from '@workspace/shared';
 import { formatTimeLabel } from '../utils/entryTimeDisplay';
 import NutritionMacroCard from '../components/NutritionMacroCard';
+import StatusView from '../components/StatusView';
 import SwipeableIngredientRow from '../components/SwipeableIngredientRow';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
 import { useMealTypes, usePreferences } from '../hooks';
@@ -24,7 +25,10 @@ import { useDeleteFoodEntryMeal } from '../hooks/useDeleteFoodEntryMeal';
 import { consumePendingMealIngredientSelection } from '../services/mealBuilderSelection';
 import { useNativeIOSHeadersActive } from '../services/nativeTabBarPreference';
 import { formatDateLabel, normalizeDate } from '../utils/dateUtils';
-import { getMealTypeLabel } from '../constants/meals';
+import {
+  getFoodEntryMealTypeLabel,
+  getMealTypeDisplayLabel,
+} from '../utils/mealNutrition';
 import { buildMealIngredientDraftFromEntryMealFood } from '../utils/mealBuilderDraft';
 import { formatCaloriesDisplay, formatServingSizeDisplay } from '../utils/foodDetails';
 import { DECIMAL_INPUT_REGEX, parseDecimalInput } from '../utils/numericInput';
@@ -155,7 +159,7 @@ const EditLoggedMealScreen: React.FC<EditLoggedMealScreenProps> = ({ navigation,
 
   const selectedMealType = mealTypes.find((mt) => mt.id === effectiveMealId);
   const mealPickerOptions = useMemo(
-    () => mealTypes.map((mt) => ({ label: getMealTypeLabel(mt.name), value: mt.id })),
+    () => mealTypes.map((mt) => ({ label: getMealTypeDisplayLabel(mt), value: mt.id })),
     [mealTypes],
   );
 
@@ -320,8 +324,8 @@ const EditLoggedMealScreen: React.FC<EditLoggedMealScreenProps> = ({ navigation,
 
   if (isLoading) {
     return (
-      <View className="flex-1 bg-background justify-center items-center" style={usesNativeHeader ? undefined : { paddingTop: insets.top }}>
-        <ActivityIndicator size="large" color={accentColor} />
+      <View className="flex-1 bg-background" style={usesNativeHeader ? undefined : { paddingTop: insets.top }}>
+        <StatusView loading />
       </View>
     );
   }
@@ -423,7 +427,7 @@ const EditLoggedMealScreen: React.FC<EditLoggedMealScreenProps> = ({ navigation,
                     className="flex-row items-center"
                   >
                     <Text className="text-text-primary text-base font-medium">
-                      {getMealTypeLabel(selectedMealType.name)}
+                      {getMealTypeDisplayLabel(selectedMealType)}
                     </Text>
                     <Icon name="chevron-down" size={12} color={textPrimary} style={{ marginLeft: 6 }} weight="medium" />
                   </TouchableOpacity>
@@ -431,7 +435,7 @@ const EditLoggedMealScreen: React.FC<EditLoggedMealScreenProps> = ({ navigation,
               />
             ) : (
               <Text className="text-text-primary text-base font-medium">
-                {getMealTypeLabel(meal.meal_type)}
+                {getFoodEntryMealTypeLabel(meal, mealTypes)}
               </Text>
             )}
           </View>
@@ -507,11 +511,10 @@ const EditLoggedMealScreen: React.FC<EditLoggedMealScreenProps> = ({ navigation,
 
         {/* Delete meal */}
         <Button
-          variant="ghost"
+          variant="destructive"
           onPress={confirmAndDelete}
           disabled={isRowBusy}
           className="mt-2"
-          textClassName="text-bg-danger font-medium"
         >
           {isDeletePending ? 'Deleting...' : 'Delete Meal'}
         </Button>

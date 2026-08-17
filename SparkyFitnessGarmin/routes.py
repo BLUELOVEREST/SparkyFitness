@@ -35,6 +35,7 @@ from service import (
     grams_to_kg,
     map_garmin_stress_to_mood,
     meters_to_km,
+    project_daily_calorie_metrics,
     safe_convert,
     seconds_to_minutes,
 )
@@ -236,7 +237,7 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
         for current_date in dates_to_fetch:
             logger.info(f"[GARMIN_SYNC] Fetching data for date: {current_date}")
 
-            # Daily Summary (steps, total_distance, highly_active_seconds, active_seconds, sedentary_seconds, body_battery)
+            # Daily Summary (steps, distance, activity time, calories, body battery)
             if any(
                 metric in metric_types_to_fetch
                 for metric in [
@@ -245,7 +246,11 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
                     "highly_active_seconds",
                     "active_seconds",
                     "sedentary_seconds",
+                    "active_calories",
+                    "bmr_calories",
+                    "total_calories",
                     "body_battery",
+                    "daily_summary",
                 ]
             ):
                 steps_value = None
@@ -315,6 +320,13 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
                                 ),
                             }
                         )
+                    calorie_metrics = project_daily_calorie_metrics(
+                        summary_data,
+                        current_date,
+                        set(metric_types_to_fetch),
+                    )
+                    for metric, records in calorie_metrics.items():
+                        health_data[metric].extend(records)
                     # Body Battery from user_summary (preferred source)
                     if "body_battery" in metric_types_to_fetch:
                         bb_highest = summary_data.get("bodyBatteryHighestValue")
@@ -344,6 +356,41 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
                                     "body_battery_charged": bb_charged,
                                     "body_battery_drained": bb_drained,
                                     "body_battery_current": bb_current,
+                                }
+                            )
+
+                    # Daily summary scalars (calories, resting HR, stress) — sourced
+                    # from the same get_user_summary() call as steps/body battery
+                    # above, since Garmin returns them together. Field names here
+                    # match what garminHealthProcessor.ts (Node) reads from
+                    # healthData.daily_summary.
+                    if "daily_summary" in metric_types_to_fetch:
+                        total_kcal = summary_data.get("totalKilocalories")
+                        active_kcal = summary_data.get("activeKilocalories")
+                        bmr_kcal = summary_data.get("bmrKilocalories")
+                        resting_hr = summary_data.get("restingHeartRate")
+                        avg_stress = summary_data.get("averageStressLevel")
+                        max_stress = summary_data.get("maxStressLevel")
+                        if any(
+                            v is not None
+                            for v in [
+                                total_kcal,
+                                active_kcal,
+                                bmr_kcal,
+                                resting_hr,
+                                avg_stress,
+                                max_stress,
+                            ]
+                        ):
+                            health_data["daily_summary"].append(
+                                {
+                                    "date": current_date,
+                                    "total_calories": total_kcal,
+                                    "active_calories": active_kcal,
+                                    "bmr_calories": bmr_kcal,
+                                    "resting_heart_rate": resting_hr,
+                                    "avg_stress_level": avg_stress,
+                                    "max_stress_level": max_stress,
                                 }
                             )
 
@@ -519,6 +566,7 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
 
                         bedtime_dt = None
                         wake_time_dt = None
+                        record_utc_offset_minutes = None
 
                         # Prioritize sleep_summary's sleepStartTimestampGMT and sleepEndTimestampGMT
                         if sleep_summary.get(
@@ -532,6 +580,21 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
                                 sleep_summary["sleepEndTimestampGMT"] / 1000,
                                 tz=timezone.utc,
                             )
+                            # The Local/GMT timestamp pair encodes the watch's
+                            # UTC offset at recording time; the server uses it
+                            # to display bed/wake in the recording zone.
+                            start_local = sleep_summary.get(
+                                "sleepStartTimestampLocal"
+                            )
+                            start_gmt = sleep_summary.get("sleepStartTimestampGMT")
+                            if isinstance(start_local, (int, float)) and isinstance(
+                                start_gmt, (int, float)
+                            ):
+                                offset_min = round((start_local - start_gmt) / 60000)
+                                # Real-world offsets top out at +/-14:00; a
+                                # pair outside that range is corrupt data.
+                                if -840 <= offset_min <= 840:
+                                    record_utc_offset_minutes = offset_min
                         else:
                             # Fallback to SleepStageLevel timestamps if summary timestamps are missing
                             stage_events_raw = sleep_data_raw.get("sleepLevels", [])
@@ -579,7 +642,7 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
                                 or 0
                             )
                             logger.info(
-                                f"[GARMIN_SYNC] Sleep stages from dailySleepDTO: deep={deep_sleep}, light={light_sleep}, rem={rem_sleep}, awake={awake_sleep}"
+                                f"[GARMIN_SYNC] Sleep stages from dailySleepDTO: deep={deep_sleep}, light={light_sleep}, rem={rem_sleep}, awake={awake_sleep}, record_utc_offset_minutes={record_utc_offset_minutes}"
                             )
 
                             sleep_entry_data = {
@@ -637,6 +700,10 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
                                 ),
                                 "stage_events": [],  # This will be populated below
                             }
+                            if record_utc_offset_minutes is not None:
+                                sleep_entry_data["record_utc_offset_minutes"] = (
+                                    record_utc_offset_minutes
+                                )
 
                             # Process Sleep Levels (Stages) - only sum if dailySleepDTO didn't have the values
                             sleep_levels_intraday = sleep_data_raw.get("sleepLevels")
@@ -785,6 +852,12 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
                     ]  # Store raw stressLevel as list of dicts directly
                     stress_data_entry["derived_mood_value"] = derived_mood_value
                     stress_data_entry["derived_mood_notes"] = derived_mood_notes
+                    # The actual 0-100 stress percentage (not the inverted mood-scale
+                    # derived_mood_value above, which is a different feature and must
+                    # not be read as a stress level).
+                    stress_data_entry["average_stress_level"] = (
+                        round(average_stress) if average_stress is not None else None
+                    )
 
                     # Only append stress_data_entry if there's valid raw stress data or derived mood data
                     if (
@@ -812,7 +885,6 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
                         # Try to get both sleep and awake respiration values
                         sleep_resp = respiration_data.get("avgSleepRespirationValue")
                         awake_resp = respiration_data.get("avgWakingRespirationValue")
-                        # Fallback to general average if specific values not available
                         avg_resp = respiration_data.get("avgRespiration")
 
                         logger.info(
@@ -820,14 +892,17 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
                         )
 
                         if sleep_resp or awake_resp or avg_resp:
+                            # Each key is stored as its own sample (contexts
+                            # sleep/awake/daily_average). No cross-key
+                            # fallback: substituting the sleep value for a
+                            # missing daily average would store the same
+                            # reading twice under two contexts.
                             health_data["respiration"].append(
                                 {
                                     "date": current_date,
                                     "sleep_respiration_avg": sleep_resp,
                                     "awake_respiration_avg": awake_resp,
-                                    "average_respiration_rate": avg_resp
-                                    or sleep_resp
-                                    or awake_resp,  # Keep for backwards compatibility
+                                    "average_respiration_rate": avg_resp,
                                 }
                             )
                 except Exception as e:
@@ -1186,8 +1261,21 @@ async def get_health_and_wellness(request_data: HealthAndWellnessRequest):
                                         bp_value = f"{systolic}/{diastolic}"
                                         if pulse is not None:
                                             bp_value += f", {pulse} bpm"
+                                        # Carry the reading's own instant so two
+                                        # measurements on the same day don't
+                                        # collapse onto the fixed noon anchor
+                                        # garminHealthProcessor falls back to.
+                                        measurement_timestamp = bp_entry.get(
+                                            "measurementTimestampGMT"
+                                        ) or bp_entry.get(
+                                            "measurementTimestampLocal"
+                                        )
                                         health_data["blood_pressure"].append(
-                                            {"date": current_date, "value": bp_value}
+                                            {
+                                                "date": current_date,
+                                                "value": bp_value,
+                                                "timestamp": measurement_timestamp,
+                                            }
                                         )
                                     else:
                                         logger.warning(

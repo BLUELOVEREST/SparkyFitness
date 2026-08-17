@@ -1,9 +1,12 @@
 import {
   initHealthConnect,
   requestHealthPermissions,
+  ensureHistoryReadPermission,
   getSyncStartDate,
   readHealthRecords,
   readHealthRecordsDetailed,
+  readEarliestRecordDetailed,
+  isQuotaExceededError,
   getAggregatedStepsByDate,
   getAggregatedStepsByDateDetailed,
   getAggregatedActiveCaloriesByDate,
@@ -22,6 +25,7 @@ const localEndOfDay = (y: number, m1to12: number, d: number) =>
 import {
   initialize,
   requestPermission,
+  getGrantedPermissions,
   readRecords,
   aggregateRecord,
   aggregateGroupByDuration,
@@ -30,6 +34,7 @@ import {
 
 import type { PermissionRequest, GrantedPermission } from '../../../src/types/healthRecords';
 import type { SyncDuration } from '../../../src/services/healthconnect/preferences';
+import { createTelemetryRunContext } from '../../../src/services/shared/telemetryBudget';
 
 jest.mock('../../../src/services/LogService', () => ({
   addLog: jest.fn(),
@@ -47,6 +52,7 @@ jest.mock('../../../src/HealthMetrics', () => ({
 
 const mockInitialize = initialize as jest.Mock;
 const mockRequestPermission = requestPermission as jest.Mock;
+const mockGetGrantedPermissions = getGrantedPermissions as jest.Mock;
 const mockReadRecords = readRecords as jest.Mock;
 const mockAggregateRecord = aggregateRecord as jest.Mock;
 const mockAggregateGroupByDuration = aggregateGroupByDuration as jest.Mock;
@@ -1321,5 +1327,289 @@ describe('enrichExerciseSessions', () => {
     ]);
 
     expect((result[0] as { distance: { inMeters: number } }).distance).toEqual({ inMeters: 90 });
+  });
+
+  describe('telemetry (gps_points/hr_samples/laps/telemetry)', () => {
+    beforeEach(() => {
+      // jest.clearAllMocks() (outer beforeEach) clears call history but NOT
+      // mockImplementation — an earlier test's readRecords/aggregateRecord
+      // implementation otherwise leaks into whichever test runs next.
+      mockReadRecords.mockResolvedValue({ records: [] });
+      mockAggregateRecord.mockResolvedValue({});
+    });
+
+    test('attaches hr_samples and derived summary telemetry when HeartRate records exist in the session window', async () => {
+      mockReadRecords.mockImplementation((recordType: string) => {
+        if (recordType === 'HeartRate') {
+          return Promise.resolve({
+            records: [
+              {
+                startTime: '2024-01-15T10:00:00Z',
+                endTime: '2024-01-15T11:00:00Z',
+                samples: [
+                  { time: '2024-01-15T10:10:00Z', beatsPerMinute: 100 },
+                  { time: '2024-01-15T10:20:00Z', beatsPerMinute: 140 },
+                ],
+              },
+            ],
+          });
+        }
+        return Promise.resolve({ records: [] });
+      });
+
+      const result = await enrichExerciseSessions([makeSession()]);
+
+      const enriched = result[0] as Record<string, unknown>;
+      expect(enriched.hr_samples).toEqual([
+        { t: '2024-01-15T10:10:00Z', bpm: 100 },
+        { t: '2024-01-15T10:20:00Z', bpm: 140 },
+      ]);
+      expect(
+        (enriched.telemetry as { avg_heart_rate?: number })?.avg_heart_rate
+      ).toBe(120);
+      expect(
+        (enriched.telemetry as { max_heart_rate?: number })?.max_heart_rate
+      ).toBe(140);
+    });
+
+    test('merges the already-computed calorie aggregate into telemetry.active_calories', async () => {
+      mockAggregateRecord.mockImplementation(
+        ({ recordType }: { recordType: string }) => {
+          if (recordType === 'ActiveCaloriesBurned') {
+            return Promise.resolve({ ACTIVE_CALORIES_TOTAL: { inKilocalories: 220 } });
+          }
+          return Promise.resolve({});
+        }
+      );
+      mockReadRecords.mockImplementation((recordType: string) => {
+        if (recordType === 'HeartRate') {
+          return Promise.resolve({
+            records: [
+              {
+                samples: [{ time: '2024-01-15T10:10:00Z', beatsPerMinute: 100 }],
+              },
+            ],
+          });
+        }
+        return Promise.resolve({ records: [] });
+      });
+
+      const result = await enrichExerciseSessions([makeSession()]);
+
+      expect(
+        (result[0] as { telemetry: { active_calories?: number } }).telemetry
+          .active_calories
+      ).toBe(220);
+    });
+
+    test('attaches laps built from session.laps', async () => {
+      const result = await enrichExerciseSessions([
+        makeSession({
+          laps: [
+            { startTime: '2024-01-15T10:00:00Z', endTime: '2024-01-15T10:30:00Z' },
+            { startTime: '2024-01-15T10:30:00Z', endTime: '2024-01-15T11:00:00Z' },
+          ],
+        }),
+      ]);
+
+      expect(result[0]).toMatchObject({
+        laps: [
+          { start_time: '2024-01-15T10:00:00Z', end_time: '2024-01-15T10:30:00Z', lap_index: 1 },
+          { start_time: '2024-01-15T10:30:00Z', end_time: '2024-01-15T11:00:00Z', lap_index: 2 },
+        ],
+      });
+    });
+
+    test('a session with no telemetry data attaches no telemetry fields at all', async () => {
+      // readRecords/aggregateRecord default to empty via jest.setup.js — this
+      // is the "nothing to enrich" baseline every other case in this describe
+      // block is a variation of.
+      const result = await enrichExerciseSessions([makeSession()]);
+
+      const enriched = result[0] as Record<string, unknown>;
+      expect(enriched.gps_points).toBeUndefined();
+      expect(enriched.hr_samples).toBeUndefined();
+      expect(enriched.laps).toBeUndefined();
+      expect(enriched.telemetry).toBeUndefined();
+    });
+
+    test('an exhausted telemetry budget skips telemetry collection entirely, leaving calories/distance untouched', async () => {
+      mockAggregateRecord.mockImplementation(
+        ({ recordType }: { recordType: string }) => {
+          if (recordType === 'ActiveCaloriesBurned') {
+            return Promise.resolve({ ACTIVE_CALORIES_TOTAL: { inKilocalories: 300 } });
+          }
+          return Promise.resolve({});
+        }
+      );
+      mockReadRecords.mockImplementation((recordType: string) => {
+        if (recordType === 'HeartRate') {
+          return Promise.resolve({
+            records: [
+              { samples: [{ time: '2024-01-15T10:10:00Z', beatsPerMinute: 100 }] },
+            ],
+          });
+        }
+        return Promise.resolve({ records: [] });
+      });
+      const result = await enrichExerciseSessions(
+        [makeSession()],
+        createTelemetryRunContext({ budget: 0 })
+      );
+
+      const enriched = result[0] as Record<string, unknown>;
+      // Calorie/distance enrichment happens before the budget gate and must
+      // still land even when the budget is exhausted.
+      expect(enriched.energy).toEqual({ inKilocalories: 300 });
+      expect(enriched.hr_samples).toBeUndefined();
+      expect(enriched.telemetry).toBeUndefined();
+    });
+
+    test('a partial budget goes to the newest sessions, not read-completion order', async () => {
+      mockReadRecords.mockImplementation((recordType: string) => {
+        if (recordType === 'HeartRate') {
+          return Promise.resolve({
+            records: [
+              { samples: [{ time: '2024-01-15T10:10:00Z', beatsPerMinute: 100 }] },
+            ],
+          });
+        }
+        return Promise.resolve({ records: [] });
+      });
+
+      const older = makeSession({
+        startTime: '2024-01-14T10:00:00Z',
+        endTime: '2024-01-14T11:00:00Z',
+      });
+      const newer = makeSession();
+
+      // Oldest first in the input — the slot must still go to the newer one.
+      const result = await enrichExerciseSessions(
+        [older, newer],
+        createTelemetryRunContext({ budget: 1 })
+      );
+
+      const enrichedOlder = result[0] as Record<string, unknown>;
+      const enrichedNewer = result[1] as Record<string, unknown>;
+      expect(enrichedOlder.hr_samples).toBeUndefined();
+      expect(enrichedNewer.hr_samples).toBeDefined();
+    });
+
+    test('an invalid session window does not consume a budget slot', async () => {
+      mockReadRecords.mockImplementation((recordType: string) => {
+        if (recordType === 'HeartRate') {
+          return Promise.resolve({
+            records: [
+              { samples: [{ time: '2024-01-15T10:10:00Z', beatsPerMinute: 100 }] },
+            ],
+          });
+        }
+        return Promise.resolve({ records: [] });
+      });
+
+      // Newest by startTime, but its window is inverted — the enrichment loop
+      // rejects it, so it must not have claimed the only slot first.
+      const invalid = makeSession({
+        startTime: '2024-01-16T10:00:00Z',
+        endTime: '2024-01-16T09:00:00Z',
+      });
+      const valid = makeSession();
+
+      const result = await enrichExerciseSessions(
+        [invalid, valid],
+        createTelemetryRunContext({ budget: 1 })
+      );
+
+      const enrichedInvalid = result[0] as Record<string, unknown>;
+      const enrichedValid = result[1] as Record<string, unknown>;
+      expect(enrichedInvalid.hr_samples).toBeUndefined();
+      expect(enrichedValid.hr_samples).toBeDefined();
+    });
+  });
+});
+
+describe('readEarliestRecordDetailed', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('issues a single ascending pageSize-1 read from the 1970 epoch', async () => {
+    mockReadRecords.mockResolvedValue({ records: [{ startTime: '2019-03-04T08:00:00Z' }] });
+
+    const result = await readEarliestRecordDetailed('Steps');
+
+    expect(mockReadRecords).toHaveBeenCalledTimes(1);
+    const [recordType, options] = mockReadRecords.mock.calls[0];
+    expect(recordType).toBe('Steps');
+    expect(options.pageSize).toBe(1);
+    expect(options.ascendingOrder).toBe(true);
+    expect(options.timeRangeFilter.operator).toBe('between');
+    expect(options.timeRangeFilter.startTime).toBe('1970-01-01T00:00:00.000Z');
+    expect(result).toEqual({ records: [{ startTime: '2019-03-04T08:00:00Z' }] });
+  });
+
+  test('maps an instantaneous record time onto startTime', async () => {
+    mockReadRecords.mockResolvedValue({ records: [{ time: '2020-06-01T07:30:00Z' }] });
+
+    const result = await readEarliestRecordDetailed('Weight');
+
+    expect(result).toEqual({ records: [{ startTime: '2020-06-01T07:30:00Z' }] });
+  });
+
+  test('returns an empty result (no error) when no records exist', async () => {
+    mockReadRecords.mockResolvedValue({ records: [] });
+
+    const result = await readEarliestRecordDetailed('Steps');
+
+    expect(result).toEqual({ records: [] });
+  });
+
+  test('surfaces failures as an error envelope with the quota string intact', async () => {
+    mockReadRecords.mockRejectedValue(new Error('API call quota exceeded'));
+
+    const result = await readEarliestRecordDetailed('HeartRate');
+
+    expect(result.records).toEqual([]);
+    expect(result.error).toBe('API call quota exceeded');
+    expect(isQuotaExceededError(result.error)).toBe(true);
+  });
+});
+
+describe('ensureHistoryReadPermission', () => {
+  const historyGrant = { accessType: 'read', recordType: 'ReadHealthDataHistory' };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('returns true without a request when already granted', async () => {
+    mockGetGrantedPermissions.mockResolvedValue([
+      { accessType: 'read', recordType: 'Steps' },
+      historyGrant,
+    ]);
+
+    await expect(ensureHistoryReadPermission()).resolves.toBe(true);
+    expect(mockRequestPermission).not.toHaveBeenCalled();
+  });
+
+  test('requests the permission and returns true on a fresh grant', async () => {
+    mockGetGrantedPermissions.mockResolvedValue([{ accessType: 'read', recordType: 'Steps' }]);
+    mockRequestPermission.mockResolvedValue([historyGrant]);
+
+    await expect(ensureHistoryReadPermission()).resolves.toBe(true);
+    expect(mockRequestPermission).toHaveBeenCalledWith([historyGrant]);
+  });
+
+  test('returns false when the user declines', async () => {
+    mockGetGrantedPermissions.mockResolvedValue([]);
+    mockRequestPermission.mockResolvedValue([]);
+
+    await expect(ensureHistoryReadPermission()).resolves.toBe(false);
+  });
+
+  test('returns false (never throws) when the bridge errors', async () => {
+    mockGetGrantedPermissions.mockRejectedValue(new Error('bridge unavailable'));
+
+    await expect(ensureHistoryReadPermission()).resolves.toBe(false);
   });
 });

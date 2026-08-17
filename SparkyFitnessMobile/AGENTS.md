@@ -1,6 +1,6 @@
 # AGENTS.md
 
-*Last updated: 2026-08-02*
+*Last updated: 2026-08-06*
 
 SparkyFitness Mobile is a React Native 0.85 + Expo SDK 56 app for syncing Apple Health / Health Connect data with the SparkyFitness backend, tracking nutrition, hydration, fasting, measurements, exercise, saved foods, meal templates, custom exercises, workout presets, iOS / Android widgets, the active workout HUD, and the Sparky AI chat.
 
@@ -49,6 +49,7 @@ npx expo prebuild --clean
 ## App Shell And Navigation
 
 - `App.tsx` is the root composition point. `App()` wraps `QueryClientProvider`, `KeyboardProvider`, `GestureHandlerRootView`, and `BottomSheetModalProvider`; `AppContent()` owns `NavigationContainer`, `SafeAreaProvider`, navigators, `AddSheet`, auth modals, the embedded/floating active-workout bars, the tab-bar `WhatsNewBanner`, and toasts.
+- App-shell logic lives in dedicated hooks that `AppContent` composes: `useInitialRoute`/`useAppStartup` (`src/hooks/useAppStartup.ts`) for the initial route, splash hide, and one-time service init; `useAutoSyncOnOpen` (`src/hooks/useAutoSyncOnOpen.ts`) for cold-start/foreground-return sync and the observer-yield window; `useAddSheetActions` (`src/hooks/useAddSheetActions.ts`) for AddSheet handlers and last-active-tab tracking. Error-boundary-wrapped `Safe*` screen components live in `src/navigation/safeScreens.tsx`.
 - Startup initializes theme, haptics, sounds, notification prefs, logs, timezone bootstrap, background sync, pending cache refreshes, fasting/hydration card visibility, and platform health observers.
 - Initial route comes from `getActiveServerConfig()`: no active config lands on `Onboarding`; otherwise users enter `Tabs`.
 - Deep links are enabled only after startup confirms `Tabs`, so widget links do not bypass first-run onboarding.
@@ -61,7 +62,7 @@ npx expo prebuild --clean
 - Native header option/button builders live in `utils/nativeHeaderItems.ts` (`createIOSNativeHeaderOptions`, `createIOSSmallNativeHeaderOptions`, text/icon button items); header action colors come from `useHeaderActionColors`, which is Liquid-Glass-aware on iOS.
 - Root-stack screens with a screen-owned React header are automatically checked by `__tests__/navigation/nativeHeaderContract.test.ts`; do not add screen-specific native-header allowlists.
 - Root-stack screens with a screen-owned React header and a real back button must set `headerBackTitle` or `headerBackButtonDisplayMode: 'minimal'` in `App.tsx` so iOS back labels stay explicit or intentionally hidden; close/cancel modal headers do not need either option.
-- Declare screen headers with `useScreenHeader(config)` (`src/hooks/useScreenHeader.tsx`), or the thin `<ScreenHeader …/>` wrapper when nothing interleaves with the bar. One declarative descriptor (`title`/`nativeTitle`, `left`/`right` items of kind `back`/`dismiss`/`text`/`icon`/`primary`, `busy`/`disabled`, `animateKey` for view↔edit cross-fades) renders both paths: on the native path it mirrors items into `unstable_header{Left,Right}Items` via a layout effect and returns `null`; on the custom path it returns the bar element for the screen to render. Hook screens must not keep hand-rolled header code (no `unstable_header*Items` blocks or custom bars alongside the hook) — the contract test enforces this.
+- Declare screen headers with `useScreenHeader(config)` (`src/hooks/useScreenHeader.tsx`), or the thin `<ScreenHeader …/>` wrapper when nothing interleaves with the bar. One declarative descriptor (`title`/`nativeTitle`, `left`/`right` items of kind `back`/`dismiss`/`text`/`icon`/`primary`/`menu`, `busy`/`disabled`, `animateKey` for view↔edit cross-fades) renders both paths: on the native path it mirrors items into `unstable_header{Left,Right}Items` via a layout effect and returns `null`; on the custom path it returns the bar element for the screen to render. A `menu` item is a declarative dropdown (plain actions and/or titled single-select sections, optional accent-dot `showsBadge`): the native path builds a system UIMenu header button, the custom path renders the trigger plus an `AnchoredMenu` under it — one item list drives both, as in `FoodsLibraryScreen`'s ownership filter. Hook screens must not keep hand-rolled header code (no `unstable_header*Items` blocks or custom bars alongside the hook) — the contract test enforces this.
 - Path selection is `useNativeIOSHeadersActive()` (`services/nativeTabBarPreference.ts`): always false on Android; on iOS it is true below iOS 26 (classic native headers) and follows the Liquid Glass toggle on iOS 26+, so turning the toggle off swaps in the same screen-owned fallback headers Android renders.
 - One-accent rule: exactly one primary header action per screen (`kind: 'primary'` or `role: 'primary'`), enforced with a `__DEV__` throw; save buttons use the exported `SAVE_LABEL`/`SAVING_LABEL`. Footer-save forms mark their header Save `placement: 'native-only'` so the custom bar does not duplicate the sticky-footer button. `onPress` handlers dispatch through the hook's internal ref map — do not add per-screen handler-ref effects for native header buttons.
 - If a root-stack screen is intentionally presented above `Tabs` instead of inside native-tabs mode, document it in `NATIVE_TABS_ROUTE_EXCLUSIONS` in `__tests__/navigation/nativeHeaderContract.test.ts` with a short reason.
@@ -79,7 +80,7 @@ npx expo prebuild --clean
 - `src/components/` - reusable UI, charts, settings rows, custom tab bar, add sheet, workout HUD, form chrome, library rows, diary rows, serving sheets, food/workout editors, fasting UI, writeback UI, and `ui/` primitives.
 - `src/components/auth/` - MFA UI shared by onboarding, setup, and reauth.
 - `src/screens/` - top-level route destinations: dashboard, diary, settings, sync, logs, Whats New, fasting, food search/scan/photo, library CRUD flows, workout/activity flows, and measurement entry.
-- `src/navigation/` - nested navigation such as `FoodPhotoFlow`.
+- `src/navigation/` - navigation-level modules such as `safeScreens.tsx`, the error-boundary-wrapped screen components registered in `App.tsx`. (`FoodPhotoFlow` lives in `src/components/`.)
 - `src/hooks/` - TanStack Query hooks, auth/connection hooks, library/search/mutation hooks, measurement/water/check-in hooks, fasting hooks, workout form hooks, widget sync, query client, query keys, and cache helpers.
 - `src/services/api/` - backend clients. `apiClient.ts` handles normal API auth/proxy headers; `healthDataApi.ts`, `aiSettingsApi.ts`, food-photo estimate, and other raw fetch paths must keep auth, proxy, timeout, and session-expiry behavior aligned.
 - `src/services/healthconnect/` - Android Health Connect reads, native aggregation, transformation, enrichment, preferences, and writeback.
@@ -124,6 +125,8 @@ npx expo prebuild --clean
 - `app.config.ts` grants `android.permission.health.READ_HEALTH_DATA_HISTORY` so Android can read data older than 30 days.
 - Health Connect permission migrations belong in `services/shared/healthPermissionMigration.ts`, not UI-only state.
 - Core check-in measurements use `measurementsApi.ts` and `MeasurementsAddScreen`; preserve `upsertCheckIn` omitted-vs-null semantics.
+- "Import Full History" (`ImportHistoryScreen`, reached from `SyncScreen`) is a one-time resumable backfill: `backfillService.ts` walks 30-day day-aligned windows newest-first from start-of-today down to a probe-derived floor (`readEarliestRecord` on both providers), one upload per window, with a per-server checkpoint in `backfillCheckpoint.ts`. It never advances `lastSyncedTime` and never runs writeback; while it runs, `isBackfillRunning()` (autoSyncCoordinator) makes background sync skip.
+- The backfill's metric set is FROZEN in its checkpoint at first run; resume uses the frozen set verbatim and toggle changes require Start Over. Quota exhaustion, locked device, and app-inactive are expected mid-run stops — the checkpoint keeps them resumable.
 
 ## Health Writeback
 
@@ -222,7 +225,7 @@ npx expo prebuild --clean
 - Many visual components read CSS variables with `useCSSVariable`, especially Skia charts and themed controls.
 - Animate Skia paths from Reanimated `useSharedValue` / `useDerivedValue`, not Skia's deprecated animation API.
 - `Icon.tsx` maps semantic names to SF Symbols on iOS and Ionicons on Android; verify identifiers before adding icons.
-- Use shared primitives where they fit: `FormInput`, `Button`, `SettingsRow`, `SettingsRowGroup`, `SegmentedControl`, `StepperInput`, `BottomSheetPicker`, `CalendarSheet`, `DateRangeSheet`, `AnchoredMenu`, `Popover`, and `FormScreenChrome`.
+- Use shared primitives where they fit: `FormInput`, `Button`, `SettingsRow`, `SettingsRowGroup`, `SegmentedControl`, `StepperInput`, `BottomSheetPicker`, `CalendarSheet`, `DateRangeSheet`, `AnchoredMenu`, and `FormScreenChrome`.
 - `BottomSheetPicker`, `CalendarSheet`, and sheets shown over native modals use `FullWindowOverlay` on iOS to avoid nested-provider inset bugs.
 - Keep button text and compact cards within their stable dimensions across mobile sizes. Avoid layout shifts from dynamic labels, loading states, or icon swaps.
 

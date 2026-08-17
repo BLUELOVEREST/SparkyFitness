@@ -13,7 +13,12 @@ import type { HealthDataPayload } from '../api/healthDataApi';
 import { runWriteback } from '../writeback';
 import { addLog } from '../LogService';
 import { aggregateByDay } from './dataAggregation';
+import { serverSupportsPerRecordWater } from '../api/measurementsApi';
 import { runTasksInBatches, TimeoutError, withTimeout } from '../../utils/concurrency';
+import {
+  createTelemetryRunContext,
+  type TelemetryRunContext,
+} from './telemetryBudget';
 import {
   alignToLocalDayStart,
   buildForegroundWindows,
@@ -48,10 +53,27 @@ export interface HealthReadProvider {
     endDate: Date,
   ): Promise<ReadResult<TransformedRecord> | null>;
   /** Raw record read for one record type. */
-  readRaw(recordType: string, startDate: Date, endDate: Date): Promise<ReadResult>;
+  readRaw(
+    recordType: string,
+    startDate: Date,
+    endDate: Date,
+    telemetry?: TelemetryRunContext,
+  ): Promise<ReadResult>;
+  /** Earliest stored sample for the metric across all history (history-import
+   *  floor probe). No data = { records: [] }; failures = { error }, never null. */
+  readEarliestRecord?(metric: HealthMetric): Promise<ReadResult<{ startTime: string }>>;
   /** Platform massaging of non-empty raw reads before transform (Android enriches
    *  ExerciseSession; iOS pre-aggregates SleepSession). */
-  postProcessRaw(metric: HealthMetric, records: unknown[]): Promise<unknown[]>;
+  postProcessRaw(
+    metric: HealthMetric,
+    records: unknown[],
+    telemetry?: TelemetryRunContext,
+  ): Promise<unknown[]>;
+  /** Interactive-run preparation with no deadline, run before the timed metric
+   *  reads. Android resolves per-session route-consent dialogs here — a dialog
+   *  waits on the user, so inside the per-metric timeout it would fail the
+   *  whole sync. */
+  prepareInteractiveRead?(metrics: HealthMetric[], windows: SyncWindows): Promise<void>;
   /** Platform transform tables (record shapes and timezone metadata differ). */
   transform(records: unknown[], metric: MetricConfig): TransformOutput[];
 }
@@ -74,17 +96,25 @@ const finishTransform = (
   metric: HealthMetric,
   records: unknown[],
   error: string | undefined,
+  waterFallbackToSum: boolean,
 ): CollectedMetric => {
   // The transform preserves each pre-aggregated record's own `type` (cumulative reads
   // emit e.g. 'total_calories' while the metric config may carry a different type).
   const transformed = provider.transform(records, metric);
 
-  if (metric.aggregationStrategy) {
+  // Hydration ships as individual records only to servers that upsert them by
+  // source_id; older servers SET the day total per record (last drink would
+  // win), so against those the day-aggregate 'sum' payload is restored.
+  const strategy =
+    metric.aggregationStrategy ??
+    (waterFallbackToSum && metric.type === 'water' ? 'sum' : undefined);
+
+  if (strategy) {
     const aggregated = aggregateByDay(
       transformed as TransformedRecord[],
       metric.type,
       metric.unit,
-      metric.aggregationStrategy,
+      strategy,
     );
     return { data: aggregated as HealthDataPayload, error };
   }
@@ -96,6 +126,8 @@ const collectMetric = async (
   provider: HealthReadProvider,
   metric: HealthMetric,
   windows: SyncWindows,
+  waterFallbackToSum: boolean,
+  telemetry: TelemetryRunContext,
 ): Promise<CollectedMetric> => {
   const readKind = metricReadKind(metric);
 
@@ -104,7 +136,7 @@ const collectMetric = async (
   if (readKind === 'cumulative-day') {
     const result = await provider.readCumulativeByDay(metric, windows.aggregatedStart, windows.end);
     if (result) {
-      return finishTransform(provider, metric, result.records, result.error);
+      return finishTransform(provider, metric, result.records, result.error, waterFallbackToSum);
     }
     // null = capability missing on this platform → raw path below.
   }
@@ -131,15 +163,27 @@ const collectMetric = async (
       ))
     : windows.sessionStart;
 
-  const result = await provider.readRaw(metric.recordType, rawStart, windows.end);
+  // Day-aggregated payloads (aggregationStrategy metrics and the water day-sum
+  // fallback) land as full-day SETs on the receiving server, so their reads
+  // must cover complete local days: the background sessionStart
+  // (lastSynced − 6h) can fall mid-day, and aggregating that slice would
+  // replace the server's real full-day values with partial-window ones
+  // (e.g. heart_rate_min losing the overnight low).
+  const readStart =
+    metric.aggregationStrategy != null ||
+    (waterFallbackToSum && metric.type === 'water')
+      ? windows.aggregatedStart
+      : rawStart;
+
+  const result = await provider.readRaw(metric.recordType, readStart, windows.end, telemetry);
   const rawRecords = result.records;
 
   if (!rawRecords || rawRecords.length === 0) {
     return { data: [], error: result.error };
   }
 
-  const processed = await provider.postProcessRaw(metric, rawRecords);
-  return finishTransform(provider, metric, processed, result.error);
+  const processed = await provider.postProcessRaw(metric, rawRecords, telemetry);
+  return finishTransform(provider, metric, processed, result.error, waterFallbackToSum);
 };
 
 /**
@@ -152,14 +196,27 @@ export const collectHealthData = async (
   provider: HealthReadProvider,
   metrics: HealthMetric[],
   windows: SyncWindows,
-  opts: { timeoutLabelPrefix: string },
+  opts: { timeoutLabelPrefix: string; timeoutMs?: number; telemetry?: TelemetryRunContext },
 ): Promise<MetricSyncOutcome[]> => {
+  const telemetry = opts.telemetry ?? createTelemetryRunContext();
+
+  // Probed once per run, and only when a per-record water metric is enabled.
+  const waterFallbackToSum = metrics.some(
+    m => m.type === 'water' && !m.aggregationStrategy,
+  )
+    ? !(await serverSupportsPerRecordWater())
+    : false;
+
+  if (telemetry.interactive && provider.prepareInteractiveRead) {
+    await provider.prepareInteractiveRead(metrics, windows);
+  }
+
   const results = await runTasksInBatches(
     metrics,
     METRIC_FETCH_CONCURRENCY,
     metric => withTimeout(
-      collectMetric(provider, metric, windows),
-      METRIC_TIMEOUT_MS,
+      collectMetric(provider, metric, windows, waterFallbackToSum, telemetry),
+      opts.timeoutMs ?? METRIC_TIMEOUT_MS,
       `${opts.timeoutLabelPrefix} for ${metric.recordType}`,
     ),
     {

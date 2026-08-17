@@ -6,6 +6,7 @@ import {
   uuidSchema,
   mealTypeEnum,
   searchTypeEnum,
+  foodProviderTypeEnum,
   entryTypeEnum,
   giIndexEnum,
   paginationSchema,
@@ -32,17 +33,7 @@ const lookupFoodNutritionSchema = z
       .min(1)
       .max(200)
       .describe('Name of the food to lookup'),
-    provider_type: z
-      .enum([
-        'internal',
-        'openfoodfacts',
-        'usda',
-        'fatsecret',
-        'mealie',
-        'tandoor',
-        'yazio',
-        'norish',
-      ])
+    provider_type: foodProviderTypeEnum
       .optional()
       .describe(
         'Optional: Force a specific provider search, bypassing the cascade lookup'
@@ -122,17 +113,7 @@ const logExternalFoodSchema = z
       .describe(
         "The lookup result's External ID, to pin the exact provider item (optional)"
       ),
-    provider_type: z
-      .enum([
-        'internal',
-        'openfoodfacts',
-        'usda',
-        'fatsecret',
-        'mealie',
-        'tandoor',
-        'yazio',
-        'norish',
-      ])
+    provider_type: foodProviderTypeEnum
       .optional()
       .describe('Provider the lookup match came from (optional)'),
     quantity: z.coerce
@@ -346,16 +327,60 @@ const listDiarySchema = z
 const deleteEntrySchema = z
   .object({
     action: z.literal('delete_entry'),
-    entry_id: uuidSchema.describe('UUID of the entry to delete'),
-    entry_type: entryTypeEnum.describe('Type of diary entry'),
+    entry_id: uuidSchema.optional().describe('UUID of the entry to delete'),
+    entry_type: entryTypeEnum
+      .optional()
+      .describe("Type of diary entry (defaults to 'food_entry')"),
+    food_name: z
+      .string()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(
+        "The entry's food name — alternative to entry_id, resolved against the diary for entry_date"
+      ),
+    entry_date: dateSchema
+      .optional()
+      .describe('Diary date food_name is resolved against (defaults to today)'),
+    meal_type: mealTypeEnum
+      .optional()
+      .describe(
+        'Narrows food_name resolution when the same food appears in several meals'
+      ),
+    meal_type_id: uuidSchema
+      .optional()
+      .describe('Custom meal type UUID narrowing food_name resolution'),
   })
-  .strict();
+  .strict()
+  .refine((v) => v.entry_id || v.food_name, {
+    message: 'Provide entry_id or food_name',
+  })
+  .refine(
+    (v) => !(!v.entry_id && v.food_name && v.entry_type === 'food_entry_meal'),
+    {
+      message:
+        'food_name resolves food entries only — pass entry_id for a food_entry_meal',
+    }
+  );
 
 const updateEntrySchema = z
   .object({
     action: z.literal('update_entry'),
-    entry_id: uuidSchema.describe('UUID of the entry to update'),
-    entry_type: entryTypeEnum.describe('Type of diary entry'),
+    entry_id: uuidSchema.optional().describe('UUID of the entry to update'),
+    entry_type: entryTypeEnum
+      .optional()
+      .describe("Type of diary entry (defaults to 'food_entry')"),
+    food_name: z
+      .string()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(
+        "The entry's food name — alternative to entry_id, resolved against the diary for entry_date"
+      ),
+    entry_date: dateSchema
+      .optional()
+      .describe('Diary date food_name is resolved against (defaults to today)'),
     quantity: z.coerce.number().min(0).optional().describe('New amount'),
     unit: z
       .string()
@@ -366,13 +391,23 @@ const updateEntrySchema = z
     meal_type: mealTypeEnum
       .optional()
       .describe(
-        'Built-in meal type fallback; ignored when meal_type_id is provided'
+        'NEW built-in meal type to move the entry to; ignored when meal_type_id is provided'
       ),
     meal_type_id: uuidSchema
       .optional()
       .describe('New meal type UUID, including custom meal types'),
   })
-  .strict();
+  .strict()
+  .refine((v) => v.entry_id || v.food_name, {
+    message: 'Provide entry_id or food_name',
+  })
+  .refine(
+    (v) => !(!v.entry_id && v.food_name && v.entry_type === 'food_entry_meal'),
+    {
+      message:
+        'food_name resolves food entries only — pass entry_id for a food_entry_meal',
+    }
+  );
 
 const updateFoodVariantSchema = z
   .object({
@@ -792,16 +827,7 @@ export const manageFoodInput = z.object({
   start_date: dateSchema.optional().describe('Start date for range queries'),
   end_date: dateSchema.optional().describe('End date for range queries'),
   // explicit search provider
-  provider_type: z
-    .enum([
-      'internal',
-      'openfoodfacts',
-      'usda',
-      'fatsecret',
-      'mealie',
-      'tandoor',
-      'norish',
-    ])
+  provider_type: foodProviderTypeEnum
     .optional()
     .describe('Optional: Force a specific provider search (e.g. USDA)'),
 });

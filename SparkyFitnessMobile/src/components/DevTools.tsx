@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, ActivityIndicator, Pressable, Platform } from 'react-native';
+import { View, Text, Pressable, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
 import Button from './ui/Button';
-import { seedHealthData, seedHistoricalSteps } from '../services/seedHealthData';
+import { seedHealthData, seedHistoricalSteps, seedOldHealthData, seedRichWorkout, seedRichStrengthWorkout } from '../services/seedHealthData';
+import { seedRichWorkoutIOS, seedRichStrengthWorkoutIOS } from '../services/seedHealthDataIOS';
 import { triggerManualSync } from '../services/backgroundSyncService';
 import { notifySessionExpired } from '../services/api/authService';
 import { getActiveServerConfig } from '../services/storage';
 import { resetWhatsNewBanner } from '../services/whatsNewBanner';
 import { resetAnnouncementModal } from './AnnouncementModal';
-import { FOOD_SEARCH_POPOVERS } from '../services/foodSearchPreferences';
 import { CycleCardRingContent, type CycleRingContentInfo } from './CycleCard';
 import { openHealthConnectSettings, openHealthConnectDataManagement, getGrantedPermissions } from 'react-native-health-connect';
 
@@ -68,6 +68,23 @@ const DevTools: React.FC = () => {
     }
   };
 
+  const handleSeedOldData = async () => {
+    setIsSeeding(true);
+    try {
+      const result = await seedOldHealthData();
+      if (result.success) {
+        Toast.show({ type: 'success', text1: 'Success', text2: `Seeded ${result.recordsInserted} records in clusters 1-3 years back.` });
+      } else {
+        Toast.show({ type: 'error', text1: 'Error', text2: result.error || 'Failed to seed old health data.' });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      Toast.show({ type: 'error', text1: 'Error', text2: `Failed to seed old health data: ${message}` });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
   const handleSeedData = async (days: number) => {
     setIsSeeding(true);
     try {
@@ -80,6 +97,74 @@ const DevTools: React.FC = () => {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       Toast.show({ type: 'error', text1: 'Error', text2: `Failed to seed health data: ${message}` });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  const handleSeedRichWorkout = async () => {
+    setIsSeeding(true);
+    try {
+      const result = await seedRichWorkout();
+      if (result.success) {
+        Toast.show({ type: 'success', text1: 'Success', text2: 'Seeded a 12-minute walk with route, HR, speed and laps. Run a foreground sync to pull it in.' });
+      } else {
+        Toast.show({ type: 'error', text1: 'Error', text2: result.error || 'Failed to seed rich workout.' });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      Toast.show({ type: 'error', text1: 'Error', text2: `Failed to seed rich workout: ${message}` });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  const handleSeedRichStrengthWorkout = async () => {
+    setIsSeeding(true);
+    try {
+      const result = await seedRichStrengthWorkout();
+      if (result.success) {
+        Toast.show({ type: 'success', text1: 'Success', text2: 'Seeded a 35-minute strength session with spiky HR (no route/reps — devices never report those). Run a foreground sync to pull it in.' });
+      } else {
+        Toast.show({ type: 'error', text1: 'Error', text2: result.error || 'Failed to seed rich strength workout.' });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      Toast.show({ type: 'error', text1: 'Error', text2: `Failed to seed rich strength workout: ${message}` });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  const handleSeedRichWorkoutIOS = async () => {
+    setIsSeeding(true);
+    try {
+      const result = await seedRichWorkoutIOS();
+      if (result.success) {
+        Toast.show({ type: 'success', text1: 'Success', text2: 'Seeded a 12-minute walk with route and HR. Run a foreground sync to pull it in.' });
+      } else {
+        Toast.show({ type: 'error', text1: 'Error', text2: result.error || 'Failed to seed rich workout.' });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      Toast.show({ type: 'error', text1: 'Error', text2: `Failed to seed rich workout: ${message}` });
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  const handleSeedRichStrengthWorkoutIOS = async () => {
+    setIsSeeding(true);
+    try {
+      const result = await seedRichStrengthWorkoutIOS();
+      if (result.success) {
+        Toast.show({ type: 'success', text1: 'Success', text2: 'Seeded a 35-minute strength session with spiky HR (no route/laps/reps — devices never report those). Run a foreground sync to pull it in.' });
+      } else {
+        Toast.show({ type: 'error', text1: 'Error', text2: result.error || 'Failed to seed rich strength workout.' });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      Toast.show({ type: 'error', text1: 'Error', text2: `Failed to seed rich strength workout: ${message}` });
     } finally {
       setIsSeeding(false);
     }
@@ -119,13 +204,10 @@ const DevTools: React.FC = () => {
           variant="primary"
           className="py-2 px-4 rounded-lg my-1 self-center min-w-20"
           onPress={() => handleSeedData(7)}
-          disabled={isSeeding}
+          loading={isSeeding}
+          textClassName="font-bold"
         >
-          {isSeeding ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text className="text-white text-base font-bold">7 Days</Text>
-          )}
+          7 Days
         </Button>
 
         <Button
@@ -154,6 +236,59 @@ const DevTools: React.FC = () => {
         >
           <Text className="text-white text-base font-bold text-center">1 Year{'\n'}(Steps)</Text>
         </Button>
+
+        <Button
+          variant="primary"
+          className="py-2 px-4 rounded-lg my-1 self-center min-w-20"
+          onPress={handleSeedOldData}
+          disabled={isSeeding}
+        >
+          <Text className="text-white text-base font-bold text-center">Old Data{'\n'}(1-3 Years)</Text>
+        </Button>
+
+        {Platform.OS === 'android' && (
+          <Button
+            variant="primary"
+            className="py-2 px-4 rounded-lg my-1 self-center min-w-20"
+            onPress={handleSeedRichWorkout}
+            disabled={isSeeding}
+          >
+            <Text className="text-white text-base font-bold text-center">Rich Workout{'\n'}(Route+HR+Laps)</Text>
+          </Button>
+        )}
+
+        {Platform.OS === 'android' && (
+          <Button
+            variant="primary"
+            className="py-2 px-4 rounded-lg my-1 self-center min-w-20"
+            onPress={handleSeedRichStrengthWorkout}
+            disabled={isSeeding}
+          >
+            <Text className="text-white text-base font-bold text-center">Rich Strength{'\n'}(Spiky HR)</Text>
+          </Button>
+        )}
+
+        {Platform.OS === 'ios' && (
+          <Button
+            variant="primary"
+            className="py-2 px-4 rounded-lg my-1 self-center min-w-20"
+            onPress={handleSeedRichWorkoutIOS}
+            disabled={isSeeding}
+          >
+            <Text className="text-white text-base font-bold text-center">Rich Workout{'\n'}(Route+HR)</Text>
+          </Button>
+        )}
+
+        {Platform.OS === 'ios' && (
+          <Button
+            variant="primary"
+            className="py-2 px-4 rounded-lg my-1 self-center min-w-20"
+            onPress={handleSeedRichStrengthWorkoutIOS}
+            disabled={isSeeding}
+          >
+            <Text className="text-white text-base font-bold text-center">Rich Strength{'\n'}(Spiky HR)</Text>
+          </Button>
+        )}
       </View>
       {Platform.OS === 'android' && (
         <View className="flex-row gap-2 flex-wrap justify-between mt-4">
@@ -181,13 +316,10 @@ const DevTools: React.FC = () => {
             variant="primary"
             className="py-2 px-4 rounded-lg my-1 self-center min-w-30"
             onPress={handleTriggerSync}
-            disabled={isSyncing}
+            loading={isSyncing}
+            textClassName="font-bold"
           >
-            {isSyncing ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text className="text-white text-base font-bold">Trigger Sync</Text>
-            )}
+            Trigger Sync
           </Button>
           {Platform.OS === 'android' && (
             <Button
@@ -271,43 +403,6 @@ const DevTools: React.FC = () => {
           >
             <Text className="text-white text-base font-bold">Reset Announcement</Text>
           </Button>
-        </View>
-      </View>
-
-      <View className="mt-5">
-        <Text className="text-sm text-text-primary">Food Search Popovers</Text>
-        <Text className="text-text-muted mb-3 text-[13px]">
-          Clear a seen flag so its coaching popover re-appears on the next food
-          search.
-        </Text>
-        <View className="flex-row gap-2 flex-wrap">
-          {FOOD_SEARCH_POPOVERS.map((popover) => (
-            <Button
-              key={popover.id}
-              variant="primary"
-              className="py-2 px-4 rounded-lg my-1 self-center min-w-30"
-              onPress={async () => {
-                try {
-                  await popover.reset();
-                  Toast.show({
-                    type: 'success',
-                    text1: 'Reset',
-                    text2: `${popover.resetLabel} popover will re-appear.`,
-                  });
-                } catch {
-                  Toast.show({
-                    type: 'error',
-                    text1: 'Error',
-                    text2: 'Could not reset popover.',
-                  });
-                }
-              }}
-            >
-              <Text className="text-white text-base font-bold">
-                {popover.resetLabel}
-              </Text>
-            </Button>
-          ))}
         </View>
       </View>
 

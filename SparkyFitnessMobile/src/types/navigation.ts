@@ -92,6 +92,8 @@ export type RootStackParamList = {
     | {
         date?: string;
         pickerMode?: FoodPickerMode;
+        /** Optional canonical meal type id to pre-select when logging. */
+        mealTypeId?: string;
       }
     | undefined;
   FoodEntryAdd:
@@ -106,6 +108,8 @@ export type RootStackParamList = {
         pickerMode?: FoodPickerMode;
         ingredientIndex?: number;
         returnDepth?: number;
+        /** Optional canonical meal type id to pre-select when logging. */
+        mealTypeId?: string;
       };
   EditLoggedMeal: { foodEntryMealId: string; initialMeal?: FoodEntryMeal };
   FoodEntryView: {
@@ -116,7 +120,11 @@ export type RootStackParamList = {
   };
   MealTypeDetail: {
     date: string;
-    mealType: MealTypeKey;
+    /** Canonical meal type id (preferred over the legacy name key). */
+    mealTypeId?: string;
+    /** Legacy name key, kept for older callers and as a name fallback. */
+    mealType?: MealTypeKey;
+    /** Pre-resolved display label (literal custom name or localized system). */
     mealLabel?: string;
     plannedMeal?: ActiveMealPlanDayMeal;
   };
@@ -162,13 +170,15 @@ export type RootStackParamList = {
         returnDepth?: number;
         initialMode?: 'barcode' | 'label' | 'photo';
         providerId?: string;
+        /** Preserved when the scan was started from a meal detail screen. */
+        mealTypeId?: string;
       }
     | {
         mode: 'capture-barcode';
         returnKey: string;
       }
     | undefined;
-  FoodPhotoIntro: { date?: string } | undefined;
+  FoodPhotoIntro: { date?: string; mealTypeId?: string } | undefined;
   FoodPhotoFlow: NavigatorScreenParams<FoodPhotoFlowParamList>;
   MealAdd:
     | {
@@ -218,8 +228,10 @@ export type RootStackParamList = {
   Chat: undefined;
   Logs: undefined;
   Sync: undefined;
+  ImportHistory: undefined;
   MeasurementsAdd: { date?: string } | undefined;
   CalorieSettings: undefined;
+  MealTypeSettings: undefined;
   FoodSettings: undefined;
   DashboardSettings: undefined;
   DiarySettings: undefined;
@@ -253,6 +265,8 @@ export type FoodPhotoFlowParamList = {
     initialDescription?: string;
     initialTotalWeight?: string;
     initialWeightUnit?: 'g' | 'oz';
+    /** Preserved when the photo flow was started from a meal detail screen. */
+    mealTypeId?: string;
   };
   EstimateReview: {
     date?: string;
@@ -262,10 +276,14 @@ export type FoodPhotoFlowParamList = {
       totalWeight?: number;
       weightUnit?: 'g' | 'oz';
     };
+    /** Preserved when the photo flow was started from a meal detail screen. */
+    mealTypeId?: string;
   };
   LogEntry: {
     date?: string;
     saveFoodPayload: SaveFoodPayload;
+    /** Preselected meal type when the flow was started from a meal detail. */
+    mealTypeId?: string;
   };
 };
 

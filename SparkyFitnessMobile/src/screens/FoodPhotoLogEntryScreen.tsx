@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -17,6 +16,7 @@ import Icon from '../components/Icon';
 import StepperInput from '../components/StepperInput';
 import BottomSheetPicker from '../components/BottomSheetPicker';
 import CalendarSheet, { type CalendarSheetRef } from '../components/CalendarSheet';
+import { FooterSaveBar } from '../components/FormScreenChrome';
 import { useAddFoodEntry } from '../hooks/useAddFoodEntry';
 import { useMealTypes } from '../hooks/useMealTypes';
 import { usePreferences } from '../hooks';
@@ -25,7 +25,7 @@ import { getNetCarbsValue } from '../utils/nutrientUtils';
 import { goalsQueryKey } from '../hooks/queryKeys';
 import { fetchDailyGoals } from '../services/api/goalsApi';
 import { fireSuccessHaptic } from '../services/haptics';
-import { getMealTypeLabel } from '../constants/meals';
+import { getMealTypeDisplayLabel } from '../utils/mealNutrition';
 import { formatDateLabel, getTodayDate } from '../utils/dateUtils';
 import type { FoodDisplayValues } from '../utils/foodDetails';
 import { parseDecimalInput, DECIMAL_INPUT_REGEX } from '../utils/numericInput';
@@ -62,7 +62,7 @@ const FoodPhotoLogEntryScreen: React.FC<Props> = ({ navigation, route }) => {
   const textPrimary = useCSSVariable('--color-text-primary') as string;
   const { backColor } = useHeaderActionColors();
 
-  const { saveFoodPayload } = route.params;
+  const { saveFoodPayload, mealTypeId: initialMealTypeId } = route.params;
 
   const { mealTypes, defaultMealTypeId } = useMealTypes();
   const [selectedMealTypeId, setSelectedMealTypeId] = useState<string | null>(null);
@@ -105,9 +105,16 @@ const FoodPhotoLogEntryScreen: React.FC<Props> = ({ navigation, route }) => {
     fat: goalPercent(displayValues.fat * servingsNumber, goals?.fat),
   };
 
-  // Default the meal type once the default arrives. Done during render (instead
-  // of in an effect); the `!selectedMealTypeId` guard makes it self-limiting.
-  if (!selectedMealTypeId && defaultMealTypeId) {
+  // Preselect the originating meal type (MealTypeDetail → search → photo flow)
+  // ONLY when it still exists in the selectable list — a stale/hidden/deleted
+  // id must never be submitted for a new entry. Otherwise default once the
+  // default arrives. Done during render (instead of in an effect); the
+  // `!selectedMealTypeId` guard makes it self-limiting.
+  const originatingTypeExists =
+    initialMealTypeId != null && mealTypes.some((mt) => mt.id === initialMealTypeId);
+  if (!selectedMealTypeId && originatingTypeExists) {
+    setSelectedMealTypeId(initialMealTypeId);
+  } else if (!selectedMealTypeId && defaultMealTypeId) {
     setSelectedMealTypeId(defaultMealTypeId);
   }
 
@@ -133,14 +140,14 @@ const FoodPhotoLogEntryScreen: React.FC<Props> = ({ navigation, route }) => {
   const mealPickerOptions = useMemo(
     () =>
       mealTypes.map((mt) => ({
-        label: getMealTypeLabel(mt.name),
+        label: getMealTypeDisplayLabel(mt),
         value: mt.id,
       })),
     [mealTypes],
   );
   const selectedMealLabel = useMemo(() => {
     const found = mealTypes.find((mt) => mt.id === selectedMealTypeId);
-    return found ? getMealTypeLabel(found.name) : 'Select meal';
+    return found ? getMealTypeDisplayLabel(found) : 'Select meal';
   }, [mealTypes, selectedMealTypeId]);
 
   const handleSave = async () => {
@@ -279,27 +286,13 @@ const FoodPhotoLogEntryScreen: React.FC<Props> = ({ navigation, route }) => {
         </View>
       </KeyboardAwareScrollView>
 
-      <View
-        className="px-4 gap-3 border-t border-border-subtle pt-3"
-        style={{ paddingBottom: Math.max(insets.bottom, 16) }}
-      >
-        <Button
-          variant="primary"
-          disabled={isPending}
-          onPress={() => {
-            void handleSave();
-          }}
-        >
-          {isPending ? (
-            <View className="flex-row items-center gap-2">
-              <ActivityIndicator size="small" color="#fff" />
-              <Text className="text-white font-semibold">Saving…</Text>
-            </View>
-          ) : (
-            'Save'
-          )}
-        </Button>
-      </View>
+      <FooterSaveBar
+        onPress={() => {
+          void handleSave();
+        }}
+        disabled={isPending}
+        busy={isPending}
+      />
 
       <CalendarSheet
         ref={calendarRef}

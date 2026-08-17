@@ -8,7 +8,13 @@ import Icon from '../components/Icon';
 import SafeImage from '../components/SafeImage';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
 import { useWorkoutPresets, useWorkoutPresetSearch, useRefetchOnFocus, useProfile } from '../hooks';
-import { deriveShareStatus } from '../utils/shareStatus';
+import {
+  deriveShareStatus,
+  filterByOwnership,
+  ownershipFilterHeaderMenu,
+  OWNERSHIP_FILTER_LABELS,
+} from '../utils/shareStatus';
+import { useAppPreferencesStore } from '../stores/appPreferencesStore';
 import ShareStatusBadge from '../components/ShareStatusBadge';
 import { useExerciseImageSource } from '../hooks/useExerciseImageSource';
 import { useNavigationActionGuard } from '../hooks/useNavigationActionGuard';
@@ -21,7 +27,6 @@ import {
   buildPresetStartExercisesPayload,
   buildSingleExerciseStartPayload,
 } from '../utils/workoutSession';
-import SegmentedControl from '../components/SegmentedControl';
 import type { Exercise } from '../types/exercise';
 import type { WorkoutPreset } from '../types/workoutPresets';
 import type { RootStackScreenProps } from '../types/navigation';
@@ -30,29 +35,6 @@ type PresetSearchScreenProps = RootStackScreenProps<'PresetSearch'>;
 
 /** startingId sentinel for the pinned empty-workout row (preset rows use preset ids). */
 const EMPTY_START_ID = 'empty-workout';
-
-const filterItems = <T extends { user_id?: string | null; userId?: string | null; is_public?: boolean | null; shared_with_public?: boolean | null; sharedWithPublic?: boolean | null }>(
-  items: T[],
-  filter: 'all' | 'mine' | 'family' | 'public',
-  currentUserId?: string
-) => {
-  if (filter === 'all') return items;
-  return items.filter((item) => {
-    const isOwner = !!((item.user_id && item.user_id === currentUserId) || (item.userId && item.userId === currentUserId));
-    const isPublic = !!(item.is_public || item.shared_with_public || item.sharedWithPublic);
-    
-    if (filter === 'mine') {
-      return isOwner;
-    }
-    if (filter === 'family') {
-      return !isOwner && !isPublic && (item.user_id != null || item.userId != null);
-    }
-    if (filter === 'public') {
-      return isPublic;
-    }
-    return true;
-  });
-};
 
 const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
@@ -67,14 +49,15 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({ navigation, rou
   const { profile } = useProfile();
 
   const [searchText, setSearchText] = useState('');
-  const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'mine' | 'family' | 'public'>('all');
+  const ownershipFilter = useAppPreferencesStore((s) => s.presetSearchOwnershipFilter);
+  const setOwnershipFilter = useAppPreferencesStore((s) => s.setPresetSearchOwnershipFilter);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [startingId, setStartingId] = useState<string | number | null>(null);
 
   const { presets, isLoading, isError, refetch } = useWorkoutPresets();
   const { searchResults, isSearching, isSearchActive, isSearchError } = useWorkoutPresetSearch(searchText);
-  const filteredPresets = useMemo(() => filterItems(presets, ownershipFilter, profile?.id), [presets, ownershipFilter, profile?.id]);
-  const filteredSearchResults = useMemo(() => filterItems(searchResults, ownershipFilter, profile?.id), [searchResults, ownershipFilter, profile?.id]);
+  const filteredPresets = useMemo(() => filterByOwnership(presets, ownershipFilter, profile?.id), [presets, ownershipFilter, profile?.id]);
+  const filteredSearchResults = useMemo(() => filterByOwnership(searchResults, ownershipFilter, profile?.id), [searchResults, ownershipFilter, profile?.id]);
   const { startLiveWorkout, isStarting } = useStartLiveWorkout(navigation);
   const { getImageSource } = useExerciseImageSource();
   const { isNavigationLocked, runNavigationAction } = useNavigationActionGuard(navigation);
@@ -88,6 +71,12 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({ navigation, rou
   const header = useScreenHeader({
     title: 'Start Workout',
     left: { kind: 'dismiss', onPress: handleCancel, identifier: 'preset-search-cancel' },
+    right: ownershipFilterHeaderMenu({
+      noun: 'presets',
+      identifier: 'preset-search-filter',
+      filter: ownershipFilter,
+      onSelect: setOwnershipFilter,
+    }),
   });
 
   const handleSelectPreset = useCallback((preset: WorkoutPreset) => {
@@ -210,6 +199,15 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({ navigation, rou
       return <StatusView icon="alert-circle" title="Failed to search presets" />;
     }
     if (filteredSearchResults.length === 0) {
+      if (searchResults.length > 0) {
+        return (
+          <StatusView
+            title={`No presets in ${OWNERSHIP_FILTER_LABELS[ownershipFilter]}`}
+            subtitle="Change the filter to see your other presets."
+            action={{ label: 'Show All', onPress: () => setOwnershipFilter('all') }}
+          />
+        );
+      }
       return <StatusView title="No matching presets found" />;
     }
     return (
@@ -243,7 +241,13 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({ navigation, rou
       return <StatusView title="No presets yet" subtitle="Start an empty workout, or save a workout as a preset to see it here" />;
     }
     if (filteredPresets.length === 0) {
-      return <StatusView title="No matching presets found" subtitle="Try changing your ownership filter" />;
+      return (
+        <StatusView
+          title={`No presets in ${OWNERSHIP_FILTER_LABELS[ownershipFilter]}`}
+          subtitle="Change the filter to see your other presets."
+          action={{ label: 'Show All', onPress: () => setOwnershipFilter('all') }}
+        />
+      );
     }
     return (
       <FlatList
@@ -261,7 +265,7 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({ navigation, rou
       {header}
 
       {/* Search bar */}
-      <View className="px-4 py-2">
+      <View className="px-4 py-2 border-b border-border-subtle">
         <View
           className="flex-row items-center bg-raised rounded-lg px-3 py-2.5"
           style={{ borderWidth: 1, borderColor: isSearchFocused ? accentColor : borderSubtle }}
@@ -290,19 +294,6 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({ navigation, rou
         </View>
       </View>
 
-      {/* Ownership filter */}
-      <View className="px-4 pb-2 border-b border-border-subtle">
-        <SegmentedControl
-          segments={[
-            { key: 'all', label: 'All' },
-            { key: 'mine', label: 'Mine' },
-            { key: 'family', label: 'Family' },
-            { key: 'public', label: 'Public' },
-          ]}
-          activeKey={ownershipFilter}
-          onSelect={setOwnershipFilter}
-        />
-      </View>
       <TouchableOpacity
         className="flex-row items-center px-4 py-3 border-b border-border-subtle"
         activeOpacity={0.7}
