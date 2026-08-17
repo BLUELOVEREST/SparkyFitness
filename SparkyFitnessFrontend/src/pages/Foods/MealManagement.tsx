@@ -688,6 +688,7 @@ const MealManagement: React.FC = () => {
           ) : (
             <DataTable
               titleColumnId="name"
+              onRowClick={handleViewDetails}
               onRowDoubleClick={handleViewDetails}
               rowSelection={rowSelection}
               onRowSelectionChange={setRowSelection}

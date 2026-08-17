@@ -2,6 +2,13 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 import {
   Plus,
@@ -53,6 +60,9 @@ const WorkoutPlansManager = () => {
   const [selectedPlan, setSelectedPlan] = useState<WorkoutPlanTemplate | null>(
     null
   );
+  const [viewingPlan, setViewingPlan] = useState<WorkoutPlanTemplate | null>(
+    null
+  );
 
   const { data: plans } = useWorkoutPlanTemplates(user?.id);
   const { mutateAsync: createWorkoutPlanTemplate } =
@@ -88,6 +98,29 @@ const WorkoutPlansManager = () => {
 
   const allSelected =
     editablePlanIds.length > 0 && selectedCount === editablePlanIds.length;
+
+  const dayLabels = React.useMemo(
+    () => [
+      t('common.sunday', 'Sunday'),
+      t('common.monday', 'Monday'),
+      t('common.tuesday', 'Tuesday'),
+      t('common.wednesday', 'Wednesday'),
+      t('common.thursday', 'Thursday'),
+      t('common.friday', 'Friday'),
+      t('common.saturday', 'Saturday'),
+    ],
+    [t]
+  );
+
+  const timeSlotLabels = React.useMemo(
+    () => ({
+      morning: t('workoutPlansManager.morning', 'Morning'),
+      noon: t('workoutPlansManager.noon', 'Noon'),
+      afternoon: t('workoutPlansManager.afternoon', 'Afternoon'),
+      evening: t('workoutPlansManager.evening', 'Evening'),
+    }),
+    [t]
+  );
 
   const handleBulkDeleteConfirm = async () => {
     try {
@@ -385,6 +418,7 @@ const WorkoutPlansManager = () => {
           ) : (
             <DataTable
               titleColumnId="plan_name"
+              onRowClick={setViewingPlan}
               onRowDoubleClick={(plan) => {
                 setSelectedPlan(plan);
                 setIsEditDialogOpen(true);
@@ -431,6 +465,145 @@ const WorkoutPlansManager = () => {
         entityName={t('workoutPlansManager.plans', 'plans')}
         onConfirm={handleBulkDeleteConfirm}
       />
+
+      <Dialog
+        open={!!viewingPlan}
+        onOpenChange={(open) => !open && setViewingPlan(null)}
+      >
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewingPlan?.plan_name}</DialogTitle>
+            <DialogDescription>
+              {viewingPlan?.description ||
+                t(
+                  'workoutPlansManager.noDescriptionProvided',
+                  'No description provided.'
+                )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingPlan && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-md border p-3">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t('workoutPlansManager.status', 'Status')}
+                  </div>
+                  <div className="mt-1">
+                    <Badge
+                      variant={viewingPlan.is_active ? 'default' : 'secondary'}
+                    >
+                      {viewingPlan.is_active
+                        ? t('workoutPlansManager.activeStatus', 'Active')
+                        : t('workoutPlansManager.inactiveStatus', 'Inactive')}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t('workoutPlansManager.planMode', 'Plan Mode')}
+                  </div>
+                  <div className="mt-1">
+                    {viewingPlan.plan_mode === 'training_focus'
+                      ? t('workoutPlansManager.trainingFocus', 'Training Focus')
+                      : t('workoutPlansManager.detailed', 'Detailed')}
+                  </div>
+                </div>
+                <div className="rounded-md border p-3 col-span-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t('workoutPlansManager.duration', 'Duration')}
+                  </div>
+                  <div className="mt-1">
+                    {viewingPlan.start_date
+                      ? new Date(viewingPlan.start_date).toLocaleDateString()
+                      : t('common.notAvailable', 'Not available')}{' '}
+                    -{' '}
+                    {viewingPlan.end_date
+                      ? new Date(viewingPlan.end_date).toLocaleDateString()
+                      : t('workoutPlansManager.ongoingStatus', 'Ongoing')}
+                  </div>
+                </div>
+              </div>
+
+              {viewingPlan.plan_mode === 'training_focus' ? (
+                <div className="space-y-3">
+                  <h4 className="font-semibold">
+                    {t('workoutPlansManager.focusSessions', 'Focus Sessions')}
+                  </h4>
+                  {viewingPlan.focus_sessions?.length ? (
+                    viewingPlan.focus_sessions.map((session, index) => (
+                      <div
+                        key={`${session.day_of_week}-${session.time_slot}-${index}`}
+                        className="rounded-md border p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="font-medium">
+                              {dayLabels[session.day_of_week]} ·{' '}
+                              {timeSlotLabels[session.time_slot]}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {session.training_focus}
+                            </div>
+                          </div>
+                          {session.is_primary && (
+                            <Badge variant="secondary">
+                              {t('workoutPlansManager.mainSession', 'Main')}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {t(
+                        'workoutPlansManager.noFocusSessions',
+                        'No focus sessions in this plan.'
+                      )}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <h4 className="font-semibold">
+                    {t('workoutPlansManager.assignments', 'Assignments')}
+                  </h4>
+                  {viewingPlan.assignments?.length ? (
+                    viewingPlan.assignments.map((assignment, index) => (
+                      <div
+                        key={`${assignment.day_of_week}-${index}`}
+                        className="rounded-md border p-3"
+                      >
+                        <div className="font-medium">
+                          {dayLabels[assignment.day_of_week]}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {assignment.workout_preset_name ||
+                            assignment.exercise_name ||
+                            t('common.notAvailable', 'Not available')}
+                        </div>
+                        {assignment.sets?.length ? (
+                          <Badge variant="outline" className="mt-2">
+                            {assignment.sets.length}{' '}
+                            {t('workoutPresetsManager.sets', 'sets')}
+                          </Badge>
+                        ) : null}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      {t(
+                        'workoutPlansManager.noAssignments',
+                        'No assignments in this plan.'
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AddWorkoutPlanDialog
         key={`add-${isAddPlanDialogOpen ? 'open' : 'closed'}`}

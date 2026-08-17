@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, CalendarDays, ChefHat, Utensils } from 'lucide-react';
+import {
+  AlertCircle,
+  CalendarDays,
+  ChefHat,
+  ChevronDown,
+  ChevronUp,
+  Utensils,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,9 +58,9 @@ const getInitialSelectedDate = (
 };
 
 const KitchenMetric = ({ label, value }: { label: string; value: string }) => (
-  <div className="rounded-lg border bg-background p-4">
-    <p className="text-sm text-muted-foreground">{label}</p>
-    <p className="mt-1 text-2xl font-semibold">{value}</p>
+  <div className="rounded-lg border bg-background px-3 py-2">
+    <p className="text-xs text-muted-foreground">{label}</p>
+    <p className="mt-0.5 text-base font-semibold">{value}</p>
   </div>
 );
 
@@ -72,7 +79,7 @@ const KitchenDayTab = ({
       role="tab"
       aria-selected={day.isSelected}
       aria-current={day.isToday ? 'date' : undefined}
-      className={`relative min-w-28 overflow-hidden rounded-xl border px-4 py-3 text-left transition-colors ${
+      className={`relative h-20 min-w-24 overflow-hidden rounded-lg border px-3 py-2 text-left transition-colors ${
         day.isSelected
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-border bg-card hover:bg-accent'
@@ -83,15 +90,17 @@ const KitchenDayTab = ({
         <span
           aria-hidden="true"
           data-testid="kitchen-today-inner-border"
-          className={`pointer-events-none absolute inset-2 rounded-lg border-2 ${
+          className={`pointer-events-none absolute inset-2 rounded-md border-2 ${
             day.isSelected ? 'border-background/90' : 'border-primary/70'
           }`}
         />
       ) : null}
-      <span className="block text-sm font-medium">{day.weekdayLabel}</span>
-      <span className="block text-lg font-semibold">{day.dayNumberLabel}</span>
+      <span className="block text-xs font-medium">{day.weekdayLabel}</span>
+      <span className="block text-xl font-semibold leading-tight">
+        {day.dayNumberLabel}
+      </span>
       {day.isToday ? (
-        <span className="mt-1 inline-flex rounded-full bg-background/80 px-2 py-0.5 text-xs text-foreground">
+        <span className="mt-1 inline-flex rounded-full bg-background/80 px-2 py-0.5 text-[11px] text-foreground">
           {t('common.today', 'Today')}
         </span>
       ) : null}
@@ -104,11 +113,11 @@ const KitchenMealCard = ({ meal }: { meal: KitchenMealPreview }) => {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <CardHeader className="space-y-2 p-4 pb-2">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-xl">{meal.label}</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-base">{meal.label}</CardTitle>
+            <CardDescription className="mt-1 text-xs">
               {translateWithVars(
                 t,
                 'kitchen.targetSummary',
@@ -127,15 +136,15 @@ const KitchenMealCard = ({ meal }: { meal: KitchenMealPreview }) => {
           </Badge>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4 pt-2">
         {meal.items.length > 0 ? (
-          <ul className="space-y-3">
+          <ul className="space-y-2">
             {meal.items.map((item) => (
               <li
                 key={`${meal.key}-${item.id}`}
-                className="flex items-center justify-between rounded-lg bg-muted/50 px-4 py-3"
+                className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2"
               >
-                <span className="font-medium">{item.name}</span>
+                <span className="text-sm font-medium">{item.name}</span>
                 <span className="text-sm text-muted-foreground">
                   {item.amountLabel}
                 </span>
@@ -143,7 +152,7 @@ const KitchenMealCard = ({ meal }: { meal: KitchenMealPreview }) => {
             ))}
           </ul>
         ) : (
-          <p className="rounded-lg bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+          <p className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
             {t(
               'kitchen.noPlannedFoodsForMeal',
               'No planned foods for this meal yet.'
@@ -155,42 +164,156 @@ const KitchenMealCard = ({ meal }: { meal: KitchenMealPreview }) => {
   );
 };
 
-const KitchenIngredientSummaryCard = ({
+const KitchenIngredientSummaryList = ({
+  items,
+  maxItems,
+}: {
+  items: KitchenIngredientSummaryItem[];
+  maxItems?: number;
+}) => {
+  const visibleItems = maxItems ? items.slice(0, maxItems) : items;
+
+  if (visibleItems.length === 0) return null;
+
+  return (
+    <ul className="divide-y rounded-lg border">
+      {visibleItems.map((item) => (
+        <li
+          key={item.key}
+          className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-start sm:justify-between"
+        >
+          <div>
+            <p className="text-sm font-medium">{item.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {item.sourceLabels.join(' · ')}
+            </p>
+          </div>
+          <span className="text-sm font-semibold tabular-nums">
+            {item.amountLabel}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+};
+
+const WeeklyPrepCommandBar = ({
+  items,
+}: {
+  items: KitchenIngredientSummaryItem[];
+}) => {
+  const { t } = useTranslation();
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (items.length === 0) return null;
+
+  const ingredientCountLabel =
+    items.length === 1
+      ? t('kitchen.ingredientCountSingular', '1 ingredient')
+      : translateWithVars(
+          t,
+          'kitchen.ingredientCountPlural',
+          '{{count}} ingredients',
+          { count: items.length }
+        );
+  const previewItems = items.slice(0, 3);
+
+  return (
+    <section
+      className="rounded-lg border bg-card px-4 py-3"
+      aria-label={t('kitchen.weeklyPrep', 'Weekly Prep')}
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">
+            {t('kitchen.weeklyPrep', 'Weekly Prep')}
+          </span>
+          <Badge variant="secondary">{ingredientCountLabel}</Badge>
+          <span className="text-sm text-muted-foreground">
+            {previewItems
+              .map((item) => `${item.name} ${item.amountLabel}`)
+              .join(' · ')}
+          </span>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          aria-expanded={isExpanded}
+          aria-controls="kitchen-weekly-prep-details"
+          onClick={() => setIsExpanded((current) => !current)}
+        >
+          {isExpanded ? (
+            <ChevronUp className="mr-2 h-4 w-4" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="mr-2 h-4 w-4" aria-hidden="true" />
+          )}
+          {isExpanded
+            ? t('kitchen.hideWeeklyIngredientTotals', 'Hide weekly totals')
+            : t(
+                'kitchen.viewWeeklyIngredientTotals',
+                'View weekly ingredient totals'
+              )}
+        </Button>
+      </div>
+      {isExpanded ? (
+        <div id="kitchen-weekly-prep-details" className="mt-3">
+          <KitchenIngredientSummaryList items={items} />
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
+const KitchenDailySummary = ({
   title,
-  description,
+  day,
   items,
 }: {
   title: string;
-  description: string;
+  day: KitchenDayPreview;
   items: KitchenIngredientSummaryItem[];
 }) => {
-  if (items.length === 0) return null;
+  const { t } = useTranslation();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+    <Card data-testid="kitchen-daily-summary">
+      <CardHeader className="p-4 pb-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="text-lg">{title}</CardTitle>
+            <CardDescription>
+              <span>{day.weekdayLabel}</span>
+              <span aria-hidden="true"> · </span>
+              <span>{day.date}</span>
+            </CardDescription>
+          </div>
+          <Badge>{day.dayTypeLabel}</Badge>
+        </div>
       </CardHeader>
-      <CardContent>
-        <ul className="divide-y rounded-lg border">
-          {items.map((item) => (
-            <li
-              key={item.key}
-              className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
-            >
-              <div>
-                <p className="font-medium">{item.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {item.sourceLabels.join(' · ')}
-                </p>
-              </div>
-              <span className="font-semibold tabular-nums">
-                {item.amountLabel}
-              </span>
-            </li>
-          ))}
-        </ul>
+      <CardContent className="grid gap-3 p-4 pt-0 lg:grid-cols-[1fr_1.15fr]">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <KitchenMetric
+            label={t('nutrition.calories', 'Calories')}
+            value={`${formatMacro(day.targetCalories)} ${t('common.kcal', 'kcal')}`}
+          />
+          <KitchenMetric
+            label={t('nutrition.carbs', 'Carbs')}
+            value={`${formatMacro(day.targetCarbs)}g ${t('nutrition.carbs', 'carbs')}`}
+          />
+          <KitchenMetric
+            label={t('nutrition.protein', 'Protein')}
+            value={`${formatMacro(day.targetProtein)}g ${t('nutrition.protein', 'protein')}`}
+          />
+          <KitchenMetric
+            label={t('nutrition.fat', 'Fat')}
+            value={`${formatMacro(day.targetFat)}g ${t('nutrition.fat', 'fat')}`}
+          />
+        </div>
+        {items.length > 0 ? (
+          <KitchenIngredientSummaryList items={items} />
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -326,11 +449,14 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
 
       {week && selectedDay ? (
         <>
+          <WeeklyPrepCommandBar items={weeklyIngredientSummary} />
+
           <section aria-label="Kitchen week">
             <div
               role="tablist"
               aria-label={t('kitchen.selectDate', 'Select kitchen date')}
-              className="flex gap-3 overflow-x-auto pb-2"
+              data-testid="kitchen-date-tabs"
+              className="flex gap-2 overflow-x-auto pb-2"
             >
               {week.days.map((day) => (
                 <KitchenDayTab
@@ -342,61 +468,16 @@ export default function Kitchen({ todayOverride }: KitchenProps) {
             </div>
           </section>
 
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle>{selectedDay.weekdayLabel}</CardTitle>
-                  <CardDescription>{selectedDay.date}</CardDescription>
-                </div>
-                <Badge>{selectedDay.dayTypeLabel}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <KitchenMetric
-                  label={t('nutrition.calories', 'Calories')}
-                  value={`${formatMacro(selectedDay.targetCalories)} ${t('common.kcal', 'kcal')}`}
-                />
-                <KitchenMetric
-                  label={t('nutrition.carbs', 'Carbs')}
-                  value={`${formatMacro(selectedDay.targetCarbs)}g ${t('nutrition.carbs', 'carbs')}`}
-                />
-                <KitchenMetric
-                  label={t('nutrition.protein', 'Protein')}
-                  value={`${formatMacro(selectedDay.targetProtein)}g ${t('nutrition.protein', 'protein')}`}
-                />
-                <KitchenMetric
-                  label={t('nutrition.fat', 'Fat')}
-                  value={`${formatMacro(selectedDay.targetFat)}g ${t('nutrition.fat', 'fat')}`}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <KitchenIngredientSummaryCard
-            title={t('kitchen.dailyPrep', 'Daily Prep')}
-            description={translateWithVars(
-              t,
-              'kitchen.dailyPrepDescription',
-              'Ingredients needed for {{day}}.',
-              { day: selectedDay.weekdayLabel }
-            )}
+          <KitchenDailySummary
+            title={t('kitchen.dailySummary', 'Daily Summary')}
+            day={selectedDay}
             items={dailyIngredientSummary}
           />
 
-          <KitchenIngredientSummaryCard
-            title={t('kitchen.weeklyPrep', 'Weekly Prep')}
-            description={t(
-              'kitchen.weeklyPrepDescription',
-              'Total ingredients for this week.'
-            )}
-            items={weeklyIngredientSummary}
-          />
-
           <section
-            className="grid gap-4"
+            className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
             aria-label={`${selectedDay.weekdayLabel} meals`}
+            data-testid="kitchen-meal-grid"
           >
             {selectedDay.meals.length > 0 ? (
               selectedDay.meals.map((meal) => (

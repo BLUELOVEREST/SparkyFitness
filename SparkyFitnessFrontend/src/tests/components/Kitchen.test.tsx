@@ -52,7 +52,7 @@ describe('Kitchen', () => {
     ).toHaveAttribute('href', '/foods');
   });
 
-  it('renders weekday tabs, target macros, and planned food amounts after selecting Tuesday', async () => {
+  it('renders compact weekday tabs, a daily summary, and meal cards after selecting Tuesday', async () => {
     mockGetMealPlanTemplates.mockResolvedValue([
       {
         id: 'plan-1',
@@ -133,24 +133,28 @@ describe('Kitchen', () => {
     expect(
       screen.getByText('Target C 39.2g / P 30g / F 0g / 277 kcal')
     ).toBeInTheDocument();
+    expect(screen.getByTestId('kitchen-date-tabs')).toHaveClass('gap-2');
+    expect(screen.getByTestId('kitchen-daily-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('kitchen-meal-grid')).toHaveClass(
+      'lg:grid-cols-4'
+    );
     expect(
-      screen.getByRole('heading', { name: 'Daily Prep' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('Ingredients needed for Tuesday.')
+      screen.getByRole('heading', { name: 'Daily Summary' })
     ).toBeInTheDocument();
     expect(screen.getAllByText('Tuesday Pre-Workout').length).toBeGreaterThan(
       0
     );
+    expect(screen.getByText('Weekly Prep')).toBeInTheDocument();
+    expect(screen.getByText('1 ingredient')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Weekly Prep' })
-    ).toBeInTheDocument();
+      screen.queryByText('Total ingredients for this week.')
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByText('Total ingredients for this week.')
+      screen.getByRole('button', { name: /View weekly ingredient totals/i })
     ).toBeInTheDocument();
   });
 
-  it('summarizes weekly ingredients across the active meal plan week', async () => {
+  it('keeps weekly ingredients collapsed until requested', async () => {
     mockGetMealPlanTemplates.mockResolvedValue([
       {
         id: 'plan-1',
@@ -208,9 +212,14 @@ describe('Kitchen', () => {
     renderKitchen();
 
     expect(await screen.findByText('Eric carb cycle')).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Weekly Prep' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('Weekly Prep')).toBeInTheDocument();
+    expect(screen.getByText('1 ingredient')).toBeInTheDocument();
+    expect(screen.queryByText('350g')).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /View weekly ingredient totals/i })
+    );
+
     expect(screen.getByText('350g')).toBeInTheDocument();
     expect(
       screen.getByText('Monday Breakfast · Tuesday Dinner')

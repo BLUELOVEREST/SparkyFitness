@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -69,6 +70,9 @@ const WorkoutPresetsManager = () => {
     useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<WorkoutPreset | null>(
+    null
+  );
+  const [viewingPreset, setViewingPreset] = useState<WorkoutPreset | null>(
     null
   );
 
@@ -419,6 +423,7 @@ const WorkoutPresetsManager = () => {
             <DataTable
               titleColumnId="name"
               getRowId={(row) => row.id.toString()}
+              onRowClick={setViewingPreset}
               onRowDoubleClick={(preset) => {
                 if (preset.user_id === user?.id) {
                   setSelectedPreset(preset);
@@ -470,6 +475,108 @@ const WorkoutPresetsManager = () => {
           <WorkoutPresetSelector
             onPresetSelected={handleStartWorkoutPlayback}
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!viewingPreset}
+        onOpenChange={(open) => !open && setViewingPreset(null)}
+      >
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewingPreset?.name}</DialogTitle>
+            <DialogDescription>
+              {viewingPreset?.description ||
+                t(
+                  'workoutPresetsManager.noDescriptionProvided',
+                  'No description provided.'
+                )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingPreset && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-md border p-3">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t('workoutPresetsManager.exercises', 'Exercises')}
+                  </div>
+                  <div className="mt-1 font-semibold">
+                    {viewingPreset.exercises?.length ?? 0}
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t('workoutPresetsManager.stats', 'Stats')}
+                  </div>
+                  <div className="mt-1 font-semibold">
+                    {viewingPreset.exercises?.reduce(
+                      (sum, exercise) => sum + (exercise.sets?.length ?? 0),
+                      0
+                    ) ?? 0}{' '}
+                    {t('workoutPresetsManager.sets', 'sets')}
+                  </div>
+                </div>
+              </div>
+
+              {viewingPreset.exercises?.length ? (
+                <div className="space-y-3">
+                  {viewingPreset.exercises.map((exercise, index) => (
+                    <div
+                      key={`${exercise.exercise_id}-${index}`}
+                      className="rounded-md border p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h4 className="font-semibold">
+                            {exercise.exercise_name}
+                          </h4>
+                          {exercise.category && (
+                            <p className="text-xs text-muted-foreground capitalize">
+                              {exercise.category}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant="secondary" className="font-normal">
+                          {exercise.sets?.length ?? 0}{' '}
+                          {t('workoutPresetsManager.sets', 'sets')}
+                        </Badge>
+                      </div>
+                      {exercise.sets?.length ? (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          {exercise.sets.map((set, setIndex) => (
+                            <div
+                              key={`${exercise.exercise_id}-${setIndex}`}
+                              className="rounded bg-muted/50 px-3 py-2 text-xs text-muted-foreground"
+                            >
+                              <span className="font-medium text-foreground">
+                                {t('workoutPresetsManager.setNumber', {
+                                  number: setIndex + 1,
+                                  defaultValue: `Set ${setIndex + 1}`,
+                                })}
+                              </span>
+                              : {set.reps ?? 0} reps
+                              {set.weight != null &&
+                                ` · ${formatWeight(set.weight, weightUnit)}`}
+                              {set.duration != null &&
+                                ` · ${Math.round(set.duration / 60)} min`}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {t(
+                    'workoutPresetsManager.noExercisesInPreset',
+                    'No exercises in this preset.'
+                  )}
+                </p>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

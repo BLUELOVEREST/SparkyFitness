@@ -4,6 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -134,6 +141,8 @@ const ExerciseDatabaseManager = () => {
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
 
   const [isAddExerciseDialogOpen, setIsAddExerciseDialogOpen] = useState(false);
+  const [viewingExercise, setViewingExercise] =
+    useState<ExerciseInterface | null>(null);
 
   const editableExerciseIds = (data?.exercises || [])
     .filter((ex) => ex.user_id === user?.id)
@@ -535,6 +544,7 @@ const ExerciseDatabaseManager = () => {
             <DataTable
               titleColumnId="name"
               getRowId={(row) => row.id}
+              onRowClick={setViewingExercise}
               onRowDoubleClick={(ex) => {
                 if (ex.user_id === user?.id) editForm.openEditDialog(ex);
               }}
@@ -639,6 +649,144 @@ const ExerciseDatabaseManager = () => {
       )}
 
       <EditExerciseDialog form={editForm} />
+
+      <Dialog
+        open={!!viewingExercise}
+        onOpenChange={(open) => !open && setViewingExercise(null)}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewingExercise?.name}</DialogTitle>
+            <DialogDescription>
+              {viewingExercise?.description ||
+                t(
+                  'exercise.databaseManager.noDescriptionProvided',
+                  'No description provided.'
+                )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingExercise && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-md border p-3">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t('exercise.databaseManager.category', 'Category')}
+                  </div>
+                  <div className="mt-1 capitalize">
+                    {viewingExercise.category ||
+                      t('common.notAvailable', 'Not available')}
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t('exercise.databaseManager.energy', 'Energy')}
+                  </div>
+                  <div className="mt-1">
+                    {Math.round(
+                      convertEnergy(
+                        viewingExercise.calories_per_hour ?? 0,
+                        'kcal',
+                        energyUnit
+                      )
+                    )}{' '}
+                    {getEnergyUnitString(energyUnit)}/h
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t('exercise.addExerciseDialog.sourceLabel', 'Source')}
+                  </div>
+                  <div className="mt-1">
+                    {viewingExercise.source ||
+                      t('common.notAvailable', 'Not available')}
+                  </div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t('exercise.addExerciseDialog.levelLabel', 'Level')}
+                  </div>
+                  <div className="mt-1 capitalize">
+                    {viewingExercise.level ||
+                      t('common.notAvailable', 'Not available')}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 text-sm">
+                <div>
+                  <h4 className="font-semibold mb-2">
+                    {t(
+                      'exercise.addExerciseDialog.primaryMusclesLabel',
+                      'Primary Muscles'
+                    )}
+                  </h4>
+                  <p className="text-muted-foreground">
+                    {viewingExercise.primary_muscles?.length
+                      ? viewingExercise.primary_muscles.join(', ')
+                      : t('common.notAvailable', 'Not available')}
+                  </p>
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-2">
+                    {t(
+                      'exercise.addExerciseDialog.secondaryMusclesLabel',
+                      'Secondary Muscles'
+                    )}
+                  </h4>
+                  <p className="text-muted-foreground">
+                    {viewingExercise.secondary_muscles?.length
+                      ? viewingExercise.secondary_muscles.join(', ')
+                      : t('common.notAvailable', 'Not available')}
+                  </p>
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-2">
+                    {t(
+                      'exercise.addExerciseDialog.equipmentLabel',
+                      'Equipment'
+                    )}
+                  </h4>
+                  <p className="text-muted-foreground">
+                    {viewingExercise.equipment?.length
+                      ? viewingExercise.equipment.join(', ')
+                      : t('common.notAvailable', 'Not available')}
+                  </p>
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-2">
+                    {t('exercise.addExerciseDialog.mechanicLabel', 'Mechanic')}
+                  </h4>
+                  <p className="text-muted-foreground capitalize">
+                    {viewingExercise.mechanic ||
+                      t('common.notAvailable', 'Not available')}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold mb-2">
+                  {t(
+                    'exercise.addExerciseDialog.instructionsLabel',
+                    'Instructions'
+                  )}
+                </h4>
+                {viewingExercise.instructions?.length ? (
+                  <ol className="list-decimal pl-5 space-y-1 text-sm text-muted-foreground">
+                    {viewingExercise.instructions.map((instruction, index) => (
+                      <li key={`${index}-${instruction}`}>{instruction}</li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {t('common.notAvailable', 'Not available')}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {showSyncConfirmation && (
         <ConfirmationDialog

@@ -621,6 +621,7 @@ const FoodDatabaseManager = () => {
           <DataTable
             titleColumnId="name"
             getRowId={(row) => row.id}
+            onRowClick={setViewingFood}
             onRowDoubleClick={setViewingFood}
             onSortingChange={(sorting) => {
               if (sorting.length > 0) {

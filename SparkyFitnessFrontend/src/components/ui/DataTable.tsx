@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type MouseEvent } from 'react';
 import {
   ColumnDef,
   flexRender,
@@ -33,6 +33,7 @@ interface DataTableProps<TData, TValue> {
   onPaginationChange?: (pageIndex: number, pageSize: number) => void;
   onSortingChange?: (sorting: SortingState) => void;
   onRowSelectionChange?: (selection: RowSelectionState) => void;
+  onRowClick?: (row: TData) => void;
   onRowDoubleClick?: (row: TData) => void;
   getRowId?: (row: TData) => string;
   manualPagination?: boolean;
@@ -69,6 +70,7 @@ export function DataTable<TData, TValue>({
   onPaginationChange,
   onSortingChange,
   onRowSelectionChange,
+  onRowClick,
   onRowDoubleClick,
   getRowId,
   manualPagination = false,
@@ -150,6 +152,20 @@ export function DataTable<TData, TValue>({
     return visibleColumns.find((c) => c.id !== 'select' && c.id !== 'actions')
       ?.id;
   }, [table, titleColumnId]);
+
+  const handleRowClick = (event: MouseEvent, row: TData) => {
+    if (!onRowClick) return;
+    const target = event.target;
+    if (
+      target instanceof HTMLElement &&
+      target.closest(
+        'button, a, input, select, textarea, [role="button"], [role="menuitem"], [role="checkbox"]'
+      )
+    ) {
+      return;
+    }
+    onRowClick(row);
+  };
 
   return (
     <div className="space-y-4">
@@ -240,9 +256,10 @@ export function DataTable<TData, TValue>({
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && 'selected'}
+                    onClick={(event) => handleRowClick(event, row.original)}
                     onDoubleClick={() => onRowDoubleClick?.(row.original)}
                     className={cn(
-                      onRowDoubleClick &&
+                      (onRowClick || onRowDoubleClick) &&
                         'cursor-pointer select-none transition-colors hover:bg-muted/50',
                       isLoading && 'opacity-70 grayscale-[0.3]'
                     )}
@@ -295,12 +312,13 @@ export function DataTable<TData, TValue>({
             {table.getRowModel().rows.map((row) => (
               <Card
                 key={row.id}
+                onClick={(event) => handleRowClick(event, row.original)}
                 onDoubleClick={() => onRowDoubleClick?.(row.original)}
                 className={`transition-all duration-200 border-2 overflow-hidden shadow-sm ${
                   row.getIsSelected()
                     ? 'border-blue-500 bg-blue-50/30 dark:bg-blue-900/10'
                     : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900'
-                } ${onRowDoubleClick ? 'active:scale-[0.98]' : ''} ${
+                } ${onRowClick || onRowDoubleClick ? 'active:scale-[0.98]' : ''} ${
                   isLoading ? 'opacity-70 grayscale-[0.3]' : ''
                 }`}
               >
@@ -319,10 +337,7 @@ export function DataTable<TData, TValue>({
                           : null;
                       })()}
 
-                      <div
-                        className="truncate font-bold text-gray-900 dark:text-gray-100 text-sm flex-1"
-                        onClick={() => onRowDoubleClick?.(row.original)}
-                      >
+                      <div className="truncate font-bold text-gray-900 dark:text-gray-100 text-sm flex-1">
                         {(() => {
                           const titleCell = row
                             .getVisibleCells()
