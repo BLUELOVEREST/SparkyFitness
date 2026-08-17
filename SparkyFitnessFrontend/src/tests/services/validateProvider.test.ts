@@ -1,5 +1,7 @@
 import { ExternalDataProvider } from '@/pages/Settings/ExternalProviderSettings';
 import {
+  getSelectableProviderTypeOptions,
+  providerUsesBaseUrl,
   resolveProviderCredentialPayload,
   validateProvider,
 } from '@/utils/settings';
@@ -219,5 +221,32 @@ describe('resolveProviderCredentialPayload', () => {
     );
     expect(result.app_id).toBe('packed-app-id');
     expect(result.app_key).toBe('packed-app-key');
+  });
+});
+
+describe('provider type UI helpers', () => {
+  const providerTypes = [
+    {
+      id: 'openfoodfacts',
+      display_name: 'Open Food Facts',
+      is_strictly_private: false,
+    },
+    {
+      id: 'grocy',
+      display_name: 'Grocy',
+      is_strictly_private: true,
+    },
+  ];
+
+  it('keeps Grocy selectable when editing global providers as admin', () => {
+    expect(
+      getSelectableProviderTypeOptions(providerTypes, true).map(
+        (type) => type.value
+      )
+    ).toContain('grocy');
+  });
+
+  it('treats Grocy as a provider that stores a base URL', () => {
+    expect(providerUsesBaseUrl('grocy')).toBe(true);
   });
 });

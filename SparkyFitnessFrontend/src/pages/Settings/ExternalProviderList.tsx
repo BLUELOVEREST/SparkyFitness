@@ -16,6 +16,7 @@ import {
   decodeYazioAppId,
   encodeYazioAppId,
   encodeYazioAppKey,
+  providerUsesBaseUrl,
   resolveProviderCredentialPayload,
 } from '@/utils/settings';
 
@@ -231,14 +232,9 @@ const ExternalProviderList = ({
       app_id,
       app_key,
       is_active: editData.is_active,
-      base_url:
-        editData.provider_type === 'mealie' ||
-        editData.provider_type === 'tandoor' ||
-        editData.provider_type === 'norish' ||
-        editData.provider_type === 'free-exercise-db' ||
-        editData.provider_type === 'openfoodfacts'
-          ? editData.base_url || null
-          : null,
+      base_url: providerUsesBaseUrl(editData.provider_type)
+        ? editData.base_url || null
+        : null,
       withings_last_sync_at:
         editData.provider_type === 'withings'
           ? editData.withings_last_sync_at
@@ -307,6 +303,7 @@ const ExternalProviderList = ({
             data.provider_type === 'mealie' ||
             data.provider_type === 'tandoor' ||
             data.provider_type === 'norish' ||
+            data.provider_type === 'grocy' ||
             data.provider_type === 'usda' ||
             data.provider_type === 'yazio')
         ) {

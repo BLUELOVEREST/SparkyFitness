@@ -56,6 +56,43 @@ const OAUTH_TOKEN_PROVIDERS = [
   'polar',
 ];
 
+const PROVIDERS_WITH_BASE_URL = [
+  'mealie',
+  'tandoor',
+  'norish',
+  'grocy',
+  'free-exercise-db',
+  'openfoodfacts',
+];
+
+export const providerUsesBaseUrl = (providerType?: string | null) =>
+  PROVIDERS_WITH_BASE_URL.includes(providerType || '');
+
+export const providerUsesStoredApiKey = (providerType?: string | null) =>
+  [
+    'mealie',
+    'tandoor',
+    'norish',
+    'grocy',
+    'nutritionix',
+    'fatsecret',
+    'withings',
+  ].includes(providerType || '');
+
+export const getSelectableProviderTypeOptions = (
+  providerTypes: Array<{
+    id: string;
+    display_name: string;
+    is_strictly_private?: boolean | null;
+  }> = [],
+  _isAdminMode = false
+) =>
+  providerTypes.map((type) => ({
+    value: type.id,
+    label: type.display_name,
+    is_strictly_private: type.is_strictly_private,
+  }));
+
 export const encodeYazioAppId = (
   username?: string | null,
   clientId?: string | null

@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import type { ExternalDataProvider } from './ExternalProviderSettings';
 import { toast } from '@/hooks/use-toast';
 import { useExternalProviderTypesQuery } from '@/hooks/Settings/useExternalProviderSettings';
+import { getSelectableProviderTypeOptions } from '@/utils/settings';
 
 interface EditProviderFormProps {
   provider: ExternalDataProvider;
@@ -80,18 +81,13 @@ export const EditProviderForm = ({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(providerTypes || [])
-                .map((type) => ({
-                  value: type.id,
-                  label: type.display_name,
-                  is_strictly_private: type.is_strictly_private,
-                }))
-                .filter((type) => !isAdminMode || !type.is_strictly_private)
-                .map((type) => (
+              {getSelectableProviderTypeOptions(providerTypes, isAdminMode).map(
+                (type) => (
                   <SelectItem key={type.value} value={type.value}>
                     {type.label}
                   </SelectItem>
-                ))}
+                )
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -185,7 +181,8 @@ export const EditProviderForm = ({
       )}
       {(editData.provider_type === 'mealie' ||
         editData.provider_type === 'tandoor' ||
-        editData.provider_type === 'norish') && (
+        editData.provider_type === 'norish' ||
+        editData.provider_type === 'grocy') && (
         <>
           <div>
             <Label>App URL</Label>
@@ -199,11 +196,13 @@ export const EditProviderForm = ({
                 }))
               }
               placeholder={
-                editData.provider_type === 'norish'
-                  ? 'e.g., https://norish.your-domain.com'
-                  : editData.provider_type === 'tandoor'
-                    ? 'e.g., http://your-tandoor-instance.com'
-                    : 'e.g., http://your-mealie-instance.com'
+                editData.provider_type === 'grocy'
+                  ? 'e.g., http://your-grocy-instance.com'
+                  : editData.provider_type === 'norish'
+                    ? 'e.g., https://norish.your-domain.com'
+                    : editData.provider_type === 'tandoor'
+                      ? 'e.g., http://your-tandoor-instance.com'
+                      : 'e.g., http://your-mealie-instance.com'
               }
               autoComplete="off"
             />
@@ -220,11 +219,13 @@ export const EditProviderForm = ({
                 }))
               }
               placeholder={
-                editData.provider_type === 'norish'
-                  ? 'Enter Norish API Key'
-                  : editData.provider_type === 'tandoor'
-                    ? 'Enter Tandoor API Key'
-                    : 'Enter Mealie API Key'
+                editData.provider_type === 'grocy'
+                  ? 'Enter Grocy API Key'
+                  : editData.provider_type === 'norish'
+                    ? 'Enter Norish API Key'
+                    : editData.provider_type === 'tandoor'
+                      ? 'Enter Tandoor API Key'
+                      : 'Enter Mealie API Key'
               }
               autoComplete="off"
             />

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Trash2, Edit, Lock, RefreshCw, Link2Off } from 'lucide-react';
 import { decodeYazioAppId } from '@/utils/settings';
+import { providerUsesStoredApiKey } from '@/utils/settings';
 import { useExternalProviderTypesQuery } from '@/hooks/Settings/useExternalProviderSettings';
 import SyncRangeDialog from './SyncRangeDialog';
 
@@ -266,6 +267,7 @@ export const ProviderCard = ({
             data.provider_type === 'mealie' ||
             data.provider_type === 'tandoor' ||
             data.provider_type === 'norish' ||
+            data.provider_type === 'grocy' ||
             data.provider_type === 'usda' ||
             data.provider_type === 'yazio')
         ) {
@@ -526,14 +528,7 @@ export const ProviderCard = ({
                 : provider.app_id.substring(0, 4)
             }...`}
           {provider.app_key &&
-            [
-              'mealie',
-              'tandoor',
-              'norish',
-              'nutritionix',
-              'fatsecret',
-              'withings',
-            ].includes(provider.provider_type) &&
+            providerUsesStoredApiKey(provider.provider_type) &&
             ` - App Key: ${provider.app_key.substring(0, 4)}...`}
           {provider.sync_frequency && ` - Sync: ${provider.sync_frequency}`}
         </p>

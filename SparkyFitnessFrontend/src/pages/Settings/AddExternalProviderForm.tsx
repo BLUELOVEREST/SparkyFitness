@@ -30,6 +30,7 @@ import {
 import {
   encodeYazioAppId,
   encodeYazioAppKey,
+  getSelectableProviderTypeOptions,
   validateProvider,
 } from '@/utils/settings';
 import { ProviderSpecificFields } from './ProviderSpecificFields';
@@ -305,18 +306,14 @@ const AddExternalProviderForm = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(providerTypes || [])
-                    .map((type) => ({
-                      value: type.id,
-                      label: type.display_name,
-                      is_strictly_private: type.is_strictly_private,
-                    }))
-                    .filter((type) => !isAdminMode || !type.is_strictly_private)
-                    .map((type) => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
-                      </SelectItem>
-                    ))}
+                  {getSelectableProviderTypeOptions(
+                    providerTypes,
+                    isAdminMode
+                  ).map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
