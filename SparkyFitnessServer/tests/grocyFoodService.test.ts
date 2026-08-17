@@ -126,7 +126,7 @@ describe('grocyFoodService', () => {
 
     expect(result).toMatchObject({
       name: '番茄',
-      brand: 'china-food-composition',
+      brand: 'Grocy',
       provider_external_id: '42',
       provider_type: 'grocy',
       provider_verified: true,
@@ -171,6 +171,23 @@ describe('grocyFoodService', () => {
     );
     expect(result).not.toHaveProperty('aliases');
     expect(result).not.toHaveProperty('matched_alias');
+  });
+
+  it('does not expose Grocy internal source labels as the food brand', () => {
+    const result = mapGrocyFood({
+      ...grocyFood,
+      name: '巴沙鱼',
+      source: {
+        provider: 'ai-curated-food-library',
+      },
+    });
+
+    expect(result).toMatchObject({
+      name: '巴沙鱼',
+      brand: 'Grocy',
+      provider_type: 'grocy',
+      provider_verified: true,
+    });
   });
 
   it('does not map incomplete Grocy nutrition as zero nutrition', () => {

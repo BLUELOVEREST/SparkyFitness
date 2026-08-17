@@ -296,7 +296,7 @@ export function mapGrocyFood(food: GrocyFood): NormalizedFood | null {
 
   return {
     name: food.name,
-    brand: food.source?.provider || 'Grocy',
+    brand: 'Grocy',
     provider_external_id: providerExternalId,
     provider_type: 'grocy',
     provider_verified: true,
