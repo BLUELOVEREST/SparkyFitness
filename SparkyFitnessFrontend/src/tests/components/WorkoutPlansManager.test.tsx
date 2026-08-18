@@ -56,6 +56,12 @@ jest.mock('@/hooks/Exercises/useWorkoutPlans', () => ({
             is_primary: true,
           },
           {
+            day_of_week: 2,
+            time_slot: 'evening',
+            training_focus: 'Football',
+            is_primary: false,
+          },
+          {
             day_of_week: 0,
             time_slot: 'evening',
             training_focus: 'Football',
@@ -100,6 +106,14 @@ describe('WorkoutPlansManager', () => {
     expect(monday).toHaveTextContent('Rest');
     expect(tuesday).toHaveTextContent('Morning');
     expect(tuesday).toHaveTextContent('Chest');
+    expect(tuesday).toHaveTextContent('Evening');
+    expect(tuesday).toHaveTextContent('Football');
+    expect(
+      screen.getByTestId('workout-main-session-plan-1-2-morning')
+    ).toHaveTextContent('Chest');
+    expect(
+      screen.getByTestId('workout-main-session-plan-1-2-morning')
+    ).toHaveClass('bg-white');
     expect(sunday).toHaveTextContent('Evening');
     expect(sunday).toHaveTextContent('Football');
   });

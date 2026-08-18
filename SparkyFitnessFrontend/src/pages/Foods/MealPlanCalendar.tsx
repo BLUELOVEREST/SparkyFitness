@@ -574,6 +574,28 @@ const MealPlanCalendar: React.FC = () => {
                     );
                     const macroTargets =
                       viewingTemplate.macro_targets?.[dayOfWeek] ?? [];
+                    const assignmentsByMeal = assignments.reduce(
+                      (grouped, assignment) => {
+                        const existing = grouped.get(assignment.meal_type);
+                        if (existing) {
+                          existing.push(assignment);
+                        } else {
+                          grouped.set(assignment.meal_type, [assignment]);
+                        }
+                        return grouped;
+                      },
+                      new Map<string, typeof assignments>()
+                    );
+                    const targetMealTypes = macroTargets.map(
+                      (target) => target.label
+                    );
+                    const assignmentMealTypes = Array.from(
+                      assignmentsByMeal.keys()
+                    ).filter((mealType) => !targetMealTypes.includes(mealType));
+                    const mealTypes = [
+                      ...targetMealTypes,
+                      ...assignmentMealTypes,
+                    ];
 
                     return (
                       <div
@@ -584,56 +606,59 @@ const MealPlanCalendar: React.FC = () => {
                         <div className="text-sm font-semibold">
                           {dayLabels[dayOfWeek]}
                         </div>
-                        {assignments.length === 0 &&
-                        macroTargets.length === 0 ? (
+                        {mealTypes.length === 0 ? (
                           <p className="mt-2 text-sm text-muted-foreground">
-                            {t('mealPlanCalendar.restDay', 'Rest')}
+                            {t(
+                              'mealPlanCalendar.noMealsPlanned',
+                              'No meals planned'
+                            )}
                           </p>
                         ) : (
                           <div className="mt-2 space-y-1.5">
-                            {assignments.map((assignment, index) => (
-                              <div
-                                key={`${assignment.meal_type}-${assignment.food_id ?? assignment.meal_id ?? index}`}
-                                className="rounded bg-muted/50 px-2 py-1.5 text-xs"
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <span className="font-medium">
-                                    {assignment.meal_type}
-                                  </span>
-                                  {assignment.macro_role && (
-                                    <Badge
-                                      variant="outline"
-                                      className="h-5 px-1.5 text-[10px] capitalize"
-                                    >
-                                      {assignment.macro_role}
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="mt-0.5 text-muted-foreground">
-                                  {assignment.food_name ||
+                            {mealTypes.map((mealType) => {
+                              const mealAssignments =
+                                assignmentsByMeal.get(mealType) ?? [];
+                              const foodSummary = mealAssignments
+                                .map((assignment) => {
+                                  const name =
+                                    assignment.food_name ||
                                     assignment.meal_name ||
-                                    t('common.notAvailable', 'Not available')}
-                                  {assignment.quantity != null &&
-                                  assignment.unit
-                                    ? ` · ${assignment.quantity}${assignment.unit}`
-                                    : ''}
-                                </div>
-                              </div>
-                            ))}
-                            {assignments.length === 0 &&
-                              macroTargets.map((target) => (
+                                    t('common.notAvailable', 'Not available');
+                                  const amount =
+                                    assignment.quantity != null &&
+                                    assignment.unit
+                                      ? ` ${assignment.quantity}${assignment.unit}`
+                                      : '';
+                                  return `${name}${amount}`;
+                                })
+                                .join(' · ');
+                              const target = macroTargets.find(
+                                (macroTarget) => macroTarget.label === mealType
+                              );
+
+                              return (
                                 <div
-                                  key={`${dayOfWeek}-${target.slotKey}-${target.label}`}
-                                  className="rounded bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground"
+                                  key={`${dayOfWeek}-${mealType}`}
+                                  data-testid={`meal-plan-day-${dayOfWeek}-${mealType}`}
+                                  className="rounded bg-muted/50 px-2 py-1.5 text-xs"
                                 >
-                                  <span className="font-medium text-foreground">
-                                    {target.label}
-                                  </span>
-                                  : {Math.round(target.carbs)}g C ·{' '}
-                                  {Math.round(target.protein)}g P ·{' '}
-                                  {Math.round(target.fat)}g F
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="rounded-full border border-border bg-background px-2 py-0.5 font-semibold text-foreground">
+                                      {mealType}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {foodSummary ||
+                                        (target
+                                          ? `${Math.round(target.carbs)}g C · ${Math.round(target.protein)}g P · ${Math.round(target.fat)}g F`
+                                          : t(
+                                              'mealPlanCalendar.noFoodsPlanned',
+                                              'No foods planned'
+                                            ))}
+                                    </span>
+                                  </div>
                                 </div>
-                              ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>

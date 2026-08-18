@@ -569,28 +569,30 @@ const WorkoutPlansManager = () => {
                             {focusSessions.map((session, index) => (
                               <div
                                 key={`${session.time_slot}-${index}`}
-                                className="flex items-start justify-between gap-2 rounded bg-muted/50 px-2 py-1.5 text-xs"
+                                className="rounded bg-muted/50 px-2 py-1.5 text-xs"
                               >
-                                <div>
-                                  <span className="font-medium">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                     {timeSlotLabels[session.time_slot]}
                                   </span>
                                   <span className="text-muted-foreground">
-                                    {' '}
-                                    · {session.training_focus}
+                                    ·
+                                  </span>
+                                  <span
+                                    data-testid={
+                                      session.is_primary
+                                        ? `workout-main-session-${viewingPlan.id}-${dayOfWeek}-${session.time_slot}`
+                                        : undefined
+                                    }
+                                    className={
+                                      session.is_primary
+                                        ? 'rounded-full border border-border bg-white px-2 py-0.5 font-semibold text-foreground shadow-sm dark:bg-slate-950'
+                                        : 'font-semibold text-foreground'
+                                    }
+                                  >
+                                    {session.training_focus}
                                   </span>
                                 </div>
-                                {session.is_primary && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="h-5 px-1.5 text-[10px]"
-                                  >
-                                    {t(
-                                      'workoutPlansManager.mainSession',
-                                      'Main'
-                                    )}
-                                  </Badge>
-                                )}
                               </div>
                             ))}
                           </div>

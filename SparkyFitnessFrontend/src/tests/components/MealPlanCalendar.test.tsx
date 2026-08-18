@@ -107,7 +107,7 @@ describe('MealPlanCalendar', () => {
     );
   });
 
-  it('shows meal plan details grouped by configured week order with rest days', async () => {
+  it('shows meal plan details grouped by configured week order and grouped by meal', async () => {
     mockGetMealPlanTemplates.mockResolvedValue([
       {
         id: 'plan-1',
@@ -116,13 +116,49 @@ describe('MealPlanCalendar', () => {
         start_date: '2026-08-17',
         end_date: '2026-08-23',
         is_active: true,
+        macro_targets: {
+          1: [
+            {
+              slotKey: 'morning',
+              label: 'Breakfast',
+              calories: 300,
+              carbs: 30,
+              protein: 30,
+              fat: 10,
+            },
+            {
+              slotKey: 'evening',
+              label: 'Dinner',
+              calories: 450,
+              carbs: 45,
+              protein: 40,
+              fat: 15,
+            },
+          ],
+        },
         assignments: [
           {
             item_type: 'food',
             day_of_week: 2,
-            meal_type: 'Breakfast',
+            meal_type: 'Pre-Workout',
             food_name: 'Noodles',
             quantity: 100,
+            unit: 'g',
+          },
+          {
+            item_type: 'food',
+            day_of_week: 2,
+            meal_type: 'Pre-Workout',
+            food_name: 'Chicken breast',
+            quantity: 180,
+            unit: 'g',
+          },
+          {
+            item_type: 'food',
+            day_of_week: 2,
+            meal_type: 'Pre-Workout',
+            food_name: 'Almonds',
+            quantity: 12,
             unit: 'g',
           },
           {
@@ -156,9 +192,18 @@ describe('MealPlanCalendar', () => {
     expect(tuesday.compareDocumentPosition(sunday)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
-    expect(monday).toHaveTextContent('Rest');
-    expect(tuesday).toHaveTextContent('Breakfast');
-    expect(tuesday).toHaveTextContent('Noodles');
+    expect(monday).not.toHaveTextContent('Rest');
+    expect(monday).toHaveTextContent('Breakfast');
+    expect(monday).toHaveTextContent('Dinner');
+
+    const tuesdayMeal = screen.getByTestId('meal-plan-day-2-Pre-Workout');
+    expect(tuesdayMeal).toHaveTextContent('Pre-Workout');
+    expect(tuesdayMeal).toHaveTextContent(
+      'Noodles 100g · Chicken breast 180g · Almonds 12g'
+    );
+    expect(
+      tuesday.querySelectorAll('[data-testid^="meal-plan-day-2-"]')
+    ).toHaveLength(1);
     expect(sunday).toHaveTextContent('Dinner');
     expect(sunday).toHaveTextContent('Cod');
   });
