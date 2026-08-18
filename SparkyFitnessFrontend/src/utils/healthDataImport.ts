@@ -14,6 +14,7 @@ import {
   detectDecimalFormat,
   resolveDecimalFormat,
   DEFAULT_CSV_FORMAT,
+  EXTRA_BODY_CIRCUMFERENCE_PARTS,
   type CellResult,
   type DecimalFormat,
   type DecimalFormatChoice,
@@ -33,7 +34,15 @@ const SLEEP_NUMERIC_FIELDS = [
 // Numeric columns per import category, used only to auto-detect the decimal
 // format (comma vs. dot) from the file's own data — see detectDecimalFormat.
 export const NUMERIC_COLUMNS_BY_CATEGORY: Record<ImportCategory, string[]> = {
-  measurements: ['weight', 'body_fat', 'height', 'neck', 'waist', 'hips'],
+  measurements: [
+    'weight',
+    'body_fat',
+    'height',
+    'neck',
+    'waist',
+    'hips',
+    ...EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => part.key),
+  ],
   sleep: [...SLEEP_NUMERIC_FIELDS],
   vitals: ['value'],
   activity: ['value'],
@@ -199,6 +208,31 @@ const mapMeasurementRow = (
       };
     }
     items.push({ ...base, type, value: round(cm, 2), unit: 'cm' });
+  }
+
+  for (const part of EXTRA_BODY_CIRCUMFERENCE_PARTS) {
+    const read = readNumber(row, part.key, format);
+    if (!read.ok) return numberError(row, part.key, read.raw);
+    const value = read.value;
+    if (value === undefined) continue;
+    const cm = lengthToCm(value, lengthUnit);
+    if (cm === undefined) {
+      return {
+        items: [],
+        errors: [
+          {
+            error: `Unrecognized length unit '${lengthUnit}'. Use one of: cm, in, m.`,
+            entry: rowSnapshot(row),
+          },
+        ],
+      };
+    }
+    items.push({
+      ...base,
+      type: part.key,
+      value: round(cm, 2),
+      unit: 'cm',
+    });
   }
 
   return { items, errors: [] };

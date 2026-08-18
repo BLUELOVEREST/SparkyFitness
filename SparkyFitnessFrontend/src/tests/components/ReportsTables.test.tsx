@@ -6,6 +6,7 @@ import ReportsTables, {
 } from '@/pages/Reports/ReportsTables';
 import type { DailyExerciseEntry } from '@/types/reports';
 import type {
+  CheckInMeasurementsResponse,
   CustomCategoriesResponse,
   CustomMeasurementsResponse,
 } from '@workspace/shared';
@@ -31,7 +32,7 @@ jest.mock('@/contexts/PreferencesContext', () => ({
       },
     ],
     weightUnit: 'lbs',
-    measurementUnit: 'in',
+    measurementUnit: 'inches',
     energyUnit: 'kcal',
     convertEnergy: (value: number) => value,
     getEnergyUnitString: () => 'kcal',
@@ -76,7 +77,8 @@ const durationOnlyExerciseEntry = {
 
 const renderTable = (
   exerciseEntries: DailyExerciseEntry[] = [],
-  initialTable: TableFilterValue = 'all'
+  initialTable: TableFilterValue = 'all',
+  measurementData: CheckInMeasurementsResponse[] = []
 ) => {
   const Wrapper = () => {
     const [selectedTable, setSelectedTable] =
@@ -85,7 +87,7 @@ const renderTable = (
       <ReportsTables
         tabularData={[baseEntry]}
         exerciseEntries={exerciseEntries}
-        measurementData={[]}
+        measurementData={measurementData}
         customCategories={[]}
         customMeasurementsData={[]}
         prData={undefined}
@@ -101,6 +103,43 @@ const renderTable = (
   };
   return render(<Wrapper />);
 };
+
+describe('ReportsTables body measurements', () => {
+  it('renders extra built-in circumference fields in the measurements table', () => {
+    renderTable([], 'measurements', [
+      {
+        id: 'measurement-1',
+        user_id: 'user-1',
+        entry_date: '2026-05-15',
+        weight: null,
+        neck: null,
+        waist: null,
+        hips: null,
+        steps: null,
+        height: null,
+        body_fat_percentage: null,
+        shoulders: 112,
+        chest: 101,
+        abdomen: 88,
+        left_biceps: 34,
+        right_biceps: 35,
+        left_thigh: 58,
+        right_thigh: 59,
+        left_calf: 38,
+        right_calf: 39,
+        muscle_mass_kg: null,
+        bone_mass_kg: null,
+        body_water_percentage: null,
+      } as CheckInMeasurementsResponse,
+    ]);
+
+    expect(screen.getByText('Shoulders (inches)')).toBeInTheDocument();
+    expect(screen.getByText('Chest (inches)')).toBeInTheDocument();
+    expect(screen.getByText('Left Calf (inches)')).toBeInTheDocument();
+    expect(screen.getByText('44.1 in')).toBeInTheDocument();
+    expect(screen.getByText('15 in')).toBeInTheDocument();
+  });
+});
 
 describe('ReportsTables net carbs', () => {
   beforeEach(() => {

@@ -18,13 +18,16 @@ import { usePreferences } from '@/contexts/PreferencesContext';
 import { info, error } from '@/utils/logging';
 import { parseISO } from 'date-fns';
 import { formatWeight, formatMeasurement } from '@/utils/numberFormatting';
-import { getPrecision } from '@workspace/shared';
+import {
+  CheckInMeasurementsResponse,
+  EXTRA_BODY_CIRCUMFERENCE_PARTS,
+  getPrecision,
+} from '@workspace/shared';
 import {
   calculateSmartYAxisDomain,
   ChartDataPoint,
   getChartConfig,
 } from '@/utils/chartUtils';
-import { CheckInMeasurementsResponse } from '@workspace/shared';
 import type { Widget } from '@/components/widgets/WidgetGrid';
 import type {
   DashboardLayouts,
@@ -40,8 +43,21 @@ const METRIC_WIDGET_KEYS = [
   'neck',
   'waist',
   'hips',
+  ...EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => part.key),
   'height',
   'body_fat_percentage',
+] as const;
+
+const EXTRA_CIRCUMFERENCE_STROKES = [
+  '#2563eb',
+  '#7c3aed',
+  '#dc2626',
+  '#0891b2',
+  '#0d9488',
+  '#ca8a04',
+  '#ea580c',
+  '#65a30d',
+  '#db2777',
 ] as const;
 
 /**
@@ -120,52 +136,70 @@ export function useMeasurementChartWidgets({
   } = usePreferences();
 
   const chartData = React.useMemo(() => {
-    return measurementData.map((d) => ({
-      ...d,
-      date: d.entry_date,
-      rawWeight: d.weight,
-      rawNeck: d.neck,
-      rawWaist: d.waist,
-      rawHips: d.hips,
-      rawHeight: d.height,
-      weight: d.weight
-        ? convertWeight(
-            d.weight,
-            'kg',
-            weightUnit === 'st_lbs' ? 'lbs' : weightUnit
-          )
-        : 0,
-      neck: d.neck
-        ? convertMeasurement(
-            d.neck,
-            'cm',
-            measurementUnit === 'ft_in' ? 'inches' : measurementUnit
-          )
-        : 0,
-      waist: d.waist
-        ? convertMeasurement(
-            d.waist,
-            'cm',
-            measurementUnit === 'ft_in' ? 'inches' : measurementUnit
-          )
-        : 0,
-      hips: d.hips
-        ? convertMeasurement(
-            d.hips,
-            'cm',
-            measurementUnit === 'ft_in' ? 'inches' : measurementUnit
-          )
-        : 0,
-      height: d.height
-        ? convertMeasurement(
-            d.height,
-            'cm',
-            measurementUnit === 'ft_in' ? 'inches' : measurementUnit
-          )
-        : 0,
-      rawBodyFat: d.body_fat_percentage,
-      body_fat_percentage: d.body_fat_percentage || 0,
-    }));
+    return measurementData.map((d) => {
+      const extraCircumferenceValues = EXTRA_BODY_CIRCUMFERENCE_PARTS.reduce<
+        Record<string, number | null>
+      >((values, part) => {
+        const rawValue = d[part.key] ?? null;
+        values[`raw_${part.key}`] = rawValue;
+        values[part.key] = rawValue
+          ? convertMeasurement(
+              rawValue,
+              'cm',
+              measurementUnit === 'ft_in' ? 'inches' : measurementUnit
+            )
+          : 0;
+        return values;
+      }, {});
+
+      return {
+        ...d,
+        ...extraCircumferenceValues,
+        date: d.entry_date,
+        rawWeight: d.weight,
+        rawNeck: d.neck,
+        rawWaist: d.waist,
+        rawHips: d.hips,
+        rawHeight: d.height,
+        weight: d.weight
+          ? convertWeight(
+              d.weight,
+              'kg',
+              weightUnit === 'st_lbs' ? 'lbs' : weightUnit
+            )
+          : 0,
+        neck: d.neck
+          ? convertMeasurement(
+              d.neck,
+              'cm',
+              measurementUnit === 'ft_in' ? 'inches' : measurementUnit
+            )
+          : 0,
+        waist: d.waist
+          ? convertMeasurement(
+              d.waist,
+              'cm',
+              measurementUnit === 'ft_in' ? 'inches' : measurementUnit
+            )
+          : 0,
+        hips: d.hips
+          ? convertMeasurement(
+              d.hips,
+              'cm',
+              measurementUnit === 'ft_in' ? 'inches' : measurementUnit
+            )
+          : 0,
+        height: d.height
+          ? convertMeasurement(
+              d.height,
+              'cm',
+              measurementUnit === 'ft_in' ? 'inches' : measurementUnit
+            )
+          : 0,
+        rawBodyFat: d.body_fat_percentage,
+        body_fat_percentage: d.body_fat_percentage || 0,
+      };
+    });
   }, [
     measurementData,
     weightUnit,
@@ -213,8 +247,28 @@ export function useMeasurementChartWidgets({
     setIsMounted(true);
   }, []);
 
-  const metrics = React.useMemo(
-    () => [
+  const metrics = React.useMemo(() => {
+    const extraCircumferenceMetrics = EXTRA_BODY_CIRCUMFERENCE_PARTS.map(
+      (part, index) => ({
+        key: part.key,
+        titleKey: `reports.${part.key}`,
+        defaultTitle: part.label,
+        dataKey: part.key,
+        rawKey: `raw_${part.key}`,
+        unit: measurementUnit,
+        stroke:
+          EXTRA_CIRCUMFERENCE_STROKES[
+            index % EXTRA_CIRCUMFERENCE_STROKES.length
+          ],
+        icon: Ruler,
+        showHeaderIcon: false,
+        formatValue: (val: number) => formatMeasurement(val, measurementUnit),
+        axisTickFormat: (value: number) =>
+          value.toFixed(getPrecision('measurement', measurementUnit)),
+      })
+    );
+
+    return [
       {
         key: METRIC_WIDGET_KEYS[0],
         titleKey: 'reports.weight',
@@ -271,8 +325,9 @@ export function useMeasurementChartWidgets({
         axisTickFormat: (value: number) =>
           value.toFixed(getPrecision('measurement', measurementUnit)),
       },
+      ...extraCircumferenceMetrics,
       {
-        key: METRIC_WIDGET_KEYS[4],
+        key: 'height',
         titleKey: 'reports.height',
         defaultTitle: 'Height',
         dataKey: 'height',
@@ -286,7 +341,7 @@ export function useMeasurementChartWidgets({
           value.toFixed(getPrecision('measurement', measurementUnit)),
       },
       {
-        key: METRIC_WIDGET_KEYS[5],
+        key: 'body_fat_percentage',
         titleKey: 'reports.bodyFatPercentage',
         defaultTitle: 'Body Fat %',
         dataKey: 'body_fat_percentage',
@@ -298,9 +353,8 @@ export function useMeasurementChartWidgets({
         formatValue: (val: number) => `${val.toFixed(1)}%`,
         axisTickFormat: (value: number) => value.toFixed(1),
       },
-    ],
-    [weightUnit, measurementUnit]
-  );
+    ];
+  }, [weightUnit, measurementUnit]);
 
   return React.useMemo<Widget[]>(() => {
     if (!isMounted) {

@@ -8,13 +8,26 @@ jest.mock('@/contexts/PreferencesContext', () => ({
 }));
 
 import { buildCheckInMeasurementsPayload } from '@/hooks/CheckIn/useCheckInLogic';
-import { CheckInMeasurementsResponse } from '@workspace/shared';
+import {
+  CheckInMeasurementsResponse,
+  EXTRA_BODY_CIRCUMFERENCE_PARTS,
+  ExtraBodyCircumferencePart,
+} from '@workspace/shared';
+
+const emptyBodyCircumferences = Object.fromEntries(
+  EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => [part.key, ''])
+) as Record<ExtraBodyCircumferencePart, string>;
+
+const nullBodyCircumferences = Object.fromEntries(
+  EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => [part.key, null])
+) as Record<ExtraBodyCircumferencePart, null>;
 
 const emptyForm = {
   weight: '',
   neck: '',
   waist: '',
   hips: '',
+  bodyCircumferences: emptyBodyCircumferences,
   steps: '',
   height: '',
   bodyFatPercentage: '',
@@ -33,6 +46,7 @@ const dayRecord = (
   neck: null,
   waist: null,
   hips: null,
+  ...nullBodyCircumferences,
   steps: null,
   height: null,
   body_fat_percentage: null,
@@ -86,6 +100,27 @@ describe('buildCheckInMeasurementsPayload', () => {
     );
 
     expect(payload).toEqual({ entry_date: '2026-07-14', steps: 10500 });
+  });
+
+  it('includes built-in body circumference fields', () => {
+    const payload = buildCheckInMeasurementsPayload(
+      '2026-07-14',
+      {
+        ...emptyForm,
+        bodyCircumferences: {
+          ...emptyBodyCircumferences,
+          shoulders: '112.3',
+          left_calf: '38.2',
+        },
+      },
+      null
+    );
+
+    expect(payload).toEqual({
+      entry_date: '2026-07-14',
+      shoulders: 112.3,
+      left_calf: 38.2,
+    });
   });
 
   it('treats whitespace-only input as empty', () => {

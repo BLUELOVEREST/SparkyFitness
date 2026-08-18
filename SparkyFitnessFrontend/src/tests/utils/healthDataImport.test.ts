@@ -22,16 +22,38 @@ describe('mapRowsToHealthItems', () => {
           neck: '',
           waist: '82',
           hips: '',
+          shoulders: '110',
+          chest: '98',
+          abdomen: '87',
+          left_biceps: '',
+          right_biceps: '',
+          left_thigh: '',
+          right_thigh: '',
+          left_calf: '',
+          right_calf: '',
           length_unit: 'cm',
         }),
       ]);
 
       expect(errors).toEqual([]);
       const types = items.map((i) => i.type).sort();
-      expect(types).toEqual(['body_fat', 'height', 'waist', 'weight']);
+      expect(types).toEqual([
+        'abdomen',
+        'body_fat',
+        'chest',
+        'height',
+        'shoulders',
+        'waist',
+        'weight',
+      ]);
       // No blank column produced a 0-valued item.
       expect(items.find((i) => i.type === 'neck')).toBeUndefined();
       expect(items.find((i) => i.type === 'hips')).toBeUndefined();
+      expect(items.find((i) => i.type === 'chest')).toMatchObject({
+        type: 'chest',
+        value: 98,
+        unit: 'cm',
+      });
     });
 
     it('converts lb -> kg and in -> cm', () => {

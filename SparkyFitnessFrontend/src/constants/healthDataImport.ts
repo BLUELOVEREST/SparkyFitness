@@ -1,4 +1,8 @@
-import { localDateToDay, addDays } from '@workspace/shared';
+import {
+  EXTRA_BODY_CIRCUMFERENCE_PARTS,
+  localDateToDay,
+  addDays,
+} from '@workspace/shared';
 
 // CSV import of historical health data (body measurements, sleep, vitals, daily
 // activity totals, hydration). Rows are parsed client-side and mapped into the
@@ -93,6 +97,7 @@ export const HEALTH_IMPORT_CATEGORIES: HealthImportCategoryConfig[] = [
       'neck',
       'waist',
       'hips',
+      ...EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => part.key),
       'length_unit',
     ],
     dropdownColumns: {
@@ -109,6 +114,15 @@ export const HEALTH_IMPORT_CATEGORIES: HealthImportCategoryConfig[] = [
         neck: '38',
         waist: '82',
         hips: '95',
+        shoulders: '110',
+        chest: '98',
+        abdomen: '87',
+        left_biceps: '33',
+        right_biceps: '33',
+        left_thigh: '57',
+        right_thigh: '57',
+        left_calf: '38',
+        right_calf: '38',
         length_unit: 'cm',
       },
       {
@@ -120,6 +134,15 @@ export const HEALTH_IMPORT_CATEGORIES: HealthImportCategoryConfig[] = [
         neck: '15',
         waist: '32',
         hips: '37',
+        shoulders: '43',
+        chest: '39',
+        abdomen: '34',
+        left_biceps: '13',
+        right_biceps: '13',
+        left_thigh: '22',
+        right_thigh: '22',
+        left_calf: '15',
+        right_calf: '15',
         length_unit: 'in',
       },
     ],

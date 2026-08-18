@@ -1,6 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { CheckInForm } from '@/pages/CheckIn/CheckInForm';
+import {
+  EXTRA_BODY_CIRCUMFERENCE_PARTS,
+  ExtraBodyCircumferencePart,
+} from '@workspace/shared';
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -20,12 +24,18 @@ const emptyPlaceholders = {
   neck: null,
   waist: null,
   hips: null,
+  bodyCircumferences: Object.fromEntries(
+    EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => [part.key, null])
+  ) as Record<ExtraBodyCircumferencePart, null>,
   height: null,
   bodyFatPercentage: null,
 };
 
 const defaultProps = {
   bodyFatPercentage: '',
+  bodyCircumferences: Object.fromEntries(
+    EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => [part.key, ''])
+  ) as Record<ExtraBodyCircumferencePart, string>,
   muscleMassKg: '',
   boneMassKg: '',
   bodyWaterPercentage: '',
@@ -40,6 +50,7 @@ const defaultProps = {
   neck: '',
   placeholders: emptyPlaceholders,
   setBodyFatPercentage: jest.fn(),
+  setBodyCircumferences: jest.fn(),
   setMuscleMassKg: jest.fn(),
   setBoneMassKg: jest.fn(),
   setBodyWaterPercentage: jest.fn(),
@@ -110,6 +121,21 @@ describe('CheckInForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use last' }));
 
     expect(setWeight).toHaveBeenCalledWith('82.5');
+  });
+
+  it('renders built-in body circumference fields', () => {
+    render(
+      <CheckInForm
+        {...defaultProps}
+        bodyCircumferences={{
+          ...defaultProps.bodyCircumferences,
+          shoulders: '112',
+        }}
+      />
+    );
+
+    expect(screen.getByLabelText('Shoulders')).toHaveValue(112);
+    expect(screen.getByLabelText('Left Calf')).toBeInTheDocument();
   });
 
   it('hides "Use last" when the field already has a value', () => {

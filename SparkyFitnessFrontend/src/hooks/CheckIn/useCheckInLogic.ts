@@ -33,6 +33,8 @@ import { CheckInPlaceholders, CombinedMeasurement } from '@/types/checkin';
 import {
   CheckInMeasurementsResponse,
   CustomMeasurementsResponse,
+  EXTRA_BODY_CIRCUMFERENCE_PARTS,
+  ExtraBodyCircumferencePart,
   UpdateCheckInMeasurementsRequest,
   UpdateCustomMeasurementsRequest,
   calculateAge,
@@ -54,6 +56,7 @@ export function buildCheckInMeasurementsPayload(
     neck: string;
     waist: string;
     hips: string;
+    bodyCircumferences: Record<ExtraBodyCircumferencePart, string>;
     steps: string;
     height: string;
     bodyFatPercentage: string;
@@ -71,6 +74,7 @@ export function buildCheckInMeasurementsPayload(
       | 'neck'
       | 'waist'
       | 'hips'
+      | ExtraBodyCircumferencePart
       | 'steps'
       | 'height'
       | 'body_fat_percentage'
@@ -96,6 +100,9 @@ export function buildCheckInMeasurementsPayload(
   apply('neck', form.neck, parseFloat);
   apply('waist', form.waist, parseFloat);
   apply('hips', form.hips, parseFloat);
+  EXTRA_BODY_CIRCUMFERENCE_PARTS.forEach((part) => {
+    apply(part.key, form.bodyCircumferences[part.key], parseFloat);
+  });
   apply('steps', form.steps, (value) => parseInt(value, 10));
   apply('height', form.height, parseFloat);
   apply('body_fat_percentage', form.bodyFatPercentage, parseFloat);
@@ -225,6 +232,17 @@ export const useCheckInLogic = (currentUserId: string | undefined) => {
     return h.toString();
   }, [existingCheckIn?.hips]);
 
+  const derivedBodyCircumferences = useMemo(
+    () =>
+      Object.fromEntries(
+        EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => [
+          part.key,
+          existingCheckIn?.[part.key]?.toString() || '',
+        ])
+      ) as Record<ExtraBodyCircumferencePart, string>,
+    [existingCheckIn]
+  );
+
   const derivedHeight = useMemo(() => {
     const h = existingCheckIn?.height;
     if (h == null) return '';
@@ -308,6 +326,9 @@ export const useCheckInLogic = (currentUserId: string | undefined) => {
   const [neck, setNeck] = useDerivedState<string>(derivedNeck, selectedDate);
   const [waist, setWaist] = useDerivedState<string>(derivedWaist, selectedDate);
   const [hips, setHips] = useDerivedState<string>(derivedHips, selectedDate);
+  const [bodyCircumferences, setBodyCircumferences] = useDerivedState<
+    Record<ExtraBodyCircumferencePart, string>
+  >(derivedBodyCircumferences, selectedDate);
   const [height, setHeight] = useDerivedState<string>(
     derivedHeight,
     selectedDate
@@ -354,6 +375,12 @@ export const useCheckInLogic = (currentUserId: string | undefined) => {
       neck: latestCheckIn?.neck ?? null,
       waist: latestCheckIn?.waist ?? null,
       hips: latestCheckIn?.hips ?? null,
+      bodyCircumferences: Object.fromEntries(
+        EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => [
+          part.key,
+          latestCheckIn?.[part.key] ?? null,
+        ])
+      ) as Record<ExtraBodyCircumferencePart, number | null>,
       height: latestCheckIn?.height ?? null,
       bodyFatPercentage: latestCheckIn?.body_fat_percentage ?? null,
     }),
@@ -427,6 +454,21 @@ export const useCheckInLogic = (currentUserId: string | undefined) => {
           entry_hour: null,
           entry_timestamp: s.updated_at,
         });
+      EXTRA_BODY_CIRCUMFERENCE_PARTS.forEach((part) => {
+        const value = s[part.key];
+        if (value == null) return;
+        allMeasurements.push({
+          id: `${s.id}-${part.key}`,
+          originalId: s.id,
+          entry_date: s.entry_date,
+          value,
+          type: 'standard',
+          display_name: part.label,
+          display_unit: defaultMeasurementUnit,
+          entry_hour: null,
+          entry_timestamp: s.updated_at,
+        });
+      });
       if (s.steps != null)
         allMeasurements.push({
           id: `${s.id}-steps`,
@@ -539,8 +581,13 @@ export const useCheckInLogic = (currentUserId: string | undefined) => {
         case 'Body Fat %':
           fieldToNull = 'body_fat_percentage';
           break;
-        default:
-          return;
+        default: {
+          const extraPart = EXTRA_BODY_CIRCUMFERENCE_PARTS.find(
+            (part) => part.label === measurement.display_name
+          );
+          if (!extraPart) return;
+          fieldToNull = extraPart.key;
+        }
       }
       await updateCheckInMeasurementField({
         id: standardId,
@@ -595,6 +642,7 @@ export const useCheckInLogic = (currentUserId: string | undefined) => {
           neck,
           waist,
           hips,
+          bodyCircumferences,
           steps,
           height,
           bodyFatPercentage,
@@ -775,6 +823,7 @@ export const useCheckInLogic = (currentUserId: string | undefined) => {
 
   return {
     bodyFatPercentage,
+    bodyCircumferences,
     boneMassKg,
     bodyWaterPercentage,
     muscleMassKg,
@@ -795,6 +844,7 @@ export const useCheckInLogic = (currentUserId: string | undefined) => {
     recentMeasurements,
     selectedDate,
     setBodyFatPercentage,
+    setBodyCircumferences,
     setBoneMassKg,
     setBodyWaterPercentage,
     setMuscleMassKg,

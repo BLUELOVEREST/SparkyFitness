@@ -1,4 +1,7 @@
-import { CustomCategoriesResponse } from '@workspace/shared';
+import {
+  CustomCategoriesResponse,
+  ExtraBodyCircumferencePart,
+} from '@workspace/shared';
 import { FastingLog } from './fasting';
 
 // Latest recorded value per standard measurement (metric), shown as input
@@ -8,6 +11,7 @@ export interface CheckInPlaceholders {
   neck: number | null;
   waist: number | null;
   hips: number | null;
+  bodyCircumferences: Record<ExtraBodyCircumferencePart, number | null>;
   height: number | null;
   bodyFatPercentage: number | null;
 }

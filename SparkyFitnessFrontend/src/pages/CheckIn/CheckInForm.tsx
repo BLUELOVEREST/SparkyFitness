@@ -12,7 +12,11 @@ import { Switch } from '@/components/ui/switch';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import { useTranslation } from 'react-i18next';
 import { UnitInput } from '@/components/ui/UnitInput';
-import { CustomCategoriesResponse } from '@workspace/shared';
+import {
+  CustomCategoriesResponse,
+  EXTRA_BODY_CIRCUMFERENCE_PARTS,
+  ExtraBodyCircumferencePart,
+} from '@workspace/shared';
 import { CheckInPlaceholders } from '@/types/checkin';
 import { History } from 'lucide-react';
 
@@ -47,6 +51,7 @@ const UseLastButton: React.FC<UseLastButtonProps> = ({
 
 interface CheckInFormProps {
   bodyFatPercentage: string;
+  bodyCircumferences: Record<ExtraBodyCircumferencePart, string>;
   // Required, not optional: optional props plus `set...?.()` calls previously let
   // these render as permanently-empty inputs without failing typecheck.
   muscleMassKg: string;
@@ -63,6 +68,9 @@ interface CheckInFormProps {
   neck: string;
   placeholders: CheckInPlaceholders;
   setBodyFatPercentage: (value: string) => void;
+  setBodyCircumferences: React.Dispatch<
+    React.SetStateAction<Record<ExtraBodyCircumferencePart, string>>
+  >;
   setMuscleMassKg: (value: string) => void;
   setBoneMassKg: (value: string) => void;
   setBodyWaterPercentage: (value: string) => void;
@@ -84,6 +92,7 @@ interface CheckInFormProps {
 
 export const CheckInForm: React.FC<CheckInFormProps> = ({
   bodyFatPercentage,
+  bodyCircumferences,
   muscleMassKg,
   boneMassKg,
   bodyWaterPercentage,
@@ -98,6 +107,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
   neck,
   placeholders,
   setBodyFatPercentage,
+  setBodyCircumferences,
   setMuscleMassKg,
   setBoneMassKg,
   setBodyWaterPercentage,
@@ -241,6 +251,38 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                 onChange={(val) => setHips(val !== null ? val.toString() : '')}
               />
             </div>
+            {EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => (
+              <div key={part.key}>
+                <div className="mb-1 flex items-center justify-between">
+                  <Label htmlFor={part.key}>
+                    {t(`checkIn.${part.key}`, part.label)}
+                  </Label>
+                  <UseLastButton
+                    value={bodyCircumferences[part.key] || ''}
+                    lastValue={placeholders.bodyCircumferences[part.key]}
+                    onAdopt={(value) =>
+                      setBodyCircumferences((prev) => ({
+                        ...prev,
+                        [part.key]: value,
+                      }))
+                    }
+                  />
+                </div>
+                <UnitInput
+                  id={part.key}
+                  type="measurement"
+                  unit={defaultMeasurementUnit}
+                  value={bodyCircumferences[part.key] || ''}
+                  placeholderValue={placeholders.bodyCircumferences[part.key]}
+                  onChange={(val) =>
+                    setBodyCircumferences((prev) => ({
+                      ...prev,
+                      [part.key]: val !== null ? val.toString() : '',
+                    }))
+                  }
+                />
+              </div>
+            ))}
             <div>
               <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <Label htmlFor="bodyFat" className="whitespace-nowrap">

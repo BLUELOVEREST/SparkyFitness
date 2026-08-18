@@ -22,7 +22,13 @@ import {
   type TelemetryGpsPoint,
 } from './workoutTelemetryDerivation.js';
 import { upsertSamplesByDay } from './healthMetricSampleWriter.js';
-import { BUILT_IN_MOODS, instantToDay } from '@workspace/shared';
+import {
+  BUILT_IN_MOODS,
+  getBodyCircumferencePartDefinition,
+  instantToDay,
+  lengthToCm,
+  round,
+} from '@workspace/shared';
 
 /**
  * Per-type handlers for processHealthData. Each handler owns the validation
@@ -81,6 +87,15 @@ const DEFAULT_UNITS_BY_HEALTH_TYPE = {
   neck: 'cm',
   waist: 'cm',
   hips: 'cm',
+  shoulders: 'cm',
+  chest: 'cm',
+  abdomen: 'cm',
+  left_biceps: 'cm',
+  right_biceps: 'cm',
+  left_thigh: 'cm',
+  right_thigh: 'cm',
+  left_calf: 'cm',
+  right_calf: 'cm',
   hydration: 'L',
   Hydration: 'L',
   lean_body_mass: 'kg',
@@ -620,6 +635,15 @@ function prepareCheckInMeasurement(
     case 'neck':
     case 'waist':
     case 'hips':
+    case 'shoulders':
+    case 'chest':
+    case 'abdomen':
+    case 'left_biceps':
+    case 'right_biceps':
+    case 'left_thigh':
+    case 'right_thigh':
+    case 'left_calf':
+    case 'right_calf':
     case 'muscle_mass_kg':
     case 'bone_mass_kg': {
       // The smart-scale masses (muscle/bone) are always stored in kg;
@@ -905,6 +929,109 @@ const waistHandler: HealthTypeHandler = {
 const hipsHandler: HealthTypeHandler = {
   handle: handleCheckInEntry,
   handleBatch: checkInHandleBatch,
+};
+
+const bodyCircumferenceHandleBatch: HandleBatchFn = async (entries, ctx) => {
+  const outcomes: HandlerOutcome[] = new Array(entries.length);
+  const checkInWrites: Array<{
+    index: number;
+    entryDate: string;
+    measurements: Record<string, number>;
+  }> = [];
+
+  for (let i = 0; i < entries.length; i++) {
+    const { entry, parsedDate } = entries[i];
+    const canonicalType =
+      typeof entry.type === 'string'
+        ? (TYPE_ALIASES[entry.type] ?? entry.type)
+        : '';
+    const part =
+      typeof entry.part === 'string' ? entry.part.trim() : canonicalType;
+    const definition = getBodyCircumferencePartDefinition(part);
+
+    if (!definition) {
+      outcomes[i] = {
+        status: 'error',
+        error: `Unsupported body circumference part: ${part || '(missing)'}`,
+      };
+      continue;
+    }
+
+    const numericValue = parseFloat(String(entry.value));
+    if (isNaN(numericValue) || numericValue <= 0) {
+      outcomes[i] = {
+        status: 'error',
+        error: `Invalid value for body circumference ${part}. Must be a positive number.`,
+      };
+      continue;
+    }
+
+    const valueCm = lengthToCm(
+      numericValue,
+      entry.unit ?? entry.measurementType
+    );
+    if (valueCm === undefined) {
+      outcomes[i] = {
+        status: 'error',
+        error: `Invalid unit for body circumference ${part}. Use one of: cm, in, m.`,
+      };
+      continue;
+    }
+
+    const roundedValueCm = round(valueCm, 2);
+    checkInWrites.push({
+      index: i,
+      entryDate: parsedDate,
+      measurements: { [definition.key]: roundedValueCm },
+    });
+  }
+
+  if (checkInWrites.length > 0) {
+    try {
+      const written = await measurementRepository.bulkUpsertCheckInMeasurements(
+        ctx.userId,
+        ctx.actingUserId,
+        checkInWrites.map(({ entryDate, measurements }) => ({
+          entryDate,
+          measurements,
+        }))
+      );
+      checkInWrites.forEach((write, position) => {
+        outcomes[write.index] = {
+          status: 'success',
+          data: written?.[position],
+        };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      for (const write of checkInWrites) {
+        outcomes[write.index] = {
+          status: 'error',
+          error: `Failed to process body circumference entry: ${message}`,
+        };
+      }
+    }
+  }
+
+  return outcomes;
+};
+
+const bodyCircumferenceHandler: HealthTypeHandler = {
+  async handle(entry, ctx) {
+    const [outcome] = await bodyCircumferenceHandleBatch(
+      [
+        {
+          entry,
+          parsedDate: ctx.parsedDate,
+          entryTimestamp: ctx.entryTimestamp,
+          entryHour: ctx.entryHour,
+        },
+      ],
+      ctx
+    );
+    return outcome;
+  },
+  handleBatch: bodyCircumferenceHandleBatch,
 };
 
 // Smart-scale composition. Shares the check-in write path so provider-synced
@@ -1750,6 +1877,16 @@ export const HEALTH_TYPE_HANDLERS: Record<string, HealthTypeHandler> = {
   neck: neckHandler,
   waist: waistHandler,
   hips: hipsHandler,
+  shoulders: bodyCircumferenceHandler,
+  chest: bodyCircumferenceHandler,
+  abdomen: bodyCircumferenceHandler,
+  left_biceps: bodyCircumferenceHandler,
+  right_biceps: bodyCircumferenceHandler,
+  left_thigh: bodyCircumferenceHandler,
+  right_thigh: bodyCircumferenceHandler,
+  left_calf: bodyCircumferenceHandler,
+  right_calf: bodyCircumferenceHandler,
+  body_circumference: bodyCircumferenceHandler,
   muscle_mass_kg: muscleMassHandler,
   bone_mass_kg: boneMassHandler,
   body_water_percentage: bodyWaterHandler,
@@ -1769,6 +1906,7 @@ export const TYPE_ALIASES: Record<string, string> = {
   'Active Calories': 'active_calories',
   ActiveCaloriesBurned: 'active_calories',
   body_fat_percentage: 'body_fat',
+  BodyCircumference: 'body_circumference',
   // Health Connect spellings for bone mass; both already arrive in kg.
   // LeanBodyMass is deliberately absent — it is not muscle mass and stays a
   // custom measurement.

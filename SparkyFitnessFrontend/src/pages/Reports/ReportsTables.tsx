@@ -43,6 +43,7 @@ import {
   CheckInMeasurementsResponse,
   CustomMeasurementsResponse,
   CustomCategoriesResponse,
+  EXTRA_BODY_CIRCUMFERENCE_PARTS,
   getPrecision,
 } from '@workspace/shared';
 
@@ -378,6 +379,9 @@ const ReportsTables = ({
         measurement.neck !== undefined ||
         measurement.waist !== undefined ||
         measurement.hips !== undefined ||
+        EXTRA_BODY_CIRCUMFERENCE_PARTS.some(
+          (part) => measurement[part.key] !== undefined
+        ) ||
         measurement.steps !== undefined
     )
     .sort(
@@ -806,6 +810,12 @@ const ReportsTables = ({
                     <TableHead>
                       {t('reportsTables.hips', 'Hips')} ({measurementUnit})
                     </TableHead>
+                    {EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => (
+                      <TableHead key={part.key}>
+                        {t(`reportsTables.${part.key}`, part.label)} (
+                        {measurementUnit})
+                      </TableHead>
+                    ))}
                     <TableHead>{t('reportsTables.steps', 'Steps')}</TableHead>
                     <TableHead>
                       {t('reportsTables.height', 'Height')} ({measurementUnit})
@@ -836,6 +846,14 @@ const ReportsTables = ({
                       <TableCell>
                         {formatMeasurement(measurement.hips, measurementUnit)}
                       </TableCell>
+                      {EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => (
+                        <TableCell key={part.key}>
+                          {formatMeasurement(
+                            measurement[part.key],
+                            measurementUnit
+                          )}
+                        </TableCell>
+                      ))}
                       <TableCell>{measurement.steps || '-'}</TableCell>
                       <TableCell>
                         {formatHeight(measurement.height, measurementUnit)}

@@ -8,6 +8,15 @@ export const checkInMeasurementsSchema = z.object({
   neck: z.number().nullable(),
   waist: z.number().nullable(),
   hips: z.number().nullable(),
+  shoulders: z.number().nullable(),
+  chest: z.number().nullable(),
+  abdomen: z.number().nullable(),
+  left_biceps: z.number().nullable(),
+  right_biceps: z.number().nullable(),
+  left_thigh: z.number().nullable(),
+  right_thigh: z.number().nullable(),
+  left_calf: z.number().nullable(),
+  right_calf: z.number().nullable(),
   steps: z.number().nullable(),
   created_at: z.coerce.date().nullable().optional(),
   updated_at: z.coerce.date().nullable().optional(),
@@ -28,6 +37,15 @@ export const checkInMeasurementsInitializerSchema = z.object({
   neck: z.number().optional().nullable(),
   waist: z.number().optional().nullable(),
   hips: z.number().optional().nullable(),
+  shoulders: z.number().optional().nullable(),
+  chest: z.number().optional().nullable(),
+  abdomen: z.number().optional().nullable(),
+  left_biceps: z.number().optional().nullable(),
+  right_biceps: z.number().optional().nullable(),
+  left_thigh: z.number().optional().nullable(),
+  right_thigh: z.number().optional().nullable(),
+  left_calf: z.number().optional().nullable(),
+  right_calf: z.number().optional().nullable(),
   steps: z.number().optional().nullable(),
   created_at: z.coerce.date().nullable().optional(),
   updated_at: z.coerce.date().nullable().optional(),
@@ -40,8 +58,15 @@ export const checkInMeasurementsInitializerSchema = z.object({
   body_water_percentage: z.number().optional().nullable(),
 });
 
-export const checkInMeasurementsMutatorSchema = checkInMeasurementsInitializerSchema.partial();
+export const checkInMeasurementsMutatorSchema =
+  checkInMeasurementsInitializerSchema.partial();
 
-export type DatabaseCheckInMeasurements = z.infer<typeof checkInMeasurementsSchema>;
-export type DatabaseCheckInMeasurementsInitializer = z.infer<typeof checkInMeasurementsInitializerSchema>;
-export type DatabaseCheckInMeasurementsMutator = z.infer<typeof checkInMeasurementsMutatorSchema>;
+export type DatabaseCheckInMeasurements = z.infer<
+  typeof checkInMeasurementsSchema
+>;
+export type DatabaseCheckInMeasurementsInitializer = z.infer<
+  typeof checkInMeasurementsInitializerSchema
+>;
+export type DatabaseCheckInMeasurementsMutator = z.infer<
+  typeof checkInMeasurementsMutatorSchema
+>;
