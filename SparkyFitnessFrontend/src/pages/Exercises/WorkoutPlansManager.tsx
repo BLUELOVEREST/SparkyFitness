@@ -52,7 +52,7 @@ import { Badge } from '@/components/ui/badge';
 const WorkoutPlansManager = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { loggingLevel } = usePreferences();
+  const { loggingLevel, firstDayOfWeek } = usePreferences();
   const isMobile = useIsMobile();
 
   const [isAddPlanDialogOpen, setIsAddPlanDialogOpen] = useState(false);
@@ -120,6 +120,11 @@ const WorkoutPlansManager = () => {
       evening: t('workoutPlansManager.evening', 'Evening'),
     }),
     [t]
+  );
+
+  const orderedWeekDays = React.useMemo(
+    () => Array.from({ length: 7 }, (_, index) => (firstDayOfWeek + index) % 7),
+    [firstDayOfWeek]
   );
 
   const handleBulkDeleteConfirm = async () => {
@@ -525,81 +530,98 @@ const WorkoutPlansManager = () => {
                 </div>
               </div>
 
-              {viewingPlan.plan_mode === 'training_focus' ? (
-                <div className="space-y-3">
-                  <h4 className="font-semibold">
-                    {t('workoutPlansManager.focusSessions', 'Focus Sessions')}
-                  </h4>
-                  {viewingPlan.focus_sessions?.length ? (
-                    viewingPlan.focus_sessions.map((session, index) => (
+              <div className="space-y-3">
+                <h4 className="font-semibold">
+                  {viewingPlan.plan_mode === 'training_focus'
+                    ? t('workoutPlansManager.focusSessions', 'Focus Sessions')
+                    : t('workoutPlansManager.assignments', 'Assignments')}
+                </h4>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {orderedWeekDays.map((dayOfWeek) => {
+                    const focusSessions =
+                      viewingPlan.focus_sessions?.filter(
+                        (session) => session.day_of_week === dayOfWeek
+                      ) ?? [];
+                    const assignments =
+                      viewingPlan.assignments?.filter(
+                        (assignment) => assignment.day_of_week === dayOfWeek
+                      ) ?? [];
+                    const isRestDay =
+                      viewingPlan.plan_mode === 'training_focus'
+                        ? focusSessions.length === 0
+                        : assignments.length === 0;
+
+                    return (
                       <div
-                        key={`${session.day_of_week}-${session.time_slot}-${index}`}
-                        className="rounded-md border p-3"
+                        key={dayOfWeek}
+                        data-testid={`workout-plan-day-${dayOfWeek}`}
+                        className="rounded-md border bg-background p-3"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="font-medium">
-                              {dayLabels[session.day_of_week]} ·{' '}
-                              {timeSlotLabels[session.time_slot]}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {session.training_focus}
-                            </div>
+                        <div className="text-sm font-semibold">
+                          {dayLabels[dayOfWeek]}
+                        </div>
+                        {isRestDay ? (
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            {t('workoutPlansManager.restDay', 'Rest')}
+                          </p>
+                        ) : viewingPlan.plan_mode === 'training_focus' ? (
+                          <div className="mt-2 space-y-1.5">
+                            {focusSessions.map((session, index) => (
+                              <div
+                                key={`${session.time_slot}-${index}`}
+                                className="flex items-start justify-between gap-2 rounded bg-muted/50 px-2 py-1.5 text-xs"
+                              >
+                                <div>
+                                  <span className="font-medium">
+                                    {timeSlotLabels[session.time_slot]}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {' '}
+                                    · {session.training_focus}
+                                  </span>
+                                </div>
+                                {session.is_primary && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="h-5 px-1.5 text-[10px]"
+                                  >
+                                    {t(
+                                      'workoutPlansManager.mainSession',
+                                      'Main'
+                                    )}
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                          {session.is_primary && (
-                            <Badge variant="secondary">
-                              {t('workoutPlansManager.mainSession', 'Main')}
-                            </Badge>
-                          )}
-                        </div>
+                        ) : (
+                          <div className="mt-2 space-y-1.5">
+                            {assignments.map((assignment, index) => (
+                              <div
+                                key={`${assignment.workout_preset_id ?? assignment.exercise_id ?? index}`}
+                                className="rounded bg-muted/50 px-2 py-1.5 text-xs"
+                              >
+                                <span className="font-medium">
+                                  {assignment.workout_preset_name ||
+                                    assignment.exercise_name ||
+                                    t('common.notAvailable', 'Not available')}
+                                </span>
+                                {assignment.sets?.length ? (
+                                  <span className="text-muted-foreground">
+                                    {' '}
+                                    · {assignment.sets.length}{' '}
+                                    {t('workoutPresetsManager.sets', 'sets')}
+                                  </span>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      {t(
-                        'workoutPlansManager.noFocusSessions',
-                        'No focus sessions in this plan.'
-                      )}
-                    </p>
-                  )}
+                    );
+                  })}
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <h4 className="font-semibold">
-                    {t('workoutPlansManager.assignments', 'Assignments')}
-                  </h4>
-                  {viewingPlan.assignments?.length ? (
-                    viewingPlan.assignments.map((assignment, index) => (
-                      <div
-                        key={`${assignment.day_of_week}-${index}`}
-                        className="rounded-md border p-3"
-                      >
-                        <div className="font-medium">
-                          {dayLabels[assignment.day_of_week]}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {assignment.workout_preset_name ||
-                            assignment.exercise_name ||
-                            t('common.notAvailable', 'Not available')}
-                        </div>
-                        {assignment.sets?.length ? (
-                          <Badge variant="outline" className="mt-2">
-                            {assignment.sets.length}{' '}
-                            {t('workoutPresetsManager.sets', 'sets')}
-                          </Badge>
-                        ) : null}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      {t(
-                        'workoutPlansManager.noAssignments',
-                        'No assignments in this plan.'
-                      )}
-                    </p>
-                  )}
-                </div>
-              )}
+              </div>
             </div>
           )}
         </DialogContent>

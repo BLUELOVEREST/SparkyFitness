@@ -141,9 +141,7 @@ describe('Kitchen', () => {
     expect(
       screen.getByRole('heading', { name: 'Daily Summary' })
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Tuesday Pre-Workout').length).toBeGreaterThan(
-      0
-    );
+    expect(screen.queryByText('Tuesday Pre-Workout')).not.toBeInTheDocument();
     expect(screen.getByText('Weekly Prep')).toBeInTheDocument();
     expect(screen.getByText('1 ingredient')).toBeInTheDocument();
     expect(
@@ -222,8 +220,8 @@ describe('Kitchen', () => {
 
     expect(screen.getByText('350g')).toBeInTheDocument();
     expect(
-      screen.getByText('Monday Breakfast · Tuesday Dinner')
-    ).toBeInTheDocument();
+      screen.queryByText('Monday Breakfast · Tuesday Dinner')
+    ).not.toBeInTheDocument();
   });
 
   it('defaults to the plan start date when today is before the active plan window', async () => {

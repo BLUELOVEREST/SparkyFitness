@@ -25,7 +25,11 @@ jest.mock('@/contexts/ActiveUserContext', () => ({
   useActiveUser: () => ({ activeUserId: 'test-user-id' }),
 }));
 jest.mock('@/contexts/PreferencesContext', () => ({
-  usePreferences: () => ({ loggingLevel: 'debug', foodDisplayLimit: 100 }),
+  usePreferences: () => ({
+    loggingLevel: 'debug',
+    foodDisplayLimit: 100,
+    firstDayOfWeek: 1,
+  }),
 }));
 
 // Mock toast
@@ -101,5 +105,61 @@ describe('MealPlanCalendar', () => {
         template: undefined,
       })
     );
+  });
+
+  it('shows meal plan details grouped by configured week order with rest days', async () => {
+    mockGetMealPlanTemplates.mockResolvedValue([
+      {
+        id: 'plan-1',
+        plan_name: 'Cutting week',
+        description: 'Weekly food plan',
+        start_date: '2026-08-17',
+        end_date: '2026-08-23',
+        is_active: true,
+        assignments: [
+          {
+            item_type: 'food',
+            day_of_week: 2,
+            meal_type: 'Breakfast',
+            food_name: 'Noodles',
+            quantity: 100,
+            unit: 'g',
+          },
+          {
+            item_type: 'food',
+            day_of_week: 0,
+            meal_type: 'Dinner',
+            food_name: 'Cod',
+            quantity: 200,
+            unit: 'g',
+          },
+        ],
+      },
+    ]);
+
+    renderWithClient(<MealPlanCalendar />);
+
+    const planTitles = await screen.findAllByText('Cutting week');
+    const planTitle = planTitles[0];
+    if (!planTitle) {
+      throw new Error('Expected meal plan title to render');
+    }
+    fireEvent.click(planTitle);
+
+    const monday = await screen.findByTestId('meal-plan-day-1');
+    const tuesday = screen.getByTestId('meal-plan-day-2');
+    const sunday = screen.getByTestId('meal-plan-day-0');
+
+    expect(monday.compareDocumentPosition(tuesday)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(tuesday.compareDocumentPosition(sunday)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    expect(monday).toHaveTextContent('Rest');
+    expect(tuesday).toHaveTextContent('Breakfast');
+    expect(tuesday).toHaveTextContent('Noodles');
+    expect(sunday).toHaveTextContent('Dinner');
+    expect(sunday).toHaveTextContent('Cod');
   });
 });

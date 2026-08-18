@@ -176,19 +176,16 @@ const KitchenIngredientSummaryList = ({
   if (visibleItems.length === 0) return null;
 
   return (
-    <ul className="divide-y rounded-lg border">
+    <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {visibleItems.map((item) => (
         <li
           key={item.key}
-          className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-start sm:justify-between"
+          className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2"
         >
-          <div>
-            <p className="text-sm font-medium">{item.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {item.sourceLabels.join(' · ')}
-            </p>
-          </div>
-          <span className="text-sm font-semibold tabular-nums">
+          <span className="min-w-0 truncate text-sm font-medium">
+            {item.name}
+          </span>
+          <span className="shrink-0 text-sm font-semibold tabular-nums">
             {item.amountLabel}
           </span>
         </li>
@@ -216,7 +213,7 @@ const WeeklyPrepCommandBar = ({
           '{{count}} ingredients',
           { count: items.length }
         );
-  const previewItems = items.slice(0, 3);
+  const previewItems = items.slice(0, 4);
 
   return (
     <section

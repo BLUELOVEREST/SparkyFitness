@@ -55,7 +55,7 @@ import { Badge } from '@/components/ui/badge';
 const MealPlanCalendar: React.FC = () => {
   const { t } = useTranslation();
   const { activeUserId } = useActiveUser();
-  const { loggingLevel } = usePreferences();
+  const { loggingLevel, firstDayOfWeek } = usePreferences();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<
     MealPlanTemplate | undefined
@@ -105,6 +105,11 @@ const MealPlanCalendar: React.FC = () => {
       t('common.saturday', 'Saturday'),
     ],
     [t]
+  );
+
+  const orderedWeekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, index) => (firstDayOfWeek + index) % 7),
+    [firstDayOfWeek]
   );
 
   const handleCreate = () => {
@@ -562,79 +567,80 @@ const MealPlanCalendar: React.FC = () => {
                 <h4 className="font-semibold">
                   {t('mealPlanCalendar.assignments', 'Assignments')}
                 </h4>
-                {viewingTemplate.assignments.length ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {viewingTemplate.assignments.map((assignment, index) => (
-                      <div
-                        key={`${assignment.day_of_week}-${assignment.meal_type}-${index}`}
-                        className="rounded-md border p-3"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="font-medium">
-                              {dayLabels[assignment.day_of_week]} ·{' '}
-                              {assignment.meal_type}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {assignment.food_name ||
-                                assignment.meal_name ||
-                                t('common.notAvailable', 'Not available')}
-                            </div>
-                          </div>
-                          {assignment.macro_role && (
-                            <Badge variant="outline" className="capitalize">
-                              {assignment.macro_role}
-                            </Badge>
-                          )}
-                        </div>
-                        {assignment.quantity != null && assignment.unit && (
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            {assignment.quantity} {assignment.unit}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {t(
-                      'mealPlanCalendar.noAssignments',
-                      'No assignments in this plan.'
-                    )}
-                  </p>
-                )}
-              </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {orderedWeekDays.map((dayOfWeek) => {
+                    const assignments = viewingTemplate.assignments.filter(
+                      (assignment) => assignment.day_of_week === dayOfWeek
+                    );
+                    const macroTargets =
+                      viewingTemplate.macro_targets?.[dayOfWeek] ?? [];
 
-              {viewingTemplate.macro_targets &&
-                Object.keys(viewingTemplate.macro_targets).length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="font-semibold">
-                      {t('mealPlanCalendar.macroTargets', 'Macro Targets')}
-                    </h4>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {Object.entries(viewingTemplate.macro_targets).map(
-                        ([day, targets]) => (
-                          <div key={day} className="rounded-md border p-3">
-                            <div className="font-medium">
-                              {dayLabels[Number(day)]}
-                            </div>
-                            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                              {targets.map((target) => (
+                    return (
+                      <div
+                        key={dayOfWeek}
+                        data-testid={`meal-plan-day-${dayOfWeek}`}
+                        className="rounded-md border bg-background p-3"
+                      >
+                        <div className="text-sm font-semibold">
+                          {dayLabels[dayOfWeek]}
+                        </div>
+                        {assignments.length === 0 &&
+                        macroTargets.length === 0 ? (
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            {t('mealPlanCalendar.restDay', 'Rest')}
+                          </p>
+                        ) : (
+                          <div className="mt-2 space-y-1.5">
+                            {assignments.map((assignment, index) => (
+                              <div
+                                key={`${assignment.meal_type}-${assignment.food_id ?? assignment.meal_id ?? index}`}
+                                className="rounded bg-muted/50 px-2 py-1.5 text-xs"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <span className="font-medium">
+                                    {assignment.meal_type}
+                                  </span>
+                                  {assignment.macro_role && (
+                                    <Badge
+                                      variant="outline"
+                                      className="h-5 px-1.5 text-[10px] capitalize"
+                                    >
+                                      {assignment.macro_role}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="mt-0.5 text-muted-foreground">
+                                  {assignment.food_name ||
+                                    assignment.meal_name ||
+                                    t('common.notAvailable', 'Not available')}
+                                  {assignment.quantity != null &&
+                                  assignment.unit
+                                    ? ` · ${assignment.quantity}${assignment.unit}`
+                                    : ''}
+                                </div>
+                              </div>
+                            ))}
+                            {assignments.length === 0 &&
+                              macroTargets.map((target) => (
                                 <div
-                                  key={`${day}-${target.slotKey}-${target.label}`}
+                                  key={`${dayOfWeek}-${target.slotKey}-${target.label}`}
+                                  className="rounded bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground"
                                 >
-                                  {target.label}: {Math.round(target.carbs)}g C
-                                  · {Math.round(target.protein)}g P ·{' '}
+                                  <span className="font-medium text-foreground">
+                                    {target.label}
+                                  </span>
+                                  : {Math.round(target.carbs)}g C ·{' '}
+                                  {Math.round(target.protein)}g P ·{' '}
                                   {Math.round(target.fat)}g F
                                 </div>
                               ))}
-                            </div>
                           </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
