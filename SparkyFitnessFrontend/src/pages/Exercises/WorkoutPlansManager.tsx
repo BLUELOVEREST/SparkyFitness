@@ -126,6 +126,21 @@ const WorkoutPlansManager = () => {
     () => Array.from({ length: 7 }, (_, index) => (firstDayOfWeek + index) % 7),
     [firstDayOfWeek]
   );
+  const workoutPlanDetailDays = React.useMemo(
+    () =>
+      orderedWeekDays.filter((dayOfWeek) =>
+        viewingPlan?.plan_mode === 'training_focus'
+          ? (viewingPlan.focus_sessions?.some(
+              (session) =>
+                session.day_of_week === dayOfWeek &&
+                session.training_focus !== 'rest'
+            ) ?? false)
+          : (viewingPlan?.assignments?.some(
+              (assignment) => assignment.day_of_week === dayOfWeek
+            ) ?? false)
+      ),
+    [orderedWeekDays, viewingPlan]
+  );
 
   const handleBulkDeleteConfirm = async () => {
     try {
@@ -537,20 +552,17 @@ const WorkoutPlansManager = () => {
                     : t('workoutPlansManager.assignments', 'Assignments')}
                 </h4>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {orderedWeekDays.map((dayOfWeek) => {
+                  {workoutPlanDetailDays.map((dayOfWeek) => {
                     const focusSessions =
                       viewingPlan.focus_sessions?.filter(
-                        (session) => session.day_of_week === dayOfWeek
+                        (session) =>
+                          session.day_of_week === dayOfWeek &&
+                          session.training_focus !== 'rest'
                       ) ?? [];
                     const assignments =
                       viewingPlan.assignments?.filter(
                         (assignment) => assignment.day_of_week === dayOfWeek
                       ) ?? [];
-                    const isRestDay =
-                      viewingPlan.plan_mode === 'training_focus'
-                        ? focusSessions.length === 0
-                        : assignments.length === 0;
-
                     return (
                       <div
                         key={dayOfWeek}
@@ -560,11 +572,7 @@ const WorkoutPlansManager = () => {
                         <div className="text-sm font-semibold">
                           {dayLabels[dayOfWeek]}
                         </div>
-                        {isRestDay ? (
-                          <p className="mt-2 text-sm text-muted-foreground">
-                            {t('workoutPlansManager.restDay', 'Rest')}
-                          </p>
-                        ) : viewingPlan.plan_mode === 'training_focus' ? (
+                        {viewingPlan.plan_mode === 'training_focus' ? (
                           <div className="mt-2 space-y-1.5">
                             {focusSessions.map((session, index) => (
                               <div
@@ -586,7 +594,7 @@ const WorkoutPlansManager = () => {
                                     }
                                     className={
                                       session.is_primary
-                                        ? 'rounded-full border border-border bg-white px-2 py-0.5 font-semibold text-foreground shadow-sm dark:bg-slate-950'
+                                        ? 'rounded-full border border-primary bg-primary/10 px-2 py-0.5 font-semibold text-primary shadow-sm dark:border-white dark:bg-white dark:text-slate-950'
                                         : 'font-semibold text-foreground'
                                     }
                                   >

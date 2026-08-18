@@ -86,13 +86,11 @@ const KitchenDayTab = ({
       }`}
       onClick={() => onSelect(day.date)}
     >
-      {day.isToday ? (
+      {day.isToday && !day.isSelected ? (
         <span
           aria-hidden="true"
           data-testid="kitchen-today-inner-border"
-          className={`pointer-events-none absolute inset-2 rounded-md border-2 ${
-            day.isSelected ? 'border-background/90' : 'border-primary/70'
-          }`}
+          className="pointer-events-none absolute inset-0 box-border rounded-lg border border-white/90"
         />
       ) : null}
       <span className="block text-xs font-medium">{day.weekdayLabel}</span>

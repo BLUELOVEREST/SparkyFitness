@@ -50,10 +50,28 @@ jest.mock('@/hooks/Exercises/useWorkoutPlans', () => ({
         is_active: true,
         focus_sessions: [
           {
+            day_of_week: 1,
+            time_slot: 'morning',
+            training_focus: 'rest',
+            is_primary: false,
+          },
+          {
+            day_of_week: 1,
+            time_slot: 'evening',
+            training_focus: 'rest',
+            is_primary: false,
+          },
+          {
             day_of_week: 2,
             time_slot: 'morning',
             training_focus: 'Chest',
             is_primary: true,
+          },
+          {
+            day_of_week: 2,
+            time_slot: 'noon',
+            training_focus: 'rest',
+            is_primary: false,
           },
           {
             day_of_week: 2,
@@ -83,7 +101,7 @@ jest.mock('@/pages/Exercises/AddWorkoutPlanDialog', () => {
 });
 
 describe('WorkoutPlansManager', () => {
-  it('shows workout plan details grouped by configured week order with rest days', async () => {
+  it('shows workout plan details grouped by configured week order without listing rest days', async () => {
     renderWithClient(<WorkoutPlansManager />);
 
     const planTitles = await screen.findAllByText('Strength week');
@@ -93,17 +111,16 @@ describe('WorkoutPlansManager', () => {
     }
     fireEvent.click(planTitle);
 
-    const monday = await screen.findByTestId('workout-plan-day-1');
+    await screen.findByTestId('workout-plan-day-2');
+    const monday = screen.queryByTestId('workout-plan-day-1');
     const tuesday = screen.getByTestId('workout-plan-day-2');
     const sunday = screen.getByTestId('workout-plan-day-0');
 
-    expect(monday.compareDocumentPosition(tuesday)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    );
     expect(tuesday.compareDocumentPosition(sunday)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING
     );
-    expect(monday).toHaveTextContent('Rest');
+    expect(monday).not.toBeInTheDocument();
+    expect(screen.queryByText('Rest')).not.toBeInTheDocument();
     expect(tuesday).toHaveTextContent('Morning');
     expect(tuesday).toHaveTextContent('Chest');
     expect(tuesday).toHaveTextContent('Evening');
@@ -113,7 +130,13 @@ describe('WorkoutPlansManager', () => {
     ).toHaveTextContent('Chest');
     expect(
       screen.getByTestId('workout-main-session-plan-1-2-morning')
-    ).toHaveClass('bg-white');
+    ).toHaveClass('bg-primary/10');
+    expect(
+      screen.getByTestId('workout-main-session-plan-1-2-morning')
+    ).toHaveClass('dark:bg-white');
+    expect(
+      screen.getByTestId('workout-main-session-plan-1-2-morning')
+    ).toHaveClass('text-primary');
     expect(sunday).toHaveTextContent('Evening');
     expect(sunday).toHaveTextContent('Football');
   });

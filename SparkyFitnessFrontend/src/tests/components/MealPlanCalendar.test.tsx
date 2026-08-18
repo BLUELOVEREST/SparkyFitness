@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import MealPlanCalendar from '../../pages/Foods/MealPlanCalendar';
 import { renderWithClient } from '../test-utils';
@@ -134,16 +134,33 @@ describe('MealPlanCalendar', () => {
               protein: 40,
               fat: 15,
             },
+            {
+              slotKey: 'pre_morning',
+              label: 'Pre-Workout',
+              calories: 250,
+              carbs: 40,
+              protein: 20,
+              fat: 5,
+            },
           ],
         },
         assignments: [
           {
             item_type: 'food',
+            day_of_week: 1,
+            meal_type: 'breakfast',
+            food_name: 'Eggs',
+            quantity: 120,
+            unit: 'g',
+          },
+          {
+            item_type: 'food',
             day_of_week: 2,
-            meal_type: 'Pre-Workout',
+            meal_type: 'pre-workout',
             food_name: 'Noodles',
             quantity: 100,
             unit: 'g',
+            macro_role: 'carb',
           },
           {
             item_type: 'food',
@@ -152,6 +169,7 @@ describe('MealPlanCalendar', () => {
             food_name: 'Chicken breast',
             quantity: 180,
             unit: 'g',
+            macro_role: 'protein',
           },
           {
             item_type: 'food',
@@ -160,6 +178,7 @@ describe('MealPlanCalendar', () => {
             food_name: 'Almonds',
             quantity: 12,
             unit: 'g',
+            macro_role: 'fat',
           },
           {
             item_type: 'food',
@@ -194,13 +213,23 @@ describe('MealPlanCalendar', () => {
     );
     expect(monday).not.toHaveTextContent('Rest');
     expect(monday).toHaveTextContent('Breakfast');
+    expect(monday).toHaveTextContent('Eggs');
+    expect(monday).toHaveTextContent('120g');
     expect(monday).toHaveTextContent('Dinner');
+    expect(
+      monday.querySelectorAll('[data-testid^="meal-plan-day-1-"]')
+    ).toHaveLength(3);
 
     const tuesdayMeal = screen.getByTestId('meal-plan-day-2-Pre-Workout');
     expect(tuesdayMeal).toHaveTextContent('Pre-Workout');
-    expect(tuesdayMeal).toHaveTextContent(
-      'Noodles 100g · Chicken breast 180g · Almonds 12g'
+    const tuesdayFoods = within(tuesdayMeal).getAllByTestId(
+      'meal-plan-food-item'
     );
+    expect(tuesdayFoods.map((food) => food.textContent)).toEqual([
+      'Noodles100g',
+      'Chicken breast180g',
+      'Almonds12g',
+    ]);
     expect(
       tuesday.querySelectorAll('[data-testid^="meal-plan-day-2-"]')
     ).toHaveLength(1);

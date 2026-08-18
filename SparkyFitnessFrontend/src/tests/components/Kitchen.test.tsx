@@ -118,7 +118,7 @@ describe('Kitchen', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByTestId('kitchen-today-inner-border').className
-    ).toContain('inset-2');
+    ).toContain('inset-0');
     expect(todayTab.className).not.toContain('ring-');
     expect(todayTab.className).not.toContain('ring-offset-2');
 
@@ -150,6 +150,42 @@ describe('Kitchen', () => {
     expect(
       screen.getByRole('button', { name: /View weekly ingredient totals/i })
     ).toBeInTheDocument();
+  });
+
+  it('hides the today inner border when today is selected', async () => {
+    mockGetMealPlanTemplates.mockResolvedValue([
+      {
+        id: 'plan-1',
+        plan_name: 'Eric carb cycle',
+        start_date: '2026-07-14',
+        end_date: null,
+        is_active: true,
+        macro_targets: {
+          3: [
+            {
+              slotKey: 'morning',
+              label: 'Breakfast',
+              carbs: 28,
+              protein: 40,
+              fat: 30,
+              calories: 542,
+            },
+          ],
+        },
+        assignments: [],
+      },
+    ]);
+
+    renderKitchen();
+
+    expect(await screen.findByText('Eric carb cycle')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Wednesday/i })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(
+      screen.queryByTestId('kitchen-today-inner-border')
+    ).not.toBeInTheDocument();
   });
 
   it('keeps weekly ingredients collapsed until requested', async () => {
