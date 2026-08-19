@@ -1,9 +1,54 @@
 import express from 'express';
 import { authenticate } from '../../middleware/authMiddleware.js';
 import { auth } from '../../auth.js';
+import { verifyApiKeyReadOnly } from '../../services/apiKeyVerificationService.js';
 const router = express.Router();
 // auth is required lazily within handlers to avoid early initialization issues during migrations
 // const { auth } = require('../../auth');
+/**
+ * @swagger
+ * /identity/api-key/verify:
+ *   get:
+ *     summary: Verify an API key without writing application data
+ *     tags: [Identity & Security]
+ *     description: Validates the x-api-key header using a read-only lookup. Intended for lightweight device connectivity checks.
+ *     security:
+ *       - apiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: API key is valid.
+ *       401:
+ *         description: Missing, invalid, or expired API key.
+ *       403:
+ *         description: API key is disabled.
+ */
+router.get('/api-key/verify', async (req, res, next) => {
+  const apiKeyHeader = req.headers['x-api-key'];
+  if (typeof apiKeyHeader !== 'string' || !apiKeyHeader.trim()) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  try {
+    const result = await verifyApiKeyReadOnly(apiKeyHeader);
+    if (result.status === 'invalid') {
+      return res.status(401).json({ error: 'Authentication required.' });
+    }
+    if (result.status === 'disabled') {
+      return res.status(403).json({ error: 'API key is disabled.' });
+    }
+    if (result.status === 'expired') {
+      return res.status(401).json({ error: 'API key has expired.' });
+    }
+    return res.status(200).json({
+      ok: true,
+      authenticated: true,
+      user_id: result.userId,
+      expires_at: result.expiresAt,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 /**
  * @swagger
  * /identity/user/generate-api-key:
