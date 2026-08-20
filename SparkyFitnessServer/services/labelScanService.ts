@@ -66,6 +66,7 @@ async function extractNutritionFromLabel(
     model_name: aiService.model_name ?? undefined,
     custom_url: aiService.custom_url ?? undefined,
     timeout: aiService.timeout ?? undefined,
+    max_tokens: aiService.max_tokens ?? undefined,
   };
 
   const result = await dispatchAiRequest({

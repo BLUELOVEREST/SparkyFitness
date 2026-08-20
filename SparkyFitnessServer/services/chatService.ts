@@ -885,6 +885,7 @@ interface ChatAiServiceConfig {
   service_type: string;
   api_key?: string | null;
   custom_url?: string | null;
+  max_tokens?: number | null;
 }
 
 // Resolves the AI SDK model instance for a chat service: native adapters for
@@ -1216,7 +1217,8 @@ export function classifyByKeywords(text: string): ChatToolCategorySlug[] {
 async function classifyUserIntent(
   messages: ChatMessage[],
   modelInstance: Parameters<typeof generateText>[0]['model'],
-  providerOptions?: Record<string, Record<string, JSONValue>>
+  providerOptions?: Record<string, Record<string, JSONValue>>,
+  maxOutputTokens?: number
 ): Promise<ChatToolCategorySlug[]> {
   const lastUserMessage = [...messages]
     .reverse()
@@ -1272,6 +1274,7 @@ Your response must contain ONLY the matched domain names as a comma-separated li
       messages: contextMessages,
       providerOptions,
       temperature: 0,
+      ...(maxOutputTokens && { maxOutputTokens }),
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(10000), // 10s timeout to prevent hanging the chat turn
     });
@@ -1377,7 +1380,8 @@ async function processChatMessage(
           aiService.service_type,
           authenticatedUserId,
           modelName
-        )
+        ),
+        aiService.max_tokens ?? undefined
       );
     }
 
@@ -1431,6 +1435,7 @@ async function processChatMessage(
       ...(toolProfile === 'core' && {
         temperature: CORE_PROFILE_CHAT_TEMPERATURE,
       }),
+      ...(aiService.max_tokens && { maxOutputTokens: aiService.max_tokens }),
       // Tighter retry ceiling for cache-less core-profile backends, where every
       // retry re-processes the full prefix.
       stopWhen: buildChatStopConditions(toolProfile),
@@ -1644,6 +1649,7 @@ async function processFoodOptionsRequest(
     model_name: aiService.model_name ?? undefined,
     custom_url: aiService.custom_url ?? undefined,
     timeout: aiService.timeout ?? undefined,
+    max_tokens: aiService.max_tokens ?? undefined,
   };
 
   const prompt = `${FOOD_OPTIONS_PROMPT}\n\nGENERATE_FOOD_OPTIONS:${foodName} in ${unit}`;
@@ -1709,6 +1715,7 @@ async function testAiServiceConnection(
   let apiKey = payload.api_key?.trim() || undefined;
   let customUrl = payload.custom_url?.trim() || undefined;
   let modelName = payload.model_name?.trim() || undefined;
+  let maxTokens = payload.max_tokens ?? undefined;
 
   // Stored-key fallback: the api_key field is blank by design on edit (the key
   // is encrypted server-side and never sent to the browser), so a test on a
@@ -1737,6 +1744,7 @@ async function testAiServiceConnection(
         apiKey = stored.api_key ?? undefined;
         customUrl = customUrl ?? stored.custom_url ?? undefined;
         modelName = modelName ?? stored.model_name ?? undefined;
+        maxTokens = maxTokens ?? stored.max_tokens ?? undefined;
       }
     }
   }
@@ -1773,6 +1781,7 @@ async function testAiServiceConnection(
     api_key: apiKey,
     model_name: modelName,
     custom_url: customUrl,
+    max_tokens: maxTokens,
   };
 
   const result = await dispatchAiRequest({
@@ -1907,7 +1916,8 @@ async function processChatMessageStream(
           aiService.service_type,
           authenticatedUserId,
           modelName
-        )
+        ),
+        aiService.max_tokens ?? undefined
       );
     }
 
@@ -1964,6 +1974,7 @@ async function processChatMessageStream(
       ...(toolProfile === 'core' && {
         temperature: CORE_PROFILE_CHAT_TEMPERATURE,
       }),
+      ...(aiService.max_tokens && { maxOutputTokens: aiService.max_tokens }),
       // Tighter retry ceiling for cache-less core-profile backends, where every
       // retry re-processes the full prefix.
       stopWhen: buildChatStopConditions(toolProfile),

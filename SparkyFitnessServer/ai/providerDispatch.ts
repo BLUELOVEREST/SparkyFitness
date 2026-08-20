@@ -35,6 +35,7 @@ export interface ProviderConfig {
   model_name?: string;
   custom_url?: string;
   timeout?: number;
+  max_tokens?: number;
 }
 
 export interface DispatchImage {
@@ -493,6 +494,9 @@ function buildOpenAiFamilyRequest(ctx: BuildContext): BuiltRequest {
   };
   if (ctx.temperature !== undefined) {
     body.temperature = ctx.temperature;
+  }
+  if (ctx.provider.max_tokens !== undefined) {
+    body.max_tokens = ctx.provider.max_tokens;
   }
   if (ctx.jsonSchema) {
     if (useStrictSchema) {

@@ -313,6 +313,29 @@ export const ServiceForm = ({
       )}
 
       <div>
+        <Label htmlFor="max_tokens">
+          {t(`${translationPrefix}.maxTokens`)}
+        </Label>
+        <Input
+          id="max_tokens"
+          type="number"
+          min={1}
+          step={1}
+          value={formData.max_tokens ?? ''}
+          onChange={(e) =>
+            onFormDataChange({
+              max_tokens: e.target.value ? Number(e.target.value) : null,
+            })
+          }
+          placeholder={t(`${translationPrefix}.maxTokensPlaceholder`)}
+          inputMode="numeric"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          {t(`${translationPrefix}.maxTokensDescription`)}
+        </p>
+      </div>
+
+      <div>
         <Label htmlFor="system_prompt">
           {t(`${translationPrefix}.systemPrompt`)}
         </Label>

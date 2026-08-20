@@ -28,6 +28,7 @@ export const createAiServiceSettingsRequestSchema =
       chat_tool_profile: true,
       custom_url: true,
       is_active: true,
+      max_tokens: true,
       model_name: true,
       service_name: true,
       service_type: true,
@@ -45,6 +46,7 @@ export const updateAiServiceSettingsRequestSchema =
       id: true,
       is_active: true,
       is_public: true,
+      max_tokens: true,
       model_name: true,
       service_name: true,
       service_type: true,
@@ -64,6 +66,7 @@ export const testAiServiceConnectionRequestSchema = z.object({
   service_type: z.string(),
   api_key: z.string().optional(),
   custom_url: z.string().optional(),
+  max_tokens: z.number().int().positive().nullable().optional(),
   model_name: z.string().optional(),
 });
 

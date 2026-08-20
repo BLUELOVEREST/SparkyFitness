@@ -60,6 +60,7 @@ export const ServiceListItem = ({
           ? editData.is_active
           : service.is_active,
       model_name: editData.model_name || service.model_name || '',
+      max_tokens: editData.max_tokens ?? service.max_tokens ?? null,
       showCustomModelInput: editData.showCustomModelInput ?? false,
       custom_model_name: editData.custom_model_name ?? service.model_name ?? '',
       chat_tool_profile:

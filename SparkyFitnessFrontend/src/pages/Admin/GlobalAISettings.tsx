@@ -88,6 +88,7 @@ const GlobalAISettings = () => {
       system_prompt: '',
       is_active: false,
       model_name: '',
+      max_tokens: null,
       showCustomModelInput: false,
       custom_model_name: '',
       chat_tool_profile: 'full',
@@ -197,6 +198,7 @@ const GlobalAISettings = () => {
         system_prompt: '',
         is_active: false,
         model_name: '',
+        max_tokens: null,
         showCustomModelInput: false,
         custom_model_name: '',
         chat_tool_profile: 'full',
@@ -274,6 +276,7 @@ const GlobalAISettings = () => {
       system_prompt: service.system_prompt || '',
       is_active: service.is_active,
       model_name: isCustomModel ? '' : service.model_name || '',
+      max_tokens: service.max_tokens ?? null,
       showCustomModelInput: isCustomModel,
       custom_model_name: service.model_name ?? '',
       chat_tool_profile: service.chat_tool_profile ?? 'full',
@@ -401,6 +404,7 @@ const GlobalAISettings = () => {
                     api_key: newService.api_key,
                     custom_url: newService.custom_url ?? undefined,
                     model_name: model,
+                    max_tokens: newService.max_tokens ?? null,
                   })
                 }
                 testing={isTesting}
@@ -432,6 +436,7 @@ const GlobalAISettings = () => {
                 api_key: editData.api_key,
                 custom_url: editData.custom_url ?? undefined,
                 model_name: model,
+                max_tokens: editData.max_tokens ?? null,
               });
             }}
             testing={isTesting}

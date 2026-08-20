@@ -201,6 +201,24 @@ describe('processFoodOptionsRequest', () => {
       expect(body.temperature).toBe(0.7);
     });
 
+    it('passes configured max_tokens to openai-compatible request bodies', async () => {
+      mockGetBackendSetting.mockResolvedValue(
+        makeAiServiceDetail({
+          service_type: 'openai_compatible',
+          api_key: 'oc-key',
+          custom_url: 'https://example.local/v1',
+          max_tokens: 2048,
+        })
+      );
+      const m = mockFetch(openAiBody(sampleFoodOptions));
+
+      await runFoodOptions(true);
+
+      const init = m.mock.calls[0][1] as { body: string };
+      const body = JSON.parse(init.body);
+      expect(body.max_tokens).toBe(2048);
+    });
+
     it('authenticates google via header (not URL key) and requests JSON output', async () => {
       mockGetBackendSetting.mockResolvedValue(
         makeAiServiceDetail({ service_type: 'google', api_key: 'gem-key' })

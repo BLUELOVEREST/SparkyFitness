@@ -271,6 +271,7 @@ describe('chatService.testAiServiceConnection', () => {
       api_key: 'decrypted-stored-key',
       custom_url: null,
       model_name: 'gpt-4o',
+      max_tokens: 2048,
       is_public: false,
     });
     mockDispatch.mockResolvedValue(okDispatch);
@@ -287,6 +288,7 @@ describe('chatService.testAiServiceConnection', () => {
       service_type: 'openai',
       api_key: 'decrypted-stored-key',
       model_name: 'gpt-4o',
+      max_tokens: 2048,
     });
   });
 
@@ -298,6 +300,7 @@ describe('chatService.testAiServiceConnection', () => {
       api_key: 'stored-anthropic-key',
       custom_url: null,
       model_name: null,
+      max_tokens: null,
       is_public: false,
     });
     mockDispatch.mockResolvedValue(okDispatch);
@@ -320,6 +323,7 @@ describe('chatService.testAiServiceConnection', () => {
       api_key: 'operator-global-key',
       custom_url: null,
       model_name: 'gpt-4o',
+      max_tokens: null,
       is_public: true,
     });
 
@@ -344,6 +348,7 @@ describe('chatService.testAiServiceConnection', () => {
       api_key: 'operator-global-key',
       custom_url: null,
       model_name: 'gpt-4o',
+      max_tokens: null,
       is_public: true,
     });
     mockDispatch.mockResolvedValue(okDispatch);
@@ -368,6 +373,7 @@ describe('chatService.testAiServiceConnection', () => {
       api_key: 'stored-openai-key',
       custom_url: null,
       model_name: 'gpt-4o',
+      max_tokens: null,
       is_public: false,
     });
     mockDispatch.mockResolvedValue({

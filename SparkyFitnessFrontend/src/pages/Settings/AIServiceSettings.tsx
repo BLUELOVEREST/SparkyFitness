@@ -107,6 +107,7 @@ const AIServiceSettings = () => {
       system_prompt: '',
       is_active: false,
       model_name: '',
+      max_tokens: null,
       showCustomModelInput: false,
       custom_model_name: '',
       chat_tool_profile: 'full',
@@ -170,6 +171,7 @@ const AIServiceSettings = () => {
         system_prompt: globalSetting.system_prompt || '',
         is_active: true,
         model_name: globalSetting.model_name || undefined,
+        max_tokens: globalSetting.max_tokens ?? null,
         chat_tool_profile: globalSetting.chat_tool_profile ?? 'full',
       };
       await addService(overrideData);
@@ -268,6 +270,7 @@ const AIServiceSettings = () => {
         system_prompt: '',
         is_active: false,
         model_name: '',
+        max_tokens: null,
         showCustomModelInput: false,
         custom_model_name: '',
         chat_tool_profile: 'full',
@@ -511,6 +514,7 @@ const AIServiceSettings = () => {
         system_prompt: originalService.system_prompt ?? '',
         is_active: isActive,
         model_name: originalService.model_name ?? '',
+        max_tokens: originalService.max_tokens ?? null,
         showCustomModelInput: false,
         custom_model_name: '',
       });
@@ -564,6 +568,7 @@ const AIServiceSettings = () => {
       system_prompt: service.system_prompt || '',
       is_active: service.is_active,
       model_name: isCustomModel ? '' : service.model_name || '',
+      max_tokens: service.max_tokens ?? null,
       showCustomModelInput: isCustomModel,
       custom_model_name: service.model_name ?? '',
       chat_tool_profile: service.chat_tool_profile ?? 'full',
@@ -653,6 +658,7 @@ const AIServiceSettings = () => {
                     api_key: newService.api_key,
                     custom_url: newService.custom_url ?? undefined,
                     model_name: model,
+                    max_tokens: newService.max_tokens ?? null,
                   })
                 }
                 testing={isTesting}
@@ -797,6 +803,7 @@ const AIServiceSettings = () => {
                             api_key: editData.api_key,
                             custom_url: editData.custom_url ?? undefined,
                             model_name: model,
+                            max_tokens: editData.max_tokens ?? null,
                           })
                         }
                         testing={isTesting}

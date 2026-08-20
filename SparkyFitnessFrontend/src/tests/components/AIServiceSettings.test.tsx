@@ -654,6 +654,7 @@ describe('AIServiceSettings', () => {
       is_active: true,
       system_prompt: 'Be concise.',
       model_name: 'my-fine-tuned-model',
+      max_tokens: 2048,
       is_public: false,
       source: 'user',
     };
@@ -679,6 +680,7 @@ describe('AIServiceSettings', () => {
         expect.objectContaining({
           is_active: false,
           model_name: 'my-fine-tuned-model',
+          max_tokens: 2048,
           custom_url: 'https://my-proxy.example.com',
           system_prompt: 'Be concise.',
         })
