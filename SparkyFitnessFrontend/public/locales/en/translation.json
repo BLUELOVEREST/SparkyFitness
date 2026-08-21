@@ -1126,6 +1126,33 @@
       "title": "AI Service",
       "description": "Manage settings for AI-powered features",
       "invalidKeyLengthWarning": "If you encounter an \"Invalid key length\" error, ensure your encryption key in the server's env variables are 64 hex.",
+      "profileSettings": {
+        "title": "Task profile overrides",
+        "description": "Tune model behavior for specific AI tasks. Built-in prompts stay optimized for each profile.",
+        "builtInPromptBadge": "Profile prompts are built in",
+        "default": "Default",
+        "custom": "Custom",
+        "resetToDefaults": "Reset to defaults",
+        "maxTokens": "Max tokens",
+        "reasoningEffort": "Reasoning effort",
+        "timeoutSeconds": "Timeout seconds",
+        "temperature": "Temperature",
+        "extraBodyJson": "Extra request body JSON",
+        "validJson": "Valid JSON object",
+        "invalidJson": "Extra request body must be a valid JSON object.",
+        "profiles": {
+          "chat": "Chat",
+          "intent": "Intent",
+          "vision": "Vision",
+          "structured": "Structured"
+        },
+        "descriptions": {
+          "chat": "Ordinary chat and health coaching.",
+          "intent": "Tool/domain classification. Built-in prompt optimized for SparkyFitness domains.",
+          "vision": "Food photo and nutrition label scanning.",
+          "structured": "Food options, unit conversion, JSON and tool parameter generation."
+        }
+      },
       "globalSettings": {
         "title": "Global AI Service Settings",
         "description": "Global AI service settings are shared across all users. Users can override these with their own settings.",

@@ -36,6 +36,8 @@ export interface ProviderConfig {
   custom_url?: string;
   timeout?: number;
   max_tokens?: number;
+  reasoning_effort?: 'low' | 'high' | 'max';
+  extra_body_json?: Record<string, unknown>;
 }
 
 export interface DispatchImage {
@@ -431,6 +433,7 @@ function buildGoogleRequest(
   parseJson: boolean
 ): BuiltRequest {
   const body: Record<string, unknown> = {
+    ...(ctx.provider.extra_body_json ?? {}),
     contents: [
       {
         role: 'user',
@@ -489,6 +492,7 @@ function buildOpenAiFamilyRequest(ctx: BuildContext): BuiltRequest {
         ]
       : prompt;
   const body: Record<string, unknown> = {
+    ...(ctx.provider.extra_body_json ?? {}),
     model: ctx.model,
     messages: [{ role: 'user', content }],
   };
@@ -497,6 +501,9 @@ function buildOpenAiFamilyRequest(ctx: BuildContext): BuiltRequest {
   }
   if (ctx.provider.max_tokens !== undefined) {
     body.max_tokens = ctx.provider.max_tokens;
+  }
+  if (ctx.provider.reasoning_effort !== undefined) {
+    body.reasoning_effort = ctx.provider.reasoning_effort;
   }
   if (ctx.jsonSchema) {
     if (useStrictSchema) {
@@ -548,6 +555,7 @@ function buildAnthropicRequest(ctx: BuildContext): BuiltRequest {
         ]
       : ctx.prompt;
   const body: Record<string, unknown> = {
+    ...(ctx.provider.extra_body_json ?? {}),
     model: ctx.model,
     max_tokens: ANTHROPIC_MAX_TOKENS,
     messages: [{ role: 'user', content }],
@@ -586,6 +594,7 @@ function buildOllamaRequest(ctx: BuildContext): BuiltRequest {
     message.images = ctx.images.map((img) => img.base64);
   }
   const body: Record<string, unknown> = {
+    ...(ctx.provider.extra_body_json ?? {}),
     model: ctx.model,
     messages: [message],
     stream: false,

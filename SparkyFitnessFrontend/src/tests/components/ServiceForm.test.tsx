@@ -26,6 +26,7 @@ function makeFormData(
     custom_model_name: '',
     showCustomModelInput: false,
     chat_tool_profile: 'full',
+    profile_settings: {},
     ...overrides,
   } as AiServiceSettingsFormInput;
 }
@@ -116,6 +117,84 @@ describe('ServiceForm — model validation', () => {
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(mockToast).not.toHaveBeenCalled();
+  });
+});
+
+describe('ServiceForm — task profile overrides', () => {
+  it('renders the profile override section with the intent defaults', () => {
+    renderForm(makeFormData());
+
+    expect(
+      screen.getByText('settings.aiService.profileSettings.title')
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', {
+        name: /settings\.aiService\.profileSettings\.profiles\.intent/,
+      })
+    ).toBeTruthy();
+    expect(screen.getByDisplayValue('1024')).toBeTruthy();
+    expect(screen.getByDisplayValue('30')).toBeTruthy();
+    expect(screen.getByDisplayValue('0')).toBeTruthy();
+    expect(screen.getByDisplayValue('{}')).toBeTruthy();
+  });
+
+  it('updates the selected profile max tokens and extra JSON fields', () => {
+    const onFormDataChange = jest.fn();
+    renderWithClient(
+      <ServiceForm
+        formData={makeFormData()}
+        onFormDataChange={onFormDataChange}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+        translationPrefix="settings.aiService.userSettings"
+      />
+    );
+
+    fireEvent.change(
+      screen.getByLabelText('settings.aiService.profileSettings.maxTokens'),
+      { target: { value: '2048' } }
+    );
+    fireEvent.change(
+      screen.getByLabelText('settings.aiService.profileSettings.extraBodyJson'),
+      { target: { value: '{"reasoning_effort":"low"}' } }
+    );
+
+    expect(onFormDataChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile_settings: expect.objectContaining({
+          intent: expect.objectContaining({ max_tokens: 2048 }),
+        }),
+      })
+    );
+    expect(onFormDataChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile_settings: expect.objectContaining({
+          intent: expect.objectContaining({
+            extra_body_json: { reasoning_effort: 'low' },
+          }),
+        }),
+      })
+    );
+  });
+
+  it('blocks submit when the selected profile extra JSON is invalid', () => {
+    const onSubmit = jest.fn();
+    const { container } = renderForm(
+      makeFormData({
+        profile_settings: {
+          intent: {
+            extra_body_json: { valid: true },
+            extra_body_json_draft: '{bad json',
+          },
+        },
+      }),
+      onSubmit
+    );
+
+    fireEvent.submit(container.querySelector('form')!);
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -89,6 +89,7 @@ const GlobalAISettings = () => {
       is_active: false,
       model_name: '',
       max_tokens: null,
+      profile_settings: {},
       showCustomModelInput: false,
       custom_model_name: '',
       chat_tool_profile: 'full',
@@ -199,6 +200,7 @@ const GlobalAISettings = () => {
         is_active: false,
         model_name: '',
         max_tokens: null,
+        profile_settings: {},
         showCustomModelInput: false,
         custom_model_name: '',
         chat_tool_profile: 'full',
@@ -405,6 +407,7 @@ const GlobalAISettings = () => {
                     custom_url: newService.custom_url ?? undefined,
                     model_name: model,
                     max_tokens: newService.max_tokens ?? null,
+                    profile_settings: newService.profile_settings,
                   })
                 }
                 testing={isTesting}
@@ -437,6 +440,7 @@ const GlobalAISettings = () => {
                 custom_url: editData.custom_url ?? undefined,
                 model_name: model,
                 max_tokens: editData.max_tokens ?? null,
+                profile_settings: editData.profile_settings,
               });
             }}
             testing={isTesting}

@@ -2,6 +2,33 @@
 import { z } from "zod";
 
 // Database
+export const aiServiceProfileKeySchema = z.enum([
+  "chat",
+  "intent",
+  "vision",
+  "structured",
+]);
+
+export const aiServiceReasoningEffortSchema = z.enum(["low", "high", "max"]);
+
+export const aiServiceProfileOverrideSchema = z
+  .object({
+    max_tokens: z.number().int().positive().nullable().optional(),
+    reasoning_effort: aiServiceReasoningEffortSchema.nullable().optional(),
+    timeout_seconds: z.number().int().positive().nullable().optional(),
+    temperature: z.number().min(0).max(2).nullable().optional(),
+    extra_body_json: z.record(z.string(), z.unknown()).nullable().optional(),
+  })
+  .strict();
+
+export const aiServiceProfileSettingsSchema = z
+  .object({
+    chat: aiServiceProfileOverrideSchema.optional(),
+    intent: aiServiceProfileOverrideSchema.optional(),
+    vision: aiServiceProfileOverrideSchema.optional(),
+    structured: aiServiceProfileOverrideSchema.optional(),
+  })
+  .strict();
 
 export const aiServiceSettingsSchema = z.object({
   id: z.string(),
@@ -15,11 +42,12 @@ export const aiServiceSettingsSchema = z.object({
   system_prompt: z.string().nullable(),
   model_name: z.string().nullable(),
   max_tokens: z.number().int().positive().nullable().optional(),
+  profile_settings: aiServiceProfileSettingsSchema.nullable().optional(),
   encrypted_api_key: z.string().nullable(),
   api_key_iv: z.string().nullable().optional(),
   api_key_tag: z.string().nullable().optional(),
   is_public: z.boolean(),
-  chat_tool_profile: z.enum(['full', 'core']).optional(),
+  chat_tool_profile: z.enum(["full", "core"]).optional(),
 });
 
 export const aiServiceSettingsInitializerSchema = z.object({
@@ -34,11 +62,12 @@ export const aiServiceSettingsInitializerSchema = z.object({
   system_prompt: z.string().optional().nullable(),
   model_name: z.string().optional().nullable(),
   max_tokens: z.number().int().positive().optional().nullable(),
+  profile_settings: aiServiceProfileSettingsSchema.optional().nullable(),
   encrypted_api_key: z.string().optional().nullable(),
   api_key_iv: z.string().optional().nullable(),
   api_key_tag: z.string().optional().nullable(),
   is_public: z.boolean().optional(),
-  chat_tool_profile: z.enum(['full', 'core']).optional(),
+  chat_tool_profile: z.enum(["full", "core"]).optional(),
 });
 
 export const aiServiceSettingsMutatorSchema = z.object({
@@ -53,14 +82,25 @@ export const aiServiceSettingsMutatorSchema = z.object({
   system_prompt: z.string().optional().nullable(),
   model_name: z.string().optional().nullable(),
   max_tokens: z.number().int().positive().optional().nullable(),
+  profile_settings: aiServiceProfileSettingsSchema.optional().nullable(),
   encrypted_api_key: z.string().optional().nullable(),
   api_key_iv: z.string().optional().nullable(),
   api_key_tag: z.string().optional().nullable(),
   is_public: z.boolean().optional(),
-  chat_tool_profile: z.enum(['full', 'core']).optional(),
+  chat_tool_profile: z.enum(["full", "core"]).optional(),
 });
 
 export type AiServiceSettings = z.infer<typeof aiServiceSettingsSchema>;
+export type AiServiceProfileKey = z.infer<typeof aiServiceProfileKeySchema>;
+export type AiServiceReasoningEffort = z.infer<
+  typeof aiServiceReasoningEffortSchema
+>;
+export type AiServiceProfileOverride = z.infer<
+  typeof aiServiceProfileOverrideSchema
+>;
+export type AiServiceProfileSettings = z.infer<
+  typeof aiServiceProfileSettingsSchema
+>;
 export type AiServiceSettingsInitializer = z.infer<
   typeof aiServiceSettingsInitializerSchema
 >;

@@ -30,6 +30,7 @@ export const createAiServiceSettingsRequestSchema =
       is_active: true,
       max_tokens: true,
       model_name: true,
+      profile_settings: true,
       service_name: true,
       service_type: true,
       system_prompt: true,
@@ -48,6 +49,7 @@ export const updateAiServiceSettingsRequestSchema =
       is_public: true,
       max_tokens: true,
       model_name: true,
+      profile_settings: true,
       service_name: true,
       service_type: true,
       system_prompt: true,
@@ -68,6 +70,7 @@ export const testAiServiceConnectionRequestSchema = z.object({
   custom_url: z.string().optional(),
   max_tokens: z.number().int().positive().nullable().optional(),
   model_name: z.string().optional(),
+  profile_settings: aiServiceSettingsSchema.shape.profile_settings,
 });
 
 export const testAiServiceConnectionResponseSchema = z.object({

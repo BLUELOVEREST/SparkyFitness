@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,6 +14,13 @@ import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Save, X, Plug, Loader2, AlertTriangle } from 'lucide-react';
 import {
+  AI_SERVICE_PROFILE_KEYS,
+  DEFAULT_AI_SERVICE_PROFILE_SETTINGS,
+  type AiServiceProfileKey,
+  type AiServiceProfileOverride,
+  type AiServiceProfileSettings,
+} from '@workspace/shared';
+import {
   getServiceTypes,
   getModelOptions,
   requiresApiKey,
@@ -23,6 +31,50 @@ import {
   UpdateAiServiceSettingsFormInput,
 } from '@/schemas/form/AiServiceSettings.form.zod';
 import type { TestConnectionStatus } from '@/hooks/AI/useTestAIServiceConnection';
+
+type ProfileFormOverride = AiServiceProfileOverride & {
+  extra_body_json_draft?: string;
+};
+
+type ProfileFormSettings = Partial<
+  Record<AiServiceProfileKey, ProfileFormOverride>
+>;
+
+const PROFILE_DESCRIPTIONS: Record<AiServiceProfileKey, string> = {
+  chat: 'settings.aiService.profileSettings.descriptions.chat',
+  intent: 'settings.aiService.profileSettings.descriptions.intent',
+  vision: 'settings.aiService.profileSettings.descriptions.vision',
+  structured: 'settings.aiService.profileSettings.descriptions.structured',
+};
+
+function profileLabelKey(profile: AiServiceProfileKey): string {
+  return `settings.aiService.profileSettings.profiles.${profile}`;
+}
+
+function getProfileSettings(
+  formData: AiServiceSettingsFormInput
+): ProfileFormSettings {
+  return (formData.profile_settings ?? {}) as ProfileFormSettings;
+}
+
+function getProfileDraft(profile: ProfileFormOverride): string {
+  if (typeof profile.extra_body_json_draft === 'string') {
+    return profile.extra_body_json_draft;
+  }
+  return JSON.stringify(profile.extra_body_json ?? {}, null, 2);
+}
+
+function hasProfileOverride(profile: ProfileFormOverride | undefined): boolean {
+  if (!profile) return false;
+  return (
+    profile.max_tokens !== undefined ||
+    profile.reasoning_effort !== undefined ||
+    profile.timeout_seconds !== undefined ||
+    profile.temperature !== undefined ||
+    (profile.extra_body_json !== undefined &&
+      Object.keys(profile.extra_body_json ?? {}).length > 0)
+  );
+}
 
 interface ServiceFormProps {
   formData: AiServiceSettingsFormInput;
@@ -54,8 +106,49 @@ export const ServiceForm = ({
 }: ServiceFormProps) => {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const [selectedProfile, setSelectedProfile] =
+    useState<AiServiceProfileKey>('intent');
   const serviceTypes = getServiceTypes(t);
   const modelOptions = getModelOptions(formData.service_type ?? '');
+  const profileSettings = getProfileSettings(formData);
+  const selectedDefaults = DEFAULT_AI_SERVICE_PROFILE_SETTINGS[selectedProfile];
+  const selectedOverride = profileSettings[selectedProfile] ?? {};
+  const selectedProfileData: ProfileFormOverride = {
+    ...selectedDefaults,
+    ...selectedOverride,
+  };
+
+  const updateSelectedProfile = (data: Partial<ProfileFormOverride>) => {
+    onFormDataChange({
+      profile_settings: {
+        ...profileSettings,
+        [selectedProfile]: {
+          ...selectedOverride,
+          ...data,
+        },
+      } as AiServiceProfileSettings,
+    });
+  };
+
+  const resetSelectedProfile = () => {
+    const nextSettings: ProfileFormSettings = { ...profileSettings };
+    delete nextSettings[selectedProfile];
+    onFormDataChange({
+      profile_settings: nextSettings as AiServiceProfileSettings,
+    });
+  };
+
+  const selectedJsonDraft = getProfileDraft(selectedProfileData);
+  const selectedJsonIsInvalid = (() => {
+    try {
+      const parsed = JSON.parse(selectedJsonDraft);
+      return (
+        typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)
+      );
+    } catch {
+      return true;
+    }
+  })();
 
   // The effective model is whichever input is active for this service type.
   const selectedModel = (
@@ -73,6 +166,14 @@ export const ServiceForm = ({
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        if (selectedJsonIsInvalid) {
+          toast({
+            title: t(`${translationPrefix}.error`),
+            description: t('settings.aiService.profileSettings.invalidJson'),
+            variant: 'destructive',
+          });
+          return;
+        }
         // Providers with preset models (openai, anthropic, ...) have a sensible
         // server-side default, so a blank model is fine. Types without presets
         // (openai_compatible/custom/ollama) point at user-hosted servers with no
@@ -333,6 +434,194 @@ export const ServiceForm = ({
         <p className="text-xs text-muted-foreground mt-1">
           {t(`${translationPrefix}.maxTokensDescription`)}
         </p>
+      </div>
+
+      <div className="border-t pt-4 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-medium">
+              {t('settings.aiService.profileSettings.title')}
+            </h4>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('settings.aiService.profileSettings.description')}
+            </p>
+          </div>
+          <span className="rounded-full border px-2 py-1 text-xs text-muted-foreground">
+            {t('settings.aiService.profileSettings.builtInPromptBadge')}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {AI_SERVICE_PROFILE_KEYS.map((profile) => {
+            const active = selectedProfile === profile;
+            const custom = hasProfileOverride(profileSettings[profile]);
+            return (
+              <button
+                key={profile}
+                type="button"
+                onClick={() => setSelectedProfile(profile)}
+                className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                  active
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-input bg-background text-foreground hover:bg-muted'
+                }`}
+              >
+                <span>{t(profileLabelKey(profile))}</span>
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                  {custom
+                    ? t('settings.aiService.profileSettings.custom')
+                    : t('settings.aiService.profileSettings.default')}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h5 className="text-sm font-medium">
+                {t(profileLabelKey(selectedProfile))}
+              </h5>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t(PROFILE_DESCRIPTIONS[selectedProfile])}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={resetSelectedProfile}
+            >
+              {t('settings.aiService.profileSettings.resetToDefaults')}
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="profile_max_tokens">
+                {t('settings.aiService.profileSettings.maxTokens')}
+              </Label>
+              <Input
+                id="profile_max_tokens"
+                type="number"
+                min={1}
+                step={1}
+                value={selectedProfileData.max_tokens ?? ''}
+                onChange={(e) =>
+                  updateSelectedProfile({
+                    max_tokens: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
+                inputMode="numeric"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="profile_timeout_seconds">
+                {t('settings.aiService.profileSettings.timeoutSeconds')}
+              </Label>
+              <Input
+                id="profile_timeout_seconds"
+                type="number"
+                min={1}
+                step={1}
+                value={selectedProfileData.timeout_seconds ?? ''}
+                onChange={(e) =>
+                  updateSelectedProfile({
+                    timeout_seconds: e.target.value
+                      ? Number(e.target.value)
+                      : null,
+                  })
+                }
+                inputMode="numeric"
+              />
+            </div>
+
+            <div>
+              <Label>
+                {t('settings.aiService.profileSettings.reasoningEffort')}
+              </Label>
+              <div className="mt-2 inline-flex rounded-md border bg-background p-1">
+                {(['low', 'high', 'max'] as const).map((effort) => (
+                  <button
+                    key={effort}
+                    type="button"
+                    onClick={() =>
+                      updateSelectedProfile({ reasoning_effort: effort })
+                    }
+                    className={`rounded px-3 py-1.5 text-sm capitalize ${
+                      selectedProfileData.reasoning_effort === effort
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {effort}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="profile_temperature">
+                {t('settings.aiService.profileSettings.temperature')}
+              </Label>
+              <Input
+                id="profile_temperature"
+                type="number"
+                min={0}
+                max={2}
+                step={0.1}
+                value={selectedProfileData.temperature ?? ''}
+                onChange={(e) =>
+                  updateSelectedProfile({
+                    temperature: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="profile_extra_body_json">
+              {t('settings.aiService.profileSettings.extraBodyJson')}
+            </Label>
+            <Textarea
+              id="profile_extra_body_json"
+              value={selectedJsonDraft}
+              onChange={(e) => {
+                const draft = e.target.value;
+                try {
+                  const parsed = JSON.parse(draft) as unknown;
+                  updateSelectedProfile({
+                    extra_body_json:
+                      typeof parsed === 'object' &&
+                      parsed !== null &&
+                      !Array.isArray(parsed)
+                        ? (parsed as Record<string, unknown>)
+                        : {},
+                    extra_body_json_draft: draft,
+                  });
+                } catch {
+                  updateSelectedProfile({ extra_body_json_draft: draft });
+                }
+              }}
+              className="font-mono"
+              rows={4}
+            />
+            <p
+              className={`text-xs mt-1 ${
+                selectedJsonIsInvalid
+                  ? 'text-destructive'
+                  : 'text-green-600 dark:text-green-400'
+              }`}
+            >
+              {selectedJsonIsInvalid
+                ? t('settings.aiService.profileSettings.invalidJson')
+                : t('settings.aiService.profileSettings.validJson')}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div>

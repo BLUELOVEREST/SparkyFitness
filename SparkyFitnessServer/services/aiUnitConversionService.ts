@@ -8,6 +8,7 @@ import {
   type JsonSchemaNode,
   type ProviderConfig,
 } from '../ai/providerDispatch.js';
+import { resolveAiProfileSettings } from '../ai/profileSettings.js';
 import { deriveAiNetworkPolicy } from '../utils/outboundUrlPolicy.js';
 import {
   aiProviderRawResponseSchema,
@@ -171,13 +172,19 @@ export async function estimateUnitConversion(
     throw new NoAiServiceError();
   }
 
+  const profile = resolveAiProfileSettings(
+    'structured',
+    aiService.profile_settings,
+    aiService.max_tokens
+  );
   const provider: ProviderConfig = {
     service_type: aiService.service_type,
     api_key: aiService.api_key ?? undefined,
     model_name: aiService.model_name ?? undefined,
     custom_url: aiService.custom_url ?? undefined,
-    timeout: aiService.timeout ?? undefined,
-    max_tokens: aiService.max_tokens ?? undefined,
+    max_tokens: profile.max_tokens,
+    reasoning_effort: profile.reasoning_effort,
+    extra_body_json: profile.extra_body_json,
   };
 
   // 4. Build prompt + dispatch. The helper owns the api-key/custom-url checks,
@@ -195,7 +202,8 @@ export async function estimateUnitConversion(
     }),
     jsonSchema: UNIT_CONVERSION_SCHEMA,
     schemaName: SCHEMA_NAME,
-    temperature: UNIT_CONVERSION_TEMPERATURE,
+    temperature: profile.temperature ?? UNIT_CONVERSION_TEMPERATURE,
+    timeoutMs: profile.timeoutMs,
   });
 
   if (!result.ok) {

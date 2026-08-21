@@ -5,6 +5,7 @@ import {
   type DispatchErrorCategory,
   type ProviderConfig,
 } from '../ai/providerDispatch.js';
+import { resolveAiProfileSettings } from '../ai/profileSettings.js';
 import { deriveAiNetworkPolicy } from '../utils/outboundUrlPolicy.js';
 
 const LABEL_SCAN_PROMPT =
@@ -60,13 +61,19 @@ async function extractNutritionFromLabel(
   // Dispatch reads everything from the decrypted backend detail. The helper
   // enforces the supported-provider, api-key, custom-url, and HEIC checks and
   // reports each as a category the route maps to an HTTP status.
+  const profile = resolveAiProfileSettings(
+    'vision',
+    aiService.profile_settings,
+    aiService.max_tokens
+  );
   const provider: ProviderConfig = {
     service_type: aiService.service_type,
     api_key: aiService.api_key ?? undefined,
     model_name: aiService.model_name ?? undefined,
     custom_url: aiService.custom_url ?? undefined,
-    timeout: aiService.timeout ?? undefined,
-    max_tokens: aiService.max_tokens ?? undefined,
+    max_tokens: profile.max_tokens,
+    reasoning_effort: profile.reasoning_effort,
+    extra_body_json: profile.extra_body_json,
   };
 
   const result = await dispatchAiRequest({
@@ -75,6 +82,8 @@ async function extractNutritionFromLabel(
     prompt: LABEL_SCAN_PROMPT,
     images: [{ base64: base64Image, mimeType }],
     parseJson: true,
+    temperature: profile.temperature,
+    timeoutMs: profile.timeoutMs,
   });
 
   if (!result.ok) {

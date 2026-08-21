@@ -6,6 +6,7 @@ import {
   type JsonSchemaNode,
   type ProviderConfig,
 } from '../ai/providerDispatch.js';
+import { resolveAiProfileSettings } from '../ai/profileSettings.js';
 import { deriveAiNetworkPolicy } from '../utils/outboundUrlPolicy.js';
 import {
   foodPhotoEstimateResponseSchema,
@@ -327,13 +328,19 @@ async function estimateFoodPhotoNutrition(
   // Dispatch reads everything from the decrypted backend detail. The helper
   // enforces the supported-provider, api-key, custom-url, and HEIC checks and
   // reports each as a category we map back to a food-photo error code.
+  const profile = resolveAiProfileSettings(
+    'vision',
+    aiService.profile_settings,
+    aiService.max_tokens
+  );
   const provider: ProviderConfig = {
     service_type: aiService.service_type,
     api_key: aiService.api_key ?? undefined,
     model_name: aiService.model_name ?? undefined,
     custom_url: aiService.custom_url ?? undefined,
-    timeout: aiService.timeout ?? undefined,
-    max_tokens: aiService.max_tokens ?? undefined,
+    max_tokens: profile.max_tokens,
+    reasoning_effort: profile.reasoning_effort,
+    extra_body_json: profile.extra_body_json,
   };
 
   const result = await dispatchAiRequest({
@@ -346,6 +353,8 @@ async function estimateFoodPhotoNutrition(
     images,
     jsonSchema: RESPONSE_SCHEMA,
     schemaName: SCHEMA_NAME,
+    temperature: profile.temperature,
+    timeoutMs: profile.timeoutMs,
   });
 
   if (!result.ok) {

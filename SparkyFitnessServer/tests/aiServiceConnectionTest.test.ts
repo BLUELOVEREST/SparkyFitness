@@ -272,6 +272,7 @@ describe('chatService.testAiServiceConnection', () => {
       custom_url: null,
       model_name: 'gpt-4o',
       max_tokens: 2048,
+      profile_settings: null,
       is_public: false,
     });
     mockDispatch.mockResolvedValue(okDispatch);
@@ -301,6 +302,7 @@ describe('chatService.testAiServiceConnection', () => {
       custom_url: null,
       model_name: null,
       max_tokens: null,
+      profile_settings: null,
       is_public: false,
     });
     mockDispatch.mockResolvedValue(okDispatch);
@@ -324,6 +326,7 @@ describe('chatService.testAiServiceConnection', () => {
       custom_url: null,
       model_name: 'gpt-4o',
       max_tokens: null,
+      profile_settings: null,
       is_public: true,
     });
 
@@ -349,6 +352,7 @@ describe('chatService.testAiServiceConnection', () => {
       custom_url: null,
       model_name: 'gpt-4o',
       max_tokens: null,
+      profile_settings: null,
       is_public: true,
     });
     mockDispatch.mockResolvedValue(okDispatch);
@@ -374,6 +378,7 @@ describe('chatService.testAiServiceConnection', () => {
       custom_url: null,
       model_name: 'gpt-4o',
       max_tokens: null,
+      profile_settings: null,
       is_public: false,
     });
     mockDispatch.mockResolvedValue({

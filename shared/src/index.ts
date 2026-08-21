@@ -111,6 +111,7 @@ export * from "./utils/csvFormat.ts";
 export * from "./utils/parseCsv.ts";
 export * from "./ai/unitConversion.ts";
 export * from "./ai/confidenceLabels.ts";
+export * from "./ai/serviceProfiles.ts";
 export * from "./medications/contracts.ts";
 export * from "./medications/glp1.ts";
 export * from "./medications/schedules.ts";

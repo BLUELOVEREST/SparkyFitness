@@ -9,6 +9,10 @@ import {
   type DispatchErrorCategory,
   type ProviderConfig,
 } from '../ai/providerDispatch.js';
+import {
+  resolveAiProfileSettings,
+  type ResolvedAiProfileSettings,
+} from '../ai/profileSettings.js';
 import { loadUserTimezone } from '../utils/timezoneLoader.js';
 import { TtlCache } from '../utils/ttlCache.js';
 import {
@@ -22,6 +26,7 @@ import {
   todayInZone,
   DatabaseCustomCategories,
   AiServiceSettings,
+  AiServiceProfileSettings,
   SparkyChatHistory,
   SparkyChatHistoryMutator,
   TestAiServiceConnectionRequest,
@@ -778,6 +783,30 @@ export function buildChatProviderOptions(
   return { openai };
 }
 
+function buildProfiledChatProviderOptions(
+  serviceType: string,
+  userId: string,
+  modelName: string,
+  profile: ResolvedAiProfileSettings
+): Record<string, Record<string, JSONValue>> | undefined {
+  const providerOptions =
+    buildChatProviderOptions(serviceType, userId, modelName) ?? {};
+  if (
+    profile.reasoning_effort ||
+    (profile.extra_body_json && Object.keys(profile.extra_body_json).length > 0)
+  ) {
+    providerOptions.openai = {
+      ...(providerOptions.openai ?? {}),
+      ...(profile.extra_body_json ?? {}),
+      ...(profile.reasoning_effort && {
+        reasoning_effort: profile.reasoning_effort,
+        reasoningEffort: profile.reasoning_effort,
+      }),
+    };
+  }
+  return Object.keys(providerOptions).length > 0 ? providerOptions : undefined;
+}
+
 interface LlmMessage {
   role: string;
   content: string | ProcessedMessagePart[];
@@ -886,6 +915,7 @@ interface ChatAiServiceConfig {
   api_key?: string | null;
   custom_url?: string | null;
   max_tokens?: number | null;
+  profile_settings?: AiServiceProfileSettings | null;
 }
 
 // Resolves the AI SDK model instance for a chat service: native adapters for
@@ -1216,9 +1246,9 @@ export function classifyByKeywords(text: string): ChatToolCategorySlug[] {
 
 async function classifyUserIntent(
   messages: ChatMessage[],
-  modelInstance: Parameters<typeof generateText>[0]['model'],
-  providerOptions?: Record<string, Record<string, JSONValue>>,
-  maxOutputTokens?: number
+  aiService: ChatAiServiceConfig,
+  modelName: string,
+  networkPolicy: ReturnType<typeof deriveAiNetworkPolicy>
 ): Promise<ChatToolCategorySlug[]> {
   const lastUserMessage = [...messages]
     .reverse()
@@ -1266,18 +1296,44 @@ Available domains:
 - coaching: general coaching advice, guidance, tips, or motivation.
 - profile: changing settings, preferences, timezone, habits, or profile details.
 
+Important rules:
+- If the user asks to design, plan, optimize, recommend, adjust, or evaluate something, include coaching.
+- If the plan or advice is about training, include exercise too.
+- If the plan or advice is about meals, nutrition, hydration, or foods, include food too.
+- If a food/nutrition plan depends on a training plan, include exercise too.
+- If a report needs workout data, include both reports and exercise.
+- Prefer including an extra relevant domain over omitting a domain that tools may need.
+
 Your response must contain ONLY the matched domain names as a comma-separated list (e.g., "exercise, food" or "checkin" or "none"). Do not include any other text.`;
 
-    const { text: resultText } = await generateText({
-      model: modelInstance,
-      system: classificationPrompt,
-      messages: contextMessages,
-      providerOptions,
-      temperature: 0,
-      ...(maxOutputTokens && { maxOutputTokens }),
-      maxRetries: 0,
-      abortSignal: AbortSignal.timeout(10000), // 10s timeout to prevent hanging the chat turn
+    const profile = resolveAiProfileSettings(
+      'intent',
+      aiService.profile_settings,
+      aiService.max_tokens
+    );
+    const provider: ProviderConfig = {
+      service_type: aiService.service_type,
+      api_key: aiService.api_key ?? undefined,
+      model_name: modelName,
+      custom_url: aiService.custom_url ?? undefined,
+      max_tokens: profile.max_tokens,
+      reasoning_effort: profile.reasoning_effort,
+      extra_body_json: profile.extra_body_json,
+    };
+    const result = await dispatchAiRequest({
+      provider,
+      networkPolicy,
+      prompt: `${classificationPrompt}\n\nConversation:\n${JSON.stringify(contextMessages)}`,
+      temperature: profile.temperature,
+      timeoutMs: profile.timeoutMs,
     });
+    if (!result.ok) {
+      throw new Error(
+        `Intent classification failed (${result.category}): ${result.detail}`
+      );
+    }
+
+    const resultText = result.text;
 
     log(
       'info',
@@ -1375,13 +1431,9 @@ async function processChatMessage(
     if (!process.env.VITEST && !categoriesAreManual) {
       activeCategories = await classifyUserIntent(
         messages,
-        modelInstance,
-        buildChatProviderOptions(
-          aiService.service_type,
-          authenticatedUserId,
-          modelName
-        ),
-        aiService.max_tokens ?? undefined
+        aiService,
+        modelName,
+        networkPolicy
       );
     }
 
@@ -1400,10 +1452,16 @@ async function processChatMessage(
       aiService.system_prompt
     );
 
-    const chatProviderOptions = buildChatProviderOptions(
+    const chatProfile = resolveAiProfileSettings(
+      'chat',
+      aiService.profile_settings,
+      aiService.max_tokens
+    );
+    const chatProviderOptions = buildProfiledChatProviderOptions(
       aiService.service_type,
       authenticatedUserId,
-      modelName
+      modelName,
+      chatProfile
     );
 
     // Map conversation history messages to CoreMessage format, then apply the
@@ -1430,12 +1488,13 @@ async function processChatMessage(
       activeTools: activeToolNames,
       prepareStep,
       providerOptions: chatProviderOptions,
-      // Low temperature only for small local models (core profile); cloud and
-      // full-profile Ollama keep provider defaults.
-      ...(toolProfile === 'core' && {
-        temperature: CORE_PROFILE_CHAT_TEMPERATURE,
+      temperature:
+        toolProfile === 'core'
+          ? CORE_PROFILE_CHAT_TEMPERATURE
+          : chatProfile.temperature,
+      ...(chatProfile.max_tokens && {
+        maxOutputTokens: chatProfile.max_tokens,
       }),
-      ...(aiService.max_tokens && { maxOutputTokens: aiService.max_tokens }),
       // Tighter retry ceiling for cache-less core-profile backends, where every
       // retry re-processes the full prefix.
       stopWhen: buildChatStopConditions(toolProfile),
@@ -1443,7 +1502,9 @@ async function processChatMessage(
         toolProfile === 'core'
           ? CORE_PROFILE_MAX_PROVIDER_RETRIES
           : MAX_PROVIDER_RETRIES,
-      abortSignal: AbortSignal.timeout(CHAT_REQUEST_TIMEOUT_MS),
+      abortSignal: AbortSignal.timeout(
+        chatProfile.timeoutMs ?? CHAT_REQUEST_TIMEOUT_MS
+      ),
       onStepFinish({ toolCalls, toolResults }) {
         if (toolCalls && toolCalls.length > 0) {
           toolCalls.forEach((call) => {
@@ -1596,8 +1657,6 @@ async function processChatMessage(
 const FOOD_OPTIONS_PROMPT = `You are Sparky, an AI nutrition and wellness coach. Your task is to generate minimum 3 realistic food options in JSON format when requested. Respond ONLY with a JSON array of FoodOption objects, including detailed nutritional information for EVERY field (calories, protein, carbs, fat, saturated_fat, polyunsaturated_fat, monounsaturated_fat, trans_fat, cholesterol, sodium, potassium, dietary_fiber, sugars, vitamin_a, vitamin_c, calcium, iron). **CRITICAL: You MUST estimate and populate every single micro-nutritional field. Do NOT default to 0 or leave blank any nutritional field if a realistic scientific estimation can be made based on the food type. Use your biochemical and culinary knowledge to calculate typical distributions.** Do NOT include any other text.
 **CRITICAL: When a unit is specified in the request (e.g., 'GENERATE_FOOD_OPTIONS:apple in piece'), ensure the \`serving_unit\` in the generated \`FoodOption\` objects matches the requested unit exactly, if it's a common and logical unit for that food. If not, provide a common and realistic serving unit.**`;
 
-const FOOD_OPTIONS_TEMPERATURE = 0.7;
-
 // 'no_ai_configured' is the only category this service mints itself; every
 // dispatch failure passes its category through unchanged for the route's
 // HTTP-status map.
@@ -1653,13 +1712,22 @@ async function processFoodOptionsRequest(
   };
 
   const prompt = `${FOOD_OPTIONS_PROMPT}\n\nGENERATE_FOOD_OPTIONS:${foodName} in ${unit}`;
+  const profile = resolveAiProfileSettings(
+    'structured',
+    aiService.profile_settings,
+    aiService.max_tokens
+  );
+  provider.max_tokens = profile.max_tokens;
+  provider.reasoning_effort = profile.reasoning_effort;
+  provider.extra_body_json = profile.extra_body_json;
 
   const result = await dispatchAiRequest({
     provider,
     networkPolicy: deriveAiNetworkPolicy(aiService, actorIsAdmin),
     prompt,
     parseJson: true,
-    temperature: FOOD_OPTIONS_TEMPERATURE,
+    temperature: profile.temperature,
+    timeoutMs: profile.timeoutMs,
   });
 
   if (!result.ok) {
@@ -1911,13 +1979,9 @@ async function processChatMessageStream(
     if (!process.env.VITEST && !categoriesAreManual) {
       activeCategories = await classifyUserIntent(
         messages,
-        modelInstance,
-        buildChatProviderOptions(
-          aiService.service_type,
-          authenticatedUserId,
-          modelName
-        ),
-        aiService.max_tokens ?? undefined
+        aiService,
+        modelName,
+        networkPolicy
       );
     }
 
@@ -1936,10 +2000,16 @@ async function processChatMessageStream(
       aiService.system_prompt
     );
 
-    const chatProviderOptions = buildChatProviderOptions(
+    const chatProfile = resolveAiProfileSettings(
+      'chat',
+      aiService.profile_settings,
+      aiService.max_tokens
+    );
+    const chatProviderOptions = buildProfiledChatProviderOptions(
       aiService.service_type,
       authenticatedUserId,
-      modelName
+      modelName,
+      chatProfile
     );
 
     // Map client messages to CoreMessage format, then apply the shared
@@ -1969,12 +2039,13 @@ async function processChatMessageStream(
       activeTools: activeToolNames,
       prepareStep,
       providerOptions: chatProviderOptions,
-      // Low temperature only for small local models (core profile); cloud and
-      // full-profile Ollama keep provider defaults.
-      ...(toolProfile === 'core' && {
-        temperature: CORE_PROFILE_CHAT_TEMPERATURE,
+      temperature:
+        toolProfile === 'core'
+          ? CORE_PROFILE_CHAT_TEMPERATURE
+          : chatProfile.temperature,
+      ...(chatProfile.max_tokens && {
+        maxOutputTokens: chatProfile.max_tokens,
       }),
-      ...(aiService.max_tokens && { maxOutputTokens: aiService.max_tokens }),
       // Tighter retry ceiling for cache-less core-profile backends, where every
       // retry re-processes the full prefix.
       stopWhen: buildChatStopConditions(toolProfile),
@@ -1982,7 +2053,9 @@ async function processChatMessageStream(
         toolProfile === 'core'
           ? CORE_PROFILE_MAX_PROVIDER_RETRIES
           : MAX_PROVIDER_RETRIES,
-      abortSignal: AbortSignal.timeout(CHAT_REQUEST_TIMEOUT_MS),
+      abortSignal: AbortSignal.timeout(
+        chatProfile.timeoutMs ?? CHAT_REQUEST_TIMEOUT_MS
+      ),
       onStepFinish({ toolResults }) {
         if (toolResults && toolResults.length > 0) {
           const sizes = toolResults

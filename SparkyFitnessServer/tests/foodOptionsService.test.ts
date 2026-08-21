@@ -186,7 +186,7 @@ describe('processFoodOptionsRequest', () => {
   });
 
   describe('request shape', () => {
-    it('sends openai a single user message with the combined prompt and temperature 0.7', async () => {
+    it('sends openai a single user message with the combined prompt and structured profile temperature', async () => {
       mockGetBackendSetting.mockResolvedValue(makeAiServiceDetail());
       const m = mockFetch(openAiBody(sampleFoodOptions));
       await runFoodOptions(true);
@@ -198,7 +198,7 @@ describe('processFoodOptionsRequest', () => {
       expect(body.messages[0].content).toContain(
         'GENERATE_FOOD_OPTIONS:apple in piece'
       );
-      expect(body.temperature).toBe(0.7);
+      expect(body.temperature).toBe(0);
     });
 
     it('passes configured max_tokens to openai-compatible request bodies', async () => {
@@ -219,6 +219,38 @@ describe('processFoodOptionsRequest', () => {
       expect(body.max_tokens).toBe(2048);
     });
 
+    it('uses the structured task profile when building openai-compatible request bodies', async () => {
+      mockGetBackendSetting.mockResolvedValue(
+        makeAiServiceDetail({
+          service_type: 'openai_compatible',
+          api_key: 'oc-key',
+          custom_url: 'https://example.local/v1',
+          max_tokens: 4096,
+          profile_settings: {
+            structured: {
+              max_tokens: 2048,
+              reasoning_effort: 'low',
+              timeout_seconds: 60,
+              temperature: 0,
+              extra_body_json: {
+                chat_template_kwargs: { enable_thinking: false },
+              },
+            },
+          },
+        })
+      );
+      const m = mockFetch(openAiBody(sampleFoodOptions));
+
+      await runFoodOptions(true);
+
+      const init = m.mock.calls[0][1] as { body: string };
+      const body = JSON.parse(init.body);
+      expect(body.max_tokens).toBe(2048);
+      expect(body.temperature).toBe(0);
+      expect(body.reasoning_effort).toBe('low');
+      expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
+    });
+
     it('authenticates google via header (not URL key) and requests JSON output', async () => {
       mockGetBackendSetting.mockResolvedValue(
         makeAiServiceDetail({ service_type: 'google', api_key: 'gem-key' })
@@ -232,11 +264,11 @@ describe('processFoodOptionsRequest', () => {
       expect(url).not.toContain('?key=');
       expect(init.headers['x-goog-api-key']).toBe('gem-key');
       const body = JSON.parse(init.body);
-      expect(body.generationConfig.temperature).toBe(0.7);
+      expect(body.generationConfig.temperature).toBe(0);
       expect(body.generationConfig.responseMimeType).toBe('application/json');
     });
 
-    it('sends anthropic temperature 0.7 and max_tokens 2048 with no system field', async () => {
+    it('sends anthropic structured profile temperature and max_tokens 2048 with no system field', async () => {
       mockGetBackendSetting.mockResolvedValue(
         makeAiServiceDetail({ service_type: 'anthropic', api_key: 'anth-key' })
       );
@@ -244,12 +276,12 @@ describe('processFoodOptionsRequest', () => {
       await runFoodOptions();
       const init = m.mock.calls[0][1] as { body: string };
       const body = JSON.parse(init.body);
-      expect(body.temperature).toBe(0.7);
+      expect(body.temperature).toBe(0);
       expect(body.max_tokens).toBe(2048);
       expect(body).not.toHaveProperty('system');
     });
 
-    it('sends ollama requests to /api/chat with temperature 0.7', async () => {
+    it('sends ollama requests to /api/chat with structured profile temperature', async () => {
       mockGetBackendSetting.mockResolvedValue(
         makeAiServiceDetail({
           service_type: 'ollama',
@@ -262,7 +294,7 @@ describe('processFoodOptionsRequest', () => {
       const [url, init] = m.mock.calls[0] as [string, { body: string }];
       expect(url).toBe('http://localhost:11434/api/chat');
       const body = JSON.parse(init.body);
-      expect(body.options.temperature).toBe(0.7);
+      expect(body.options.temperature).toBe(0);
     });
 
     it('passes the configured timeout to the Ollama agent', async () => {
@@ -279,13 +311,13 @@ describe('processFoodOptionsRequest', () => {
       expect(result.success).toBe(true);
       expect(mockAgent).toHaveBeenCalledWith(
         expect.objectContaining({
-          headersTimeout: 5000,
-          bodyTimeout: 5000,
+          headersTimeout: 60000,
+          bodyTimeout: 60000,
         })
       );
     });
 
-    it('defaults the Ollama agent timeout to 120000ms when unset', async () => {
+    it('defaults the Ollama agent timeout to the structured profile timeout when unset', async () => {
       mockGetBackendSetting.mockResolvedValue(
         makeAiServiceDetail({
           service_type: 'ollama',
@@ -299,8 +331,8 @@ describe('processFoodOptionsRequest', () => {
       expect(result.success).toBe(true);
       expect(mockAgent).toHaveBeenCalledWith(
         expect.objectContaining({
-          headersTimeout: 120000,
-          bodyTimeout: 120000,
+          headersTimeout: 60000,
+          bodyTimeout: 60000,
         })
       );
     });
