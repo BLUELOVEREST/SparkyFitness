@@ -250,7 +250,37 @@ Rules:
     burrito → tortilla, rice, beans, meat, cheese, salsa).
   - Be explicit about assumptions (oil used, milk type, skin on/off).
   - Lower your confidence when portions are ambiguous or ingredients hidden.
-  - Only ask clarifying questions that would materially change the estimate.`;
+  - Only ask clarifying questions that would materially change the estimate.
+  - Return exactly one top-level JSON object. Do not wrap it in fields like
+    data, result, analysis, estimate, nutrition, or response.
+  - The top-level object must include meal_summary, overall_confidence,
+    confidence_reason, items, totals, user_weight_reconciliation, and
+    clarifying_questions.
+  - overall_confidence and every item_confidence must be exactly one of:
+    high, medium, low.
+  - If a value is unknown, still include the field using an empty string,
+    empty array, or numeric estimate. Never omit required fields.`;
+}
+
+function buildRepairPrompt(rawResponse: unknown): string {
+  return `The previous response for a food-photo nutrition estimate did not match the required JSON shape.
+
+Convert it into exactly one top-level JSON object matching the provided JSON Schema.
+
+Rules:
+
+  - Preserve the original nutrition estimate as much as possible.
+  - Do not invent a wrapper field such as data, result, analysis, estimate,
+    nutrition, or response.
+  - Include every required top-level field even if the previous response omitted it.
+  - Use empty strings for missing text fields, empty arrays for missing arrays,
+    and numeric estimates for missing nutrition numbers.
+  - overall_confidence and item_confidence must be exactly one of high, medium,
+    or low.
+  - Return only the corrected JSON object, no prose.
+
+Previous response:
+${JSON.stringify(rawResponse).slice(0, 8000)}`;
 }
 
 export interface PhotoImage {
@@ -373,6 +403,43 @@ async function estimateFoodPhotoNutrition(
       `Food-photo estimation: ${provider.service_type} JSON failed schema validation for user ${userId}`,
       parsed.error.issues
     );
+    const repairResult = await dispatchAiRequest({
+      provider,
+      networkPolicy: deriveAiNetworkPolicy(
+        aiService,
+        Boolean(input.actorIsAdmin)
+      ),
+      prompt: buildRepairPrompt(result.json),
+      jsonSchema: RESPONSE_SCHEMA,
+      schemaName: SCHEMA_NAME,
+      temperature: 0,
+      timeoutMs: profile.timeoutMs,
+    });
+    if (repairResult.ok) {
+      const repaired = foodPhotoEstimateResponseSchema.safeParse(
+        repairResult.json
+      );
+      if (repaired.success) {
+        log(
+          'warn',
+          `Food-photo estimation: ${provider.service_type} JSON shape repaired for user ${userId}`
+        );
+        return { success: true, estimate: repaired.data };
+      }
+      log(
+        'error',
+        `Food-photo estimation: ${provider.service_type} repaired JSON failed schema validation for user ${userId}`,
+        repaired.error.issues
+      );
+    } else {
+      log(
+        repairResult.category === 'refused' ||
+          repairResult.category === 'no_content'
+          ? 'warn'
+          : 'error',
+        `Food-photo estimation: ${provider.service_type} JSON repair failed for user ${userId} (${repairResult.category}): ${repairResult.detail}`
+      );
+    }
     // The issues above describe what was *missing* against the expected shape;
     // logging the raw payload shows what the provider *actually* returned, which
     // is what you need to tell "wrong shape" from "truncated/garbage".

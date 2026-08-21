@@ -517,19 +517,36 @@ describe('estimateFoodPhotoNutrition', () => {
   });
 
   describe('domain validation', () => {
-    it('returns PARSE_ERROR when the provider payload fails the Zod schema', async () => {
+    it('repairs an unexpected provider payload shape once before returning success', async () => {
       mockGetVisionSetting.mockResolvedValue(makeSetting());
       mockGetBackendSetting.mockResolvedValue(makeServiceDetail());
       const wrongShape: Record<string, unknown> = { ...sampleEstimate };
       delete wrongShape.totals;
-      mockFetch(googleBody(wrongShape));
+      const m = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => googleBody(wrongShape),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => googleBody(sampleEstimate),
+        });
+      global.fetch = m as typeof global.fetch;
       const result = await estimateFoodPhotoNutrition({
         base64Image: TEST_BASE64,
         mimeType: TEST_MIME,
         userId: TEST_USER_ID,
       });
-      expect(result.success).toBe(false);
-      if (!result.success) expect(result.code).toBe('PARSE_ERROR');
+      expect(result.success).toBe(true);
+      expect(m).toHaveBeenCalledTimes(2);
+      if (result.success) {
+        expect(result.estimate.totals.calories_kcal).toBe(250);
+      }
     });
   });
 });
