@@ -47,6 +47,21 @@ const PROFILE_DESCRIPTIONS: Record<AiServiceProfileKey, string> = {
   structured: 'settings.aiService.profileSettings.descriptions.structured',
 };
 
+const PROFILE_LABEL_FALLBACKS: Record<AiServiceProfileKey, string> = {
+  chat: 'Chat',
+  intent: 'Intent',
+  vision: 'Vision',
+  structured: 'Structured',
+};
+
+const PROFILE_DESCRIPTION_FALLBACKS: Record<AiServiceProfileKey, string> = {
+  chat: 'Ordinary chat and health coaching.',
+  intent: 'Tool and domain classification for SparkyFitness actions.',
+  vision: 'Food photo and nutrition label scanning.',
+  structured:
+    'JSON output, food options, unit conversion, and tool parameters.',
+};
+
 function profileLabelKey(profile: AiServiceProfileKey): string {
   return `settings.aiService.profileSettings.profiles.${profile}`;
 }
@@ -169,7 +184,10 @@ export const ServiceForm = ({
         if (selectedJsonIsInvalid) {
           toast({
             title: t(`${translationPrefix}.error`),
-            description: t('settings.aiService.profileSettings.invalidJson'),
+            description: t(
+              'settings.aiService.profileSettings.invalidJson',
+              'Extra request body must be a valid JSON object.'
+            ),
             variant: 'destructive',
           });
           return;
@@ -415,7 +433,7 @@ export const ServiceForm = ({
 
       <div>
         <Label htmlFor="max_tokens">
-          {t(`${translationPrefix}.maxTokens`)}
+          {t(`${translationPrefix}.maxTokens`, 'Max tokens')}
         </Label>
         <Input
           id="max_tokens"
@@ -428,26 +446,57 @@ export const ServiceForm = ({
               max_tokens: e.target.value ? Number(e.target.value) : null,
             })
           }
-          placeholder={t(`${translationPrefix}.maxTokensPlaceholder`)}
+          placeholder={t(
+            `${translationPrefix}.maxTokensPlaceholder`,
+            'Leave blank for provider default'
+          )}
           inputMode="numeric"
         />
         <p className="text-xs text-muted-foreground mt-1">
-          {t(`${translationPrefix}.maxTokensDescription`)}
+          {t(
+            `${translationPrefix}.maxTokensDescription`,
+            'Optional output token limit sent with AI requests.'
+          )}
         </p>
       </div>
 
-      <div className="border-t pt-4 space-y-4">
+      <div>
+        <Label htmlFor="system_prompt">
+          {t(`${translationPrefix}.systemPrompt`, 'System prompt')}
+        </Label>
+        <Textarea
+          id="system_prompt"
+          value={formData.system_prompt ?? ''}
+          onChange={(e) => onFormDataChange({ system_prompt: e.target.value })}
+          placeholder={t(
+            `${translationPrefix}.systemPromptPlaceholder`,
+            'Additional instructions for this AI service'
+          )}
+          rows={3}
+        />
+      </div>
+
+      <div
+        data-testid="ai-profile-settings"
+        className="mt-2 space-y-5 border-t border-border/80 py-6"
+      >
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h4 className="text-sm font-medium">
-              {t('settings.aiService.profileSettings.title')}
+              {t('settings.aiService.profileSettings.title', 'Task profiles')}
             </h4>
             <p className="text-xs text-muted-foreground mt-1">
-              {t('settings.aiService.profileSettings.description')}
+              {t(
+                'settings.aiService.profileSettings.description',
+                'Tune model behavior for specific AI tasks.'
+              )}
             </p>
           </div>
           <span className="rounded-full border px-2 py-1 text-xs text-muted-foreground">
-            {t('settings.aiService.profileSettings.builtInPromptBadge')}
+            {t(
+              'settings.aiService.profileSettings.builtInPromptBadge',
+              'Built-in prompts'
+            )}
           </span>
         </div>
 
@@ -466,25 +515,39 @@ export const ServiceForm = ({
                     : 'border-input bg-background text-foreground hover:bg-muted'
                 }`}
               >
-                <span>{t(profileLabelKey(profile))}</span>
+                <span>
+                  {t(
+                    profileLabelKey(profile),
+                    PROFILE_LABEL_FALLBACKS[profile]
+                  )}
+                </span>
                 <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                   {custom
-                    ? t('settings.aiService.profileSettings.custom')
-                    : t('settings.aiService.profileSettings.default')}
+                    ? t('settings.aiService.profileSettings.custom', 'Custom')
+                    : t(
+                        'settings.aiService.profileSettings.default',
+                        'Default'
+                      )}
                 </span>
               </button>
             );
           })}
         </div>
 
-        <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+        <div className="space-y-4 rounded-md border bg-muted/20 p-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <h5 className="text-sm font-medium">
-                {t(profileLabelKey(selectedProfile))}
+                {t(
+                  profileLabelKey(selectedProfile),
+                  PROFILE_LABEL_FALLBACKS[selectedProfile]
+                )}
               </h5>
               <p className="text-xs text-muted-foreground mt-1">
-                {t(PROFILE_DESCRIPTIONS[selectedProfile])}
+                {t(
+                  PROFILE_DESCRIPTIONS[selectedProfile],
+                  PROFILE_DESCRIPTION_FALLBACKS[selectedProfile]
+                )}
               </p>
             </div>
             <Button
@@ -493,14 +556,20 @@ export const ServiceForm = ({
               size="sm"
               onClick={resetSelectedProfile}
             >
-              {t('settings.aiService.profileSettings.resetToDefaults')}
+              {t(
+                'settings.aiService.profileSettings.resetToDefaults',
+                'Reset to defaults'
+              )}
             </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="profile_max_tokens">
-                {t('settings.aiService.profileSettings.maxTokens')}
+                {t(
+                  'settings.aiService.profileSettings.maxTokens',
+                  'Max tokens'
+                )}
               </Label>
               <Input
                 id="profile_max_tokens"
@@ -519,7 +588,10 @@ export const ServiceForm = ({
 
             <div>
               <Label htmlFor="profile_timeout_seconds">
-                {t('settings.aiService.profileSettings.timeoutSeconds')}
+                {t(
+                  'settings.aiService.profileSettings.timeoutSeconds',
+                  'Timeout seconds'
+                )}
               </Label>
               <Input
                 id="profile_timeout_seconds"
@@ -540,7 +612,10 @@ export const ServiceForm = ({
 
             <div>
               <Label>
-                {t('settings.aiService.profileSettings.reasoningEffort')}
+                {t(
+                  'settings.aiService.profileSettings.reasoningEffort',
+                  'Reasoning effort'
+                )}
               </Label>
               <div className="mt-2 inline-flex rounded-md border bg-background p-1">
                 {(['low', 'high', 'max'] as const).map((effort) => (
@@ -564,7 +639,10 @@ export const ServiceForm = ({
 
             <div>
               <Label htmlFor="profile_temperature">
-                {t('settings.aiService.profileSettings.temperature')}
+                {t(
+                  'settings.aiService.profileSettings.temperature',
+                  'Temperature'
+                )}
               </Label>
               <Input
                 id="profile_temperature"
@@ -584,7 +662,10 @@ export const ServiceForm = ({
 
           <div>
             <Label htmlFor="profile_extra_body_json">
-              {t('settings.aiService.profileSettings.extraBodyJson')}
+              {t(
+                'settings.aiService.profileSettings.extraBodyJson',
+                'Extra request body JSON'
+              )}
             </Label>
             <Textarea
               id="profile_extra_body_json"
@@ -617,24 +698,17 @@ export const ServiceForm = ({
               }`}
             >
               {selectedJsonIsInvalid
-                ? t('settings.aiService.profileSettings.invalidJson')
-                : t('settings.aiService.profileSettings.validJson')}
+                ? t(
+                    'settings.aiService.profileSettings.invalidJson',
+                    'Extra request body must be a valid JSON object.'
+                  )
+                : t(
+                    'settings.aiService.profileSettings.validJson',
+                    'Valid JSON object'
+                  )}
             </p>
           </div>
         </div>
-      </div>
-
-      <div>
-        <Label htmlFor="system_prompt">
-          {t(`${translationPrefix}.systemPrompt`)}
-        </Label>
-        <Textarea
-          id="system_prompt"
-          value={formData.system_prompt ?? ''}
-          onChange={(e) => onFormDataChange({ system_prompt: e.target.value })}
-          placeholder={t(`${translationPrefix}.systemPromptPlaceholder`)}
-          rows={3}
-        />
       </div>
 
       <div className="flex items-center space-x-2">

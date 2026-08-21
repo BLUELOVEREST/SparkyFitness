@@ -4,7 +4,10 @@ import { ServiceForm } from '@/components/ai/ServiceForm';
 import type { AiServiceSettingsFormInput } from '@/schemas/form/AiServiceSettings.form.zod';
 
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, fallback?: unknown) =>
+      typeof fallback === 'string' ? fallback : key,
+  }),
 }));
 
 const mockToast = jest.fn();
@@ -124,18 +127,62 @@ describe('ServiceForm — task profile overrides', () => {
   it('renders the profile override section with the intent defaults', () => {
     renderForm(makeFormData());
 
-    expect(
-      screen.getByText('settings.aiService.profileSettings.title')
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('button', {
-        name: /settings\.aiService\.profileSettings\.profiles\.intent/,
-      })
-    ).toBeTruthy();
+    expect(screen.getByText('Task profiles')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Intent/ })).toBeTruthy();
     expect(screen.getByDisplayValue('1024')).toBeTruthy();
     expect(screen.getByDisplayValue('30')).toBeTruthy();
     expect(screen.getByDisplayValue('0')).toBeTruthy();
     expect(screen.getByDisplayValue('{}')).toBeTruthy();
+  });
+
+  it('keeps the global system prompt above the profile-specific settings', () => {
+    const { container } = renderForm(makeFormData());
+    const systemPrompt = container.querySelector('#system_prompt');
+    const profileTitle = screen.getByText('Task profiles');
+    const profileSection = profileTitle.closest(
+      '[data-testid="ai-profile-settings"]'
+    );
+
+    expect(systemPrompt).toBeTruthy();
+    expect(profileSection).toBeTruthy();
+    expect(
+      systemPrompt!.compareDocumentPosition(profileTitle) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(profileSection?.className).toContain('py-6');
+  });
+
+  it('uses readable fallback labels when profile translations are missing', () => {
+    renderForm(makeFormData());
+
+    expect(
+      screen.queryByText('settings.aiService.profileSettings.profiles.intent')
+    ).toBeNull();
+    expect(
+      screen.queryByText('settings.aiService.profileSettings.maxTokens')
+    ).toBeNull();
+    expect(screen.getByText('Built-in prompts')).toBeTruthy();
+    expect(screen.getAllByLabelText('Max tokens').length).toBeGreaterThan(0);
+  });
+
+  it('uses readable fallback labels for global max token settings', () => {
+    renderWithClient(
+      <ServiceForm
+        formData={makeFormData()}
+        onFormDataChange={jest.fn()}
+        onSubmit={jest.fn()}
+        onCancel={jest.fn()}
+        translationPrefix="settings.aiService.globalSettings"
+      />
+    );
+
+    expect(
+      screen.queryByText('settings.aiService.globalSettings.maxTokens')
+    ).toBeNull();
+    expect(screen.getAllByLabelText('Max tokens').length).toBeGreaterThan(0);
+    expect(
+      screen.getByPlaceholderText('Leave blank for provider default')
+    ).toBeTruthy();
   });
 
   it('updates the selected profile max tokens and extra JSON fields', () => {
@@ -150,14 +197,12 @@ describe('ServiceForm — task profile overrides', () => {
       />
     );
 
-    fireEvent.change(
-      screen.getByLabelText('settings.aiService.profileSettings.maxTokens'),
-      { target: { value: '2048' } }
-    );
-    fireEvent.change(
-      screen.getByLabelText('settings.aiService.profileSettings.extraBodyJson'),
-      { target: { value: '{"reasoning_effort":"low"}' } }
-    );
+    fireEvent.change(document.getElementById('profile_max_tokens')!, {
+      target: { value: '2048' },
+    });
+    fireEvent.change(screen.getByLabelText('Extra request body JSON'), {
+      target: { value: '{"reasoning_effort":"low"}' },
+    });
 
     expect(onFormDataChange).toHaveBeenCalledWith(
       expect.objectContaining({
