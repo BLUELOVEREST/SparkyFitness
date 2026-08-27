@@ -1,4 +1,7 @@
-import { FOOD_VARIANT_NUTRIENT_FIELDS } from '@workspace/shared';
+import {
+  BODY_CIRCUMFERENCE_PARTS,
+  FOOD_VARIANT_NUTRIENT_FIELDS,
+} from '@workspace/shared';
 import { getClient } from '../db/poolManager.js';
 async function getNutritionData(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -342,8 +345,11 @@ async function getTabularFoodData(
 async function getMeasurementData(userId: any, startDate: any, endDate: any) {
   const client = await getClient(userId); // User-specific operation
   try {
+    const circumferenceColumns = BODY_CIRCUMFERENCE_PARTS.map(
+      (part) => part.key
+    ).join(', ');
     const result = await client.query(
-      "SELECT TO_CHAR(entry_date, 'YYYY-MM-DD') AS entry_date, weight, neck, waist, hips, steps, height, body_fat_percentage FROM check_in_measurements WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3 ORDER BY entry_date",
+      `SELECT TO_CHAR(entry_date, 'YYYY-MM-DD') AS entry_date, weight, ${circumferenceColumns}, steps, height, body_fat_percentage FROM check_in_measurements WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3 ORDER BY entry_date`,
       [userId, startDate, endDate]
     );
     return result.rows;

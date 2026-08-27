@@ -75,3 +75,38 @@ describe('getCustomMeasurementsData - large dataset downsampling', () => {
     expect(result).toEqual(rows);
   });
 });
+
+describe('getMeasurementData', () => {
+  const mockQuery = vi.fn();
+  const mockClient = { query: mockQuery, release: vi.fn() };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (getClient as ReturnType<typeof vi.fn>).mockResolvedValue(mockClient);
+  });
+
+  it('selects all standard body circumference fields for reports', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    await reportRepository.getMeasurementData(
+      'user-1',
+      '2026-08-21',
+      '2026-08-21'
+    );
+
+    const [sql, params] = mockQuery.mock.calls[0];
+    expect(sql).toContain('neck');
+    expect(sql).toContain('waist');
+    expect(sql).toContain('hips');
+    expect(sql).toContain('shoulders');
+    expect(sql).toContain('chest');
+    expect(sql).toContain('abdomen');
+    expect(sql).toContain('left_biceps');
+    expect(sql).toContain('right_biceps');
+    expect(sql).toContain('left_thigh');
+    expect(sql).toContain('right_thigh');
+    expect(sql).toContain('left_calf');
+    expect(sql).toContain('right_calf');
+    expect(params).toEqual(['user-1', '2026-08-21', '2026-08-21']);
+  });
+});
