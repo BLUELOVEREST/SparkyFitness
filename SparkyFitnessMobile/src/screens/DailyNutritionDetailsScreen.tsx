@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCSSVariable } from 'uniwind';
@@ -9,16 +10,52 @@ import { useNutrientDisplayPreferences } from '../hooks/useNutrientDisplayPrefer
 import { useCustomNutrients } from '../hooks/useCustomNutrients';
 import { useServerConnection } from '../hooks/useServerConnection';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
-import { NUTRIENT_META } from '../constants/nutrients';
+import { NUTRIENT_META, getNutrientLabel } from '../constants/nutrients';
 import NutritionMacroCard from '../components/NutritionMacroCard';
 import StatusView from '../components/StatusView';
 import Icon from '../components/Icon';
+import {
+  resolveSupplementTotals,
+  FOOD_VARIANT_NUTRIENT_FIELDS,
+} from '@workspace/shared';
+import type { FoodVariantNutrientField } from '@workspace/shared';
 import type { RootStackScreenProps } from '../types/navigation';
 import type { FoodEntry } from '../types/foodEntries';
+import { formatLocalizedNumber } from '../localization';
 
 type DailyNutritionDetailsScreenProps = RootStackScreenProps<'DailyNutritionDetails'>;
 
+type GlycemicIndexValue = 'None' | 'Very Low' | 'Low' | 'Medium' | 'High' | 'Very High';
+
+/**
+ * The API/database constrains glycemic_index to a controlled classification enum.
+ * Keep the persisted value unchanged and localize only its presentation label.
+ * Unknown future values remain readable rather than leaking an i18n key.
+ */
+export function getGlycemicIndexLabel(
+  t: (key: string, options: { defaultValue: string }) => string,
+  value: string,
+): string {
+  switch (value as GlycemicIndexValue) {
+    case 'None':
+      return t('nutrients.glycemicIndexNone', { defaultValue: 'None' });
+    case 'Very Low':
+      return t('nutrients.glycemicIndexVeryLow', { defaultValue: 'Very Low' });
+    case 'Low':
+      return t('nutrients.glycemicIndexLow', { defaultValue: 'Low' });
+    case 'Medium':
+      return t('nutrients.glycemicIndexMedium', { defaultValue: 'Medium' });
+    case 'High':
+      return t('nutrients.glycemicIndexHigh', { defaultValue: 'High' });
+    case 'Very High':
+      return t('nutrients.glycemicIndexVeryHigh', { defaultValue: 'Very High' });
+    default:
+      return value;
+  }
+}
+
 const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = ({ route, navigation }) => {
+  const { t } = useTranslation();
   const { date } = route.params;
   const insets = useSafeAreaInsets();
   const activeWorkoutBarPadding = useActiveWorkoutBarPadding('stack');
@@ -35,7 +72,7 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
 
   // Configure screen header
   const header = useScreenHeader({
-    title: 'Nutrition Details',
+    title: t('dailyNutritionDetails.title', { defaultValue: 'Nutrition Details' }),
     left: { kind: 'back' },
   });
 
@@ -93,6 +130,12 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
       goal?: number;
     }[] = [];
 
+    // Logged supplement doses, full width and zero-filled, so a fixed nutrient computed
+    // from food entries below can have its supplement contribution added back (#2145).
+    const supplements = resolveSupplementTotals(summary.supplementTotals);
+    const isFixedNutrient = (key: string): key is FoodVariantNutrientField =>
+      (FOOD_VARIANT_NUTRIENT_FIELDS as readonly string[]).includes(key);
+
     // Filter and compute standard nutrients in order of visibleKeys
     for (const key of visibleKeys) {
       // Exclude base macros from the detailed breakdown if they are already visible in top card
@@ -103,7 +146,7 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
       if (key === 'glycemic_index') {
         standardItems.push({
           key,
-          label: NUTRIENT_META[key]?.label ?? 'Glycemic Index',
+          label: getNutrientLabel(t, key),
           unit: '',
           consumed: 0, // categorical, handled specifically in render
           goal: undefined,
@@ -113,12 +156,30 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
 
       const meta = NUTRIENT_META[key];
       if (meta) {
-        const consumed = calculateNutrientTotal(summary.foodEntries, key as keyof FoodEntry);
+        // Fields the summary already rolls up include logged supplement doses; recomputing
+        // one from foodEntries would print a different number from the macro card at the
+        // top of this same screen. Fiber is the one that reaches here today, since the
+        // other rolled-up fields are excluded above, but keying on the set rather than on
+        // fiber keeps that true if the exclusion list ever changes.
+        const rolledUp: Record<string, number> = {
+          protein: summary.protein.consumed,
+          carbs: summary.carbs.consumed,
+          fat: summary.fat.consumed,
+          dietary_fiber: summary.fiber.consumed,
+        };
+        // Anything not already rolled up is derived from food entries here, which is
+        // food-only. Every fixed nutrient a supplement can carry has to have its dose
+        // contribution added back, or this screen shows a smaller calcium than Reports
+        // does for the same day.
+        const consumed =
+          rolledUp[key] ??
+          calculateNutrientTotal(summary.foodEntries, key as keyof FoodEntry) +
+            (isFixedNutrient(key) ? supplements[key] : 0);
         const goal = summary.goals[key as keyof typeof summary.goals] as number | undefined;
 
         standardItems.push({
           key,
-          label: meta.label,
+          label: getNutrientLabel(t, key),
           unit: meta.unit,
           consumed,
           goal: goal && goal > 0 ? goal : undefined,
@@ -161,7 +222,7 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
     }
 
     return { standardItems, customItems };
-  }, [summary, preferences, customDefs]);
+  }, [summary, preferences, customDefs, t]);
 
   if (isLoading) {
     return <StatusView loading className="bg-background" />;
@@ -171,10 +232,10 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
     return (
       <View className="flex-1 bg-background justify-center items-center p-4">
         <Text className="text-text-primary text-base font-semibold mb-2">
-          Failed to load nutrition details
+          {t('dailyNutritionDetails.loadFailed', { defaultValue: 'Failed to load nutrition details' })}
         </Text>
         <Text className="text-text-secondary text-sm text-center">
-          Please check your connection and try again.
+          {t('dailyNutritionDetails.tryAgain', { defaultValue: 'Please check your connection and try again.' })}
         </Text>
       </View>
     );
@@ -198,13 +259,14 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
       const giValues = summary.foodEntries
         .map((e) => e.glycemic_index)
         .filter((gi) => gi && gi !== 'None');
-      const giValue = giValues.length > 0 ? giValues[0] : 'None';
+      const giValue = giValues[0] ?? 'None';
+      const giDisplayValue = getGlycemicIndexLabel(t, giValue);
 
       return (
         <View key={item.key} className="py-3 border-b border-border-subtle">
           <View className="flex-row justify-between items-center">
             <Text className="text-text-secondary text-sm font-medium">{item.label}</Text>
-            <Text className="text-text-primary text-sm font-semibold">{giValue}</Text>
+            <Text className="text-text-primary text-sm font-semibold">{giDisplayValue}</Text>
           </View>
         </View>
       );
@@ -216,9 +278,9 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
     let subText = '';
     if (hasGoal) {
       const diff = item.goal! - item.consumed;
-      const remainingLabel = diff > 0 ? `${Math.round(diff).toLocaleString()}${item.unit} left` : diff < 0 ? `${Math.round(Math.abs(diff)).toLocaleString()}${item.unit} over` : 'met';
+      const remainingLabel = diff > 0 ? t('dailyNutritionDetails.left', { defaultValue: '{{value}}{{unit}} left', value: formatLocalizedNumber(Math.round(diff)), unit: item.unit }) : diff < 0 ? t('dailyNutritionDetails.over', { defaultValue: '{{value}}{{unit}} over', value: formatLocalizedNumber(Math.round(Math.abs(diff))), unit: item.unit }) : t('dailyNutritionDetails.met', { defaultValue: 'met' });
       const pct = Math.round((item.consumed / item.goal!) * 100);
-      subText = `${pct}% · ${remainingLabel}`;
+      subText = t('dailyNutritionDetails.percentRemaining', { defaultValue: '{{percent}}% · {{remaining}}', percent: pct, remaining: remainingLabel });
     }
 
     return (
@@ -239,8 +301,8 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
           <Text className="text-text-secondary text-sm font-medium">{item.label}</Text>
           <View className="flex-row items-center gap-1">
             <Text className="text-text-primary text-sm font-semibold">
-              {Math.round(item.consumed).toLocaleString()}{item.unit}
-              {hasGoal && ` / ${Math.round(item.goal!).toLocaleString()}${item.unit}`}
+              {formatLocalizedNumber(Math.round(item.consumed))}{item.unit}
+              {hasGoal && ` / ${formatLocalizedNumber(Math.round(item.goal!))}${item.unit}`}
             </Text>
             <Icon name="chevron-forward" size={14} color={progressTrackColor} />
           </View>
@@ -301,7 +363,7 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
         {/* Predefined Nutrients Section */}
         {displayGroups && displayGroups.standardItems.length > 0 && (
           <View className="bg-surface rounded-xl p-4 mt-4 shadow-sm">
-            <Text className="text-text-primary text-base font-bold mb-2">Nutrient Breakdown</Text>
+            <Text className="text-text-primary text-base font-bold mb-2">{t('dailyNutritionDetails.nutrientBreakdown', { defaultValue: 'Nutrient Breakdown' })}</Text>
             {displayGroups.standardItems.map(renderNutrientRow)}
           </View>
         )}
@@ -309,7 +371,7 @@ const DailyNutritionDetailsScreen: React.FC<DailyNutritionDetailsScreenProps> = 
         {/* Custom Nutrients Section */}
         {displayGroups && displayGroups.customItems.length > 0 && (
           <View className="bg-surface rounded-xl p-4 mt-4 shadow-sm">
-            <Text className="text-text-primary text-base font-bold mb-2">Custom Tracked Nutrients</Text>
+            <Text className="text-text-primary text-base font-bold mb-2">{t('dailyNutritionDetails.customTracked', { defaultValue: 'Custom Tracked Nutrients' })}</Text>
             {displayGroups.customItems.map(renderNutrientRow)}
           </View>
         )}

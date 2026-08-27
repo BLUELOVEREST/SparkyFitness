@@ -6,3 +6,6 @@ pnpm-lock.yaml
 package-lock.json
 # Vendored third-party bundles (e.g. self-hosted @simplewebauthn browser lib)
 *.min.js
+
+# Bundled China Food Composition data is imported source material.
+integrations/chinafood/data/

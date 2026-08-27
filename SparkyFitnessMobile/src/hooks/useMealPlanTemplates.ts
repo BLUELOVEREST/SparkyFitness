@@ -18,6 +18,7 @@ import type {
   SaveMealPlanTemplatePayload,
 } from '../types/mealPlan';
 import type { CarbCycleInput, CarbCycleWeekResult } from '../types/goals';
+import i18n from '../localization/i18n';
 
 const activeMealPlanDayQueryKeyRoot = ['activeMealPlanDay'] as const;
 
@@ -69,16 +70,21 @@ export function useCreateMealPlanTemplate(options?: {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: (payload: SaveMealPlanTemplatePayload) => createMealPlanTemplate(payload),
-    onSuccess: (template) => {
+    mutationFn: (payload: SaveMealPlanTemplatePayload) =>
+      createMealPlanTemplate(payload),
+    onSuccess: template => {
       invalidateMealPlanTemplateCaches(queryClient);
       options?.onSuccess?.(template);
     },
     onError: () => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to create meal plan',
-        text2: 'Please try again.',
+        text1: i18n.t('planTemplates.toast.mealCreateFailed', {
+          defaultValue: 'Failed to create meal plan',
+        }),
+        text2: i18n.t('planTemplates.tryAgain', {
+          defaultValue: 'Please try again.',
+        }),
       });
     },
   });
@@ -95,14 +101,18 @@ export function usePreviewCarbCycleWeek(options?: {
 }) {
   const mutation = useMutation({
     mutationFn: (input: CarbCycleInput) => previewCarbCycleWeek(input),
-    onSuccess: (preview) => {
+    onSuccess: preview => {
       options?.onSuccess?.(preview);
     },
     onError: () => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to preview carb cycle',
-        text2: 'Check your weight and macro inputs.',
+        text1: i18n.t('planTemplates.toast.mealPreviewFailed', {
+          defaultValue: 'Failed to preview carb cycle',
+        }),
+        text2: i18n.t('planTemplates.toast.mealPreviewHint', {
+          defaultValue: 'Check your weight and macro inputs.',
+        }),
       });
     },
   });
@@ -130,15 +140,19 @@ export function useUpdateMealPlanTemplate(options?: {
       }
       return updateMealPlanTemplate({ ...payload, id });
     },
-    onSuccess: (template) => {
+    onSuccess: template => {
       invalidateMealPlanTemplateCaches(queryClient);
       onSuccess?.(template);
     },
     onError: () => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to update meal plan',
-        text2: 'Please try again.',
+        text1: i18n.t('planTemplates.toast.mealUpdateFailed', {
+          defaultValue: 'Failed to update meal plan',
+        }),
+        text2: i18n.t('planTemplates.tryAgain', {
+          defaultValue: 'Please try again.',
+        }),
       });
     },
   });
@@ -173,8 +187,12 @@ export function useDeleteMealPlanTemplate(options?: {
     onError: () => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to delete meal plan',
-        text2: 'Please try again.',
+        text1: i18n.t('planTemplates.toast.mealDeleteFailed', {
+          defaultValue: 'Failed to delete meal plan',
+        }),
+        text2: i18n.t('planTemplates.tryAgain', {
+          defaultValue: 'Please try again.',
+        }),
       });
     },
   });

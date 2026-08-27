@@ -1,4 +1,22 @@
-import { ACTIVITY_MULTIPLIERS } from "../constants/calorieConstants.ts";
+import {
+  ACTIVITY_MULTIPLIERS,
+  ADAPTIVE_TDEE_GOAL_MIN_DAYS,
+  CALORIE_CALCULATION_CONSTANTS,
+  DEFAULT_CUSTOM_CALORIE_SAFETY_FLOOR,
+  ENERGY_DENSITY_KCAL_PER_KG,
+  MAX_CALORIE_SAFETY_FLOOR,
+  MIN_CALORIE_SAFETY_FLOOR,
+  type CalorieSafetyFloorMode,
+} from "../constants/calorieConstants.ts";
+
+export function convertEnergyValue(
+  value: number,
+  fromUnit: "kcal" | "kJ",
+  toUnit: "kcal" | "kJ",
+): number {
+  if (fromUnit === toUnit) return value;
+  return fromUnit === "kcal" ? value * 4.184 : value / 4.184;
+}
 
 export type CalorieGoalAdjustmentMode =
   | "dynamic"
@@ -8,11 +26,46 @@ export type CalorieGoalAdjustmentMode =
   | "smart"
   | "adaptive";
 
+/**
+ * Collapses `smart` onto `tdee` for anything that branches on the mode.
+ *
+ * `smart` is not a separate calculation: `computeCaloriesRemaining` and
+ * `computeCalorieBalance` both branch `tdee`/`smart` together, and nothing else in the
+ * codebase tells them apart. It also has no UI of its own, so every `=== "tdee"` check
+ * silently excluded it and fell through to the *fixed*-mode branch -- which on the Diary
+ * meant hiding the TDEE projection the server had already computed and sent.
+ *
+ * Presentation-only. This never changes what is persisted, so a stored `smart` stays
+ * `smart` and keeps behaving as the server intends.
+ */
+export function normalizeCalorieGoalAdjustmentMode(
+  mode: CalorieGoalAdjustmentMode | string | null | undefined,
+): CalorieGoalAdjustmentMode {
+  if (!mode) return "dynamic";
+  return mode === "smart" ? "tdee" : (mode as CalorieGoalAdjustmentMode);
+}
+
 export type ExerciseCalorieSource = "logged" | "active" | "steps" | "none";
 
 export interface ResolvedExerciseCalories {
   calories: number;
   source: ExerciseCalorieSource;
+}
+
+/** Derives active energy from total energy that includes resting energy. */
+export function deriveActiveCalories(
+  totalCalories: number,
+  restingCalories: number,
+): number | null {
+  if (
+    !Number.isFinite(totalCalories) ||
+    !Number.isFinite(restingCalories) ||
+    totalCalories < 0 ||
+    restingCalories < 0
+  ) {
+    return null;
+  }
+  return Math.max(0, totalCalories - restingCalories);
 }
 
 /**
@@ -24,6 +77,82 @@ export interface ResolvedExerciseCalories {
  * It returns whichever is larger to ensure we don't under-count, but avoids
  * double-counting by not adding steps on top of a device-wide "Active Calories" summary.
  */
+export interface StepCalorieInputs {
+  /**
+   * Steps that no logged exercise entry already accounts for, i.e. the day's total
+   * steps minus the steps attributed to workouts. Passing raw total steps here would
+   * double-count the walking a logged workout already charged for.
+   */
+  backgroundSteps: number;
+  weightKg?: number;
+  heightCm?: number;
+}
+
+/**
+ * Net (above-BMR) kcal from background walking, estimated from step count.
+ *
+ * Step length is approximated from height, distance from step length × steps, and energy
+ * from distance × body weight. The per-kg-per-km figure is the measured mean net cost
+ * of level walking at a normal pace. Net cost excludes resting energy because the daily
+ * calorie balance accounts for BMR separately.
+ *
+ * Shared because this arithmetic has to agree in four places that each used to carry
+ * their own copy: the Diary's per-date step calories, the ranged Reports path, the
+ * dashboard stats endpoint, and the frontend's own step estimate. When those drift, the
+ * same day's walking is worth a different number of calories depending on which screen
+ * is asking -- which is the class of bug this function exists to end.
+ */
+export function computeStepCalories({
+  backgroundSteps,
+  weightKg = CALORIE_CALCULATION_CONSTANTS.DEFAULT_WEIGHT_KG,
+  heightCm = CALORIE_CALCULATION_CONSTANTS.DEFAULT_HEIGHT_CM,
+}: StepCalorieInputs): number {
+  if (!Number.isFinite(backgroundSteps) || backgroundSteps <= 0) return 0;
+
+  const stepLengthM =
+    (heightCm * CALORIE_CALCULATION_CONSTANTS.STRIDE_LENGTH_MULTIPLIER) / 100;
+  const distanceKm = (backgroundSteps * stepLengthM) / 1000;
+
+  return Math.round(
+    distanceKm *
+      weightKg *
+      CALORIE_CALCULATION_CONSTANTS.NET_CALORIES_PER_KG_PER_KM,
+  );
+}
+
+/**
+ * Background step kcal from a day's raw totals.
+ *
+ * Wraps the two rules that always travel together: steps a logged workout already
+ * accounted for are not background steps, and a missing or non-positive body
+ * measurement falls back to the default rather than zeroing the day. Both the per-date
+ * Diary path and the ranged Reports path call this, so they cannot drift apart.
+ */
+export function resolveBackgroundStepCalories({
+  totalSteps,
+  activitySteps,
+  weightKg,
+  heightCm,
+}: {
+  totalSteps: number;
+  activitySteps: number;
+  /** Non-positive or nullish values fall back to the default. */
+  weightKg?: number | null;
+  heightCm?: number | null;
+}): number {
+  return computeStepCalories({
+    backgroundSteps: Math.max(0, (totalSteps || 0) - (activitySteps || 0)),
+    weightKg:
+      weightKg && weightKg > 0
+        ? weightKg
+        : CALORIE_CALCULATION_CONSTANTS.DEFAULT_WEIGHT_KG,
+    heightCm:
+      heightCm && heightCm > 0
+        ? heightCm
+        : CALORIE_CALCULATION_CONSTANTS.DEFAULT_HEIGHT_CM,
+  });
+}
+
 export function resolveExerciseCalories(
   loggedExerciseCalories: number,
   activeCaloriesFromExercise: number,
@@ -178,13 +307,14 @@ export interface TimedSetLike {
  */
 export function setsDurationMinutes(
   sets: readonly TimedSetLike[] | null | undefined,
-  options?: { fallbackMinutes?: number }
+  options?: { fallbackMinutes?: number },
 ): number {
   const rows = Array.isArray(sets) ? sets : [];
   const totalSeconds = rows.reduce(
     // Values flow through pg drivers and legacy call sites, so coerce defensively.
-    (sum, set) => sum + (Number(set.duration) || 0) + (Number(set.rest_time) || 0),
-    0
+    (sum, set) =>
+      sum + (Number(set.duration) || 0) + (Number(set.rest_time) || 0),
+    0,
   );
   const minutes = totalSeconds / 60;
   if (minutes === 0 && options?.fallbackMinutes != null) {
@@ -217,23 +347,86 @@ export function setsDistanceKm(
   return total;
 }
 
-export type GoalMode = "maintain" | "recomp" | "cut" | "high_cut" | "manual";
+export type GoalMode =
+  | "maintain"
+  | "recomp"
+  | "cut"
+  | "high_cut"
+  | "lean_bulk"
+  | "bulk"
+  | "manual";
 export type GoalModeCalculationMethod = "adaptive" | "manual";
 
-export function getGoalModeDeficit(goalMode: string, customPercentage: number = 0): number {
+/** Largest magnitude, in percent, that a manual goal-mode adjustment may take in either direction. */
+export const MAX_GOAL_MODE_PERCENTAGE = 40;
+
+/**
+ * Signed adjustment applied to the baseline TDEE, as a fraction.
+ *
+ * **Return value: positive means a deficit, negative means a surplus.** That is
+ * the orientation the arithmetic needs, since callers apply it as
+ * `baselineTdee * (1 - adjustment)` and the sign flows through without branching.
+ *
+ * Note this is the *opposite* orientation to the stored user preference. The
+ * user-facing `customPercentage` follows the convention people expect from a
+ * fitness app — **positive adds calories, negative cuts them** — so it is negated
+ * on the way in. Migration `20260816173934` flipped existing stored values to
+ * match; anything read from `user_preferences.goal_mode_custom_percentage`
+ * already uses the user-facing orientation.
+ */
+export function getGoalModeAdjustment(
+  goalMode: string,
+  customPercentage: number = 0,
+): number {
   switch (goalMode) {
     case "recomp":
-      return 0.10;
+      return 0.1;
     case "cut":
       return 0.15;
     case "high_cut":
-      return 0.20;
-    case "manual":
-      return Math.min(40, Math.max(0, customPercentage)) / 100;
+      return 0.2;
+    case "lean_bulk":
+      return -0.1;
+    case "bulk":
+      return -0.2;
+    case "manual": {
+      const clamped = Math.min(
+        MAX_GOAL_MODE_PERCENTAGE,
+        Math.max(-MAX_GOAL_MODE_PERCENTAGE, customPercentage),
+      );
+      // Negated: a positive user percentage means "eat more" = a surplus.
+      return -clamped / 100;
+    }
     case "maintain":
     default:
       return 0.0;
   }
+}
+
+/**
+ * Maps the onboarding "primary goal" answer onto a goal mode.
+ *
+ * Deliberately conservative: the gentlest option in each direction, since
+ * onboarding never asks how fast the user wants to move.
+ */
+export function goalModeFromPrimaryGoal(primaryGoal: string): GoalMode {
+  switch (primaryGoal) {
+    case "lose_weight":
+      return "cut";
+    case "gain_weight":
+      return "lean_bulk";
+    case "maintain_weight":
+    default:
+      return "maintain";
+  }
+}
+
+/** True for goal modes that target weight gain rather than loss. */
+export function isGainGoalMode(
+  goalMode: string,
+  customPercentage: number = 0,
+): boolean {
+  return getGoalModeAdjustment(goalMode, customPercentage) < 0;
 }
 
 export type BmrCalculatorFn = (
@@ -242,7 +435,7 @@ export type BmrCalculatorFn = (
   height: number,
   age: number,
   gender: "male" | "female",
-  bodyFatPercentage?: number | null
+  bodyFatPercentage?: number | null,
 ) => number;
 
 export function calculateBmr(
@@ -251,19 +444,14 @@ export function calculateBmr(
   heightCm?: number | null,
   age?: number | null,
   gender?: "male" | "female" | null,
-  bodyFatPercentage?: number | null
+  bodyFatPercentage?: number | null,
 ): number {
-  if (
-    algorithm === "Katch-McArdle" ||
-    algorithm === "Cunningham"
-  ) {
+  if (algorithm === "Katch-McArdle" || algorithm === "Cunningham") {
     if (!weightKg || !bodyFatPercentage) {
       return 0;
     }
     const lbm = weightKg * (1 - bodyFatPercentage / 100);
-    return algorithm === "Katch-McArdle"
-      ? 370 + 21.6 * lbm
-      : 500 + 22 * lbm;
+    return algorithm === "Katch-McArdle" ? 370 + 21.6 * lbm : 500 + 22 * lbm;
   }
 
   if (!weightKg || !heightCm || !age || !gender) {
@@ -294,7 +482,7 @@ export function calculateMinimumMetabolism(
   gender: "male" | "female",
   bodyFatPercentage?: number | null,
   bmrAlgorithm: string = "Mifflin-St Jeor",
-  calculateBmrFn?: BmrCalculatorFn
+  calculateBmrFn?: BmrCalculatorFn,
 ): number {
   const activeBmrFn = calculateBmrFn || calculateBmr;
   if (
@@ -303,27 +491,133 @@ export function calculateMinimumMetabolism(
     bodyFatPercentage > 0
   ) {
     const lbm = weightKg * (1 - bodyFatPercentage / 100);
-    return bmrAlgorithm === "Cunningham"
-      ? 500 + 22 * lbm
-      : 370 + 21.6 * lbm;
+    return bmrAlgorithm === "Cunningham" ? 500 + 22 * lbm : 370 + 21.6 * lbm;
   }
 
-  return activeBmrFn(bmrAlgorithm, weightKg, heightCm, age, gender, bodyFatPercentage);
+  return activeBmrFn(
+    bmrAlgorithm,
+    weightKg,
+    heightCm,
+    age,
+    gender,
+    bodyFatPercentage,
+  );
 }
 
 export interface CalorieTargetResult {
   target: number;
   rmr: number;
   baselineTdee: number;
+  /** Signed: positive is a deficit, negative is a surplus. */
   appliedDeficit: number;
   isBelowRmr: boolean;
   isBelowAbsoluteFloor: boolean;
   absoluteFloorValue: number;
   finalTarget: number;
   insufficientHistory: boolean;
-  projectedWeeklyLossKg: number;
-  projectedWeeklyLossPercent: number;
-  lossSafetyZone: "green" | "yellow" | "red";
+  /** Signed projection: negative is weight loss, positive is weight gain. */
+  projectedWeeklyChangeKg: number;
+  /** Magnitude of the projection as a percentage of body weight. Always >= 0. */
+  projectedWeeklyChangePercent: number;
+  /** True when the goal targets weight gain. */
+  isGainGoal: boolean;
+  /** Rate-of-change safety rating, thresholded per direction. */
+  safetyZone: "green" | "yellow" | "red";
+  /**
+   * True when the adaptive safety floor overrode the requested target.
+   * Only ever true for `calculationMethod === "adaptive"`.
+   */
+  wasClampedToFloor: boolean;
+  /** Which floor bound: RMR, the flat absolute minimum, or a user override. */
+  clampedFloorSource: "rmr" | "absolute" | "custom" | null;
+  /** Recommended default (the higher of RMR and the sex-specific absolute floor). */
+  recommendedSafetyFloor: number;
+  /** Floor that is actually enforced, or null when automatic clamping is disabled. */
+  effectiveSafetyFloor: number | null;
+  /**
+   * Largest deficit, in percent, that still clears the safety floor.
+   *
+   * Always present under the adaptive method, whether or not the current goal
+   * mode trips the floor, so the UI can mark unreachable modes *before* one is
+   * chosen rather than explaining the override afterwards. Null under manual,
+   * which never clamps, and when the baseline is unknown.
+   */
+  maxFeasibleDeficitPercent: number | null;
+}
+
+/**
+ * Whether a measured adaptive TDEE is settled enough to drive a calorie goal.
+ *
+ * `AdaptiveTdeeService` hands back a raw estimate at 7 qualifying days, but a goal
+ * budget wants a stabler number than that. Every consumer that turns adaptive TDEE
+ * into a target must ask this same question, so it lives here rather than being
+ * re-expressed at each call site — they had already drifted apart once, with the
+ * settings preview holding out for a mature estimate while the saved goal took the
+ * raw one.
+ *
+ * Fails closed on an unknown fallback status. The service always populates the
+ * flag, but the web types it as optional and pass it through unmodified, so a
+ * partial or stale payload could otherwise let an estimate of unknown provenance
+ * set someone's calorie target. Requiring an explicit `false` costs nothing when
+ * the field is present and degrades to the estimated baseline when it is not.
+ */
+export function isAdaptiveTdeeMature(
+  tdee: number | null | undefined,
+  isFallback: boolean | null | undefined,
+  daysOfData: number | null | undefined,
+): tdee is number {
+  return (
+    typeof tdee === "number" &&
+    Number.isFinite(tdee) &&
+    tdee > 0 &&
+    isFallback === false &&
+    (daysOfData ?? 0) >= ADAPTIVE_TDEE_GOAL_MIN_DAYS
+  );
+}
+
+export function resolveCalorieSafetyFloor(
+  mode: CalorieSafetyFloorMode | string | null | undefined,
+  customValue: number | null | undefined,
+  standardFloor: number,
+): number | null {
+  if (mode === "disabled") return null;
+  if (
+    mode === "custom" &&
+    Number.isInteger(customValue) &&
+    Number(customValue) >= MIN_CALORIE_SAFETY_FLOOR &&
+    Number(customValue) <= MAX_CALORIE_SAFETY_FLOOR
+  ) {
+    return Number(customValue);
+  }
+  return standardFloor;
+}
+
+export function getRecommendedCalorieSafetyFloor(
+  rmr: number,
+  gender: "male" | "female",
+): number {
+  return Math.max(rmr, getClinicalCalorieMinimum(gender));
+}
+
+export function getClinicalCalorieMinimum(gender: "male" | "female"): number {
+  return gender === "female" ? 1200 : 1500;
+}
+
+/**
+ * Whether a low-target warning is worth showing at all.
+ *
+ * Deliberately not gated on the calculation method. The floor only ever clamps
+ * under `adaptive`, so gating on `manual` silenced the warning in exactly the
+ * configurations that can land below RMR: a custom floor, or a disabled one.
+ * Those are also the settings the smallest users depend on, because a clinical
+ * minimum of 1200/1500 can sit above their entire maintenance.
+ *
+ * Callers pair this with the outcome (`finalTarget < rmr` and friends), which is
+ * self-limiting: an unclamped adaptive target sits at or above its floor, so the
+ * comparison is false and nothing renders.
+ */
+export function shouldShowCalorieSafetyWarning(goalMode: string): boolean {
+  return goalMode !== "maintain";
 }
 
 export function computeCalorieTarget({
@@ -342,7 +636,9 @@ export function computeCalorieTarget({
   bodyFatPercentage,
   bmrAlgorithm,
   currentGoalCalories,
-  calculateBmrFn
+  calculateBmrFn,
+  calorieSafetyFloorMode = "standard",
+  calorieSafetyFloorValue = DEFAULT_CUSTOM_CALORIE_SAFETY_FLOOR,
 }: {
   goalMode: string;
   calculationMethod: string;
@@ -360,15 +656,32 @@ export function computeCalorieTarget({
   bmrAlgorithm?: string;
   currentGoalCalories: number;
   calculateBmrFn?: BmrCalculatorFn;
+  calorieSafetyFloorMode?: CalorieSafetyFloorMode;
+  calorieSafetyFloorValue?: number;
 }): CalorieTargetResult {
-  const rmr = calculateMinimumMetabolism(weightKg, heightCm, age, gender, bodyFatPercentage, bmrAlgorithm, calculateBmrFn);
-  const deficitPercent = getGoalModeDeficit(goalMode, customPercentage);
+  const rmr = calculateMinimumMetabolism(
+    weightKg,
+    heightCm,
+    age,
+    gender,
+    bodyFatPercentage,
+    bmrAlgorithm,
+    calculateBmrFn,
+  );
+  // Signed: positive is a deficit, negative is a surplus.
+  const deficitPercent = getGoalModeAdjustment(goalMode, customPercentage);
 
   let baselineTdee = currentGoalCalories;
   let insufficientHistory = false;
 
   if (calculationMethod === "adaptive") {
-    if (adaptiveTdeeFallback || !adaptiveTdee || adaptiveTdeeDaysOfData < 14) {
+    if (
+      !isAdaptiveTdeeMature(
+        adaptiveTdee,
+        adaptiveTdeeFallback,
+        adaptiveTdeeDaysOfData,
+      )
+    ) {
       baselineTdee = Math.round(bmr * activityLevelMultiplier);
       insufficientHistory = true;
     } else {
@@ -377,25 +690,73 @@ export function computeCalorieTarget({
   }
 
   const calculatedTarget = baselineTdee * (1 - deficitPercent);
+  const isGainGoal = deficitPercent < 0;
   const isBelowRmr = calculatedTarget < rmr;
 
-  const absoluteFloorValue = gender === "female" ? 1200 : 1500;
+  const absoluteFloorValue = getClinicalCalorieMinimum(gender);
   const isBelowAbsoluteFloor = calculatedTarget < absoluteFloorValue;
 
-  const safetyFloor = Math.max(rmr, absoluteFloorValue);
-  const finalTarget = (calculationMethod === "adaptive" && calculatedTarget < safetyFloor)
-    ? Math.round(safetyFloor)
+  // The floor is whichever is higher: the user's own resting metabolism, or the
+  // flat minimum below which hitting protein and micronutrient targets is
+  // impractical. A surplus can never trip it.
+  const recommendedSafetyFloor = getRecommendedCalorieSafetyFloor(rmr, gender);
+  const effectiveSafetyFloor = resolveCalorieSafetyFloor(
+    calorieSafetyFloorMode,
+    calorieSafetyFloorValue,
+    recommendedSafetyFloor,
+  );
+  const wasClampedToFloor =
+    calculationMethod === "adaptive" &&
+    effectiveSafetyFloor !== null &&
+    calculatedTarget < effectiveSafetyFloor;
+  const finalTarget = wasClampedToFloor
+    ? Math.round(effectiveSafetyFloor)
     : Math.round(calculatedTarget);
 
-  const dailyDeficit = Math.max(0, baselineTdee - finalTarget);
-  const projectedWeeklyLossKg = (dailyDeficit * 7) / 7700;
-  const projectedWeeklyLossPercent = weightKg > 0 ? (projectedWeeklyLossKg / weightKg) * 100 : 0;
+  // Name which floor actually bound, so the UI can explain rather than just clamp.
+  const usesValidCustomFloor =
+    calorieSafetyFloorMode === "custom" &&
+    Number.isInteger(calorieSafetyFloorValue) &&
+    calorieSafetyFloorValue >= MIN_CALORIE_SAFETY_FLOOR &&
+    calorieSafetyFloorValue <= MAX_CALORIE_SAFETY_FLOOR;
+  const clampedFloorSource: "rmr" | "absolute" | "custom" | null =
+    wasClampedToFloor
+      ? usesValidCustomFloor
+        ? "custom"
+        : rmr >= absoluteFloorValue
+          ? "rmr"
+          : "absolute"
+      : null;
 
-  let lossSafetyZone: "green" | "yellow" | "red" = "green";
-  if (projectedWeeklyLossPercent > 1.5) {
-    lossSafetyZone = "red";
-  } else if (projectedWeeklyLossPercent > 1.0) {
-    lossSafetyZone = "yellow";
+  // The largest deficit that still clears the floor. Computed whenever the floor
+  // could bind — not only once it has — so a goal-mode picker can say which modes
+  // are out of reach up front. Depends on the baseline and the floor, both of
+  // which are independent of the goal mode, so it is the same for every mode.
+  const maxFeasibleDeficitPercent =
+    calculationMethod === "adaptive" &&
+    baselineTdee > 0 &&
+    effectiveSafetyFloor !== null
+      ? Math.max(0, (1 - effectiveSafetyFloor / baselineTdee) * 100)
+      : null;
+
+  // Signed: negative is loss, positive is gain, matching how weight deltas read
+  // elsewhere in the codebase. Uses the same energy density AdaptiveTdeeService
+  // measures with, or the app would project consequences under a different
+  // assumption than it calculates.
+  const dailyEnergyBalance = finalTarget - baselineTdee;
+  const projectedWeeklyChangeKg =
+    (dailyEnergyBalance * 7) / ENERGY_DENSITY_KCAL_PER_KG;
+  const projectedWeeklyChangePercent =
+    weightKg > 0 ? (Math.abs(projectedWeeklyChangeKg) / weightKg) * 100 : 0;
+
+  // Loss tolerates a faster rate than gain: beyond ~0.5%/week, added weight is
+  // increasingly fat rather than muscle, so the gain thresholds are much tighter.
+  const [yellowThreshold, redThreshold] = isGainGoal ? [0.25, 0.5] : [1.0, 1.5];
+  let safetyZone: "green" | "yellow" | "red" = "green";
+  if (projectedWeeklyChangePercent > redThreshold) {
+    safetyZone = "red";
+  } else if (projectedWeeklyChangePercent > yellowThreshold) {
+    safetyZone = "yellow";
   }
 
   return {
@@ -408,8 +769,15 @@ export function computeCalorieTarget({
     absoluteFloorValue,
     finalTarget,
     insufficientHistory,
-    projectedWeeklyLossKg,
-    projectedWeeklyLossPercent,
-    lossSafetyZone
+    projectedWeeklyChangeKg,
+    projectedWeeklyChangePercent,
+    isGainGoal,
+    safetyZone,
+    wasClampedToFloor,
+    clampedFloorSource,
+    recommendedSafetyFloor: Math.round(recommendedSafetyFloor),
+    effectiveSafetyFloor:
+      effectiveSafetyFloor === null ? null : Math.round(effectiveSafetyFloor),
+    maxFeasibleDeficitPercent,
   };
 }

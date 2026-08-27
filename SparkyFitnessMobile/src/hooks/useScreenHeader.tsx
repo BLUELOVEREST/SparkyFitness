@@ -10,6 +10,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { SymbolView } from 'expo-symbols';
 import { useCSSVariable } from 'uniwind';
 import { useNavigation } from '@react-navigation/native';
+import { createDuplicatePressGuard } from '../utils/duplicatePress';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { ParamListBase } from '@react-navigation/native';
 import type {
   NativeStackHeaderItem,
@@ -31,9 +34,11 @@ import {
 } from '../utils/nativeHeaderItems';
 
 /**
- * Canonical label for every form/create/edit save action. The screen title
- * already names the object ("Create Meal", "Edit Preset"), so the button is
- * just "Save" (or "Saving…" while busy).
+ * Canonical English fallback label for every form/create/edit save action. The
+ * screen title already names the object ("Create Meal", "Edit Preset"), so the
+ * button is just "Save" (or "Saving…" while busy). Localized callers pass their
+ * own label; screens that omit a `kind:'primary'` label fall back to the
+ * localized `common.save` / `common.saving` values.
  */
 export const SAVE_LABEL = 'Save';
 export const SAVING_LABEL = 'Saving…';
@@ -110,9 +115,10 @@ export type HeaderItem =
       identifier?: string;
     }
   | {
-      // Sugar for `text` + role:'primary' + weight 600.
+      // Sugar for `text` + role:'primary' + weight 600. When `label` is
+      // omitted the localized `common.save` label is used.
       kind: 'primary';
-      label: string;
+      label?: string;
       onPress: () => void;
       placement?: HeaderPlacement;
       disabled?: boolean;
@@ -131,7 +137,12 @@ export type HeaderItem =
       items: HeaderMenuEntry[];
       /** Accent dot on the trigger marking a non-default selection. */
       showsBadge?: boolean;
+      badgeValue?: string;
       accessibilityLabel: string;
+      /** Optional custom-bar label when native and custom paths need different context. */
+      customAccessibilityLabel?: string;
+      /** Optional native label when native and custom paths need different context. */
+      nativeAccessibilityLabel?: string;
       identifier?: string;
     };
 
@@ -187,19 +198,76 @@ function itemIsDisabled(item: HeaderItem): boolean {
   return ('disabled' in item && !!item.disabled) || itemIsBusy(item);
 }
 
-function itemAccessibilityLabel(item: HeaderItem): string | undefined {
+function itemAccessibilityLabel(item: HeaderItem, t: TFunction): string | undefined {
   switch (item.kind) {
     case 'back':
-      return 'Back';
+      return t('common.back', 'Back');
     case 'dismiss':
-      return item.accessibilityLabel ?? 'Close';
+      return item.accessibilityLabel ?? t('common.close', 'Close');
     case 'icon':
-    case 'menu':
       return item.accessibilityLabel;
+    case 'menu':
+      return item.customAccessibilityLabel ?? item.accessibilityLabel;
     case 'text':
     case 'primary':
-      return item.accessibilityLabel ?? item.label;
+      // Explicit caller accessibilityLabel wins; otherwise mirror the visible
+      // label of the custom path (busy only disables the button there — it
+      // never swaps the text), so the a11y label always matches the UI text
+      // instead of hard-coded English.
+      return item.accessibilityLabel ?? resolveItemLabel(item, t);
   }
+}
+
+/**
+ * Resolves the visible label for a header item. `kind:'primary'` items without
+ * an explicit label, or whose label is the canonical English SAVE_LABEL marker,
+ * fall back to the localized `common.save` value with an explicit English
+ * fallback; every other item uses its required label.
+ */
+function resolveItemLabel(item: HeaderItem, t: TFunction): string | undefined {
+  switch (item.kind) {
+    case 'primary':
+      return item.label === undefined || item.label === SAVE_LABEL
+        ? t('common.save', 'Save')
+        : item.label;
+    case 'text':
+      // A role:'primary' text item with the canonical SAVE_LABEL marker is also
+      // localized (e.g. caller reuses SAVE_LABEL for a primary text action).
+      if (('role' in item && item.role === 'primary') && item.label === SAVE_LABEL) {
+        return t('common.save', 'Save');
+      }
+      return item.label;
+    case 'back':
+    case 'dismiss':
+    case 'icon':
+      return undefined;
+  }
+}
+
+/**
+ * Resolves the busy label for a header item. Primary items without an explicit
+ * busy label, or whose busy label is the canonical SAVING_LABEL marker, fall
+ * back to the localized `common.saving` value with an explicit English fallback.
+ */
+function resolveItemBusyLabel(item: HeaderItem, t: TFunction): string | undefined {
+  const primaryBusy = (kind: 'primary' | 'text') =>
+    kind === 'primary'
+      ? item.kind === 'primary' && (item.busyLabel === undefined || item.busyLabel === SAVING_LABEL)
+      : item.kind === 'text' && ('role' in item && item.role === 'primary') && item.busyLabel === SAVING_LABEL;
+
+  if (item.kind === 'primary') {
+    return primaryBusy('primary')
+      ? t('common.saving', 'Saving…')
+      : item.busyLabel;
+  }
+
+  if (item.kind === 'text') {
+    return primaryBusy('text')
+      ? t('common.saving', 'Saving…')
+      : item.busyLabel;
+  }
+
+  return undefined;
 }
 
 /**
@@ -294,8 +362,8 @@ function buildNativeMenuItem(
     sfSymbol: item.sfSymbol ?? 'ellipsis',
     identifier,
     tintColor: colors.defaultColor,
-    accessibilityLabel: item.accessibilityLabel,
-    badge: item.showsBadge ? createNativeHeaderAccentBadge(accentColor) : undefined,
+    accessibilityLabel: item.nativeAccessibilityLabel ?? item.accessibilityLabel,
+    badge: item.showsBadge ? createNativeHeaderAccentBadge(accentColor, item.badgeValue ?? '•') : undefined,
     menuItems,
   });
 }
@@ -336,9 +404,11 @@ function HeaderBarButton({
   badgeColor?: string;
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
   const disabled = itemIsDisabled(item);
   const busy = itemIsBusy(item);
 
+  const label = resolveItemLabel(item, t);
   let content: React.ReactNode;
   if (busy) {
     content = <ActivityIndicator size="small" color={color} />;
@@ -374,7 +444,7 @@ function HeaderBarButton({
   } else {
     content = (
       <Text style={{ color, fontSize: 17, fontWeight: isPrimaryItem(item) ? '600' : '500' }}>
-        {item.label}
+        {label}
       </Text>
     );
   }
@@ -385,7 +455,7 @@ function HeaderBarButton({
       disabled={disabled}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       accessibilityRole="button"
-      accessibilityLabel={itemAccessibilityLabel(item)}
+      accessibilityLabel={itemAccessibilityLabel(item, t)}
       style={disabled ? { opacity: 0.4 } : undefined}
     >
       {content}
@@ -407,6 +477,7 @@ function buildNativeItem(
   identifier: string,
   colors: HeaderColors,
   press: () => void,
+  t: TFunction,
 ): NativeStackHeaderItem | null {
   const color = itemColor(item, colors);
   switch (item.kind) {
@@ -418,7 +489,7 @@ function buildNativeItem(
         sfSymbol: 'xmark',
         identifier,
         tintColor: colors.defaultColor,
-        accessibilityLabel: item.accessibilityLabel ?? 'Close',
+        accessibilityLabel: item.accessibilityLabel ?? t('common.close', 'Close'),
         onPress: press,
         disabled: !!item.disabled,
       });
@@ -433,15 +504,19 @@ function buildNativeItem(
       });
     case 'text':
     case 'primary': {
-      const label = item.busy && item.busyLabel ? item.busyLabel : item.label;
+      const resolvedLabel = resolveItemLabel(item, t);
+      const resolvedBusyLabel = resolveItemBusyLabel(item, t);
+      const visibleLabel = itemIsBusy(item) && resolvedBusyLabel
+        ? resolvedBusyLabel
+        : (resolvedLabel ?? t('common.save', 'Save'));
       return createNativeHeaderTextButtonItem({
-        label,
+        label: visibleLabel,
         identifier,
         tintColor: color,
         onPress: press,
         disabled: itemIsDisabled(item),
         fontWeight: isPrimaryItem(item) ? '600' : '500',
-        accessibilityLabel: itemAccessibilityLabel(item),
+        accessibilityLabel: item.accessibilityLabel ?? visibleLabel,
       });
     }
   }
@@ -459,6 +534,7 @@ function buildNativeItem(
  * navigation/secondary actions neutral) is enforced here for both paths.
  */
 export function useScreenHeader(config: ScreenHeaderConfig): React.ReactNode {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>();
   const usesNativeHeader = useNativeIOSHeadersActive();
   const { defaultColor, saveColor } = useHeaderActionColors();
@@ -492,6 +568,19 @@ export function useScreenHeader(config: ScreenHeaderConfig): React.ReactNode {
   const handlersRef = useRef<Record<string, () => void>>({});
   const nextHandlers: Record<string, () => void> = {};
 
+  // `kind: 'primary'` is the Save sugar, and most screens expose their only
+  // Save through it. Those presses dispatch straight through `handlersRef` with
+  // no synchronous guard, so a burst of taps replayed off a blocked JS thread
+  // ran the handler once per tap — screen-local isPending checks do not help,
+  // because every queued press sees the previous render's closure (#2191).
+  //
+  // Same guard the footer Save bar uses, and scoped to the RIGHT-slot primary:
+  // that is the accent write action, the only one where a repeated press
+  // writes twice. The left slot is navigation, and at least one screen uses
+  // the primary sugar for a wizard Back (CycleOnboardingScreen) where rapid
+  // repeated presses are exactly what the user means.
+  const allowPress = useRef(createDuplicatePressGuard()).current;
+
   const goBack = () => navigation.goBack();
   // A menu item's own press only exists on the custom path: measure the
   // trigger and open the AnchoredMenu under it. (Natively the system presents
@@ -500,17 +589,24 @@ export function useScreenHeader(config: ScreenHeaderConfig): React.ReactNode {
     measureAnchoredMenuTrigger(menuTriggerRefs.current[id] ?? null, (anchor) =>
       setOpenMenu({ id, anchor }),
     );
-  const registerHandlers = (item: HeaderItem, id: string) => {
-    nextHandlers[id] = item.kind === 'menu' ? openAnchoredMenu(id) : resolvePress(item, goBack);
+  const registerHandlers = (item: HeaderItem, id: string, slot: 'left' | 'right') => {
+    const press = item.kind === 'menu' ? openAnchoredMenu(id) : resolvePress(item, goBack);
+    nextHandlers[id] =
+      item.kind === 'primary' && slot === 'right'
+        ? () => {
+            if (!allowPress(id)) return;
+            press();
+          }
+        : press;
     collectMenuHandlers(item, id, nextHandlers);
   };
   const leftId = left ? resolveIdentifier(left, 'header-left') : 'header-left';
   if (left) {
-    registerHandlers(left, leftId);
+    registerHandlers(left, leftId, 'left');
   }
   const rightMeta = rightItems.map((item, index) => {
     const id = resolveIdentifier(item, `header-right-${index}`);
-    registerHandlers(item, id);
+    registerHandlers(item, id, 'right');
     return { item, id };
   });
   handlersRef.current = nextHandlers;
@@ -522,7 +618,10 @@ export function useScreenHeader(config: ScreenHeaderConfig): React.ReactNode {
       ? {
           sfSymbol: item.sfSymbol,
           showsBadge: !!item.showsBadge,
+          badgeValue: item.kind === 'menu' ? item.badgeValue : undefined,
           accessibilityLabel: item.accessibilityLabel,
+          customAccessibilityLabel: item.customAccessibilityLabel,
+          nativeAccessibilityLabel: item.nativeAccessibilityLabel,
           entries: item.items.map((entry) =>
             isMenuSection(entry)
               ? {
@@ -550,6 +649,8 @@ export function useScreenHeader(config: ScreenHeaderConfig): React.ReactNode {
       ? {
           id: leftId,
           kind: left.kind,
+          label: resolveItemLabel(left, t),
+          busyLabel: resolveItemBusyLabel(left, t),
           disabled: itemIsDisabled(left),
           busy: itemIsBusy(left),
           menu: menuSignature(left),
@@ -558,8 +659,8 @@ export function useScreenHeader(config: ScreenHeaderConfig): React.ReactNode {
     right: rightMeta.map(({ item, id }) => ({
       id,
       kind: item.kind,
-      label: 'label' in item ? item.label : undefined,
-      busyLabel: 'busyLabel' in item ? item.busyLabel : undefined,
+      label: resolveItemLabel(item, t),
+      busyLabel: resolveItemBusyLabel(item, t),
       sfSymbol: item.kind === 'icon' ? item.sfSymbol : undefined,
       role: 'role' in item ? item.role : undefined,
       disabled: itemIsDisabled(item),
@@ -585,7 +686,7 @@ export function useScreenHeader(config: ScreenHeaderConfig): React.ReactNode {
           ? buildNativeMenuItem(item, id, colors, accentColor, (handlerKey) => () =>
               handlersRef.current[handlerKey]?.(),
             )
-          : buildNativeItem(item, id, colors, () => handlersRef.current[id]?.());
+          : buildNativeItem(item, id, colors, () => handlersRef.current[id]?.(), t);
 
       if (!left || left.kind === 'back') {
         options.unstable_headerLeftItems = undefined;
@@ -665,14 +766,36 @@ export function useScreenHeader(config: ScreenHeaderConfig): React.ReactNode {
 
   const bar = (
     <View
-      className={`flex-row items-center px-4 py-3 ${borderless ? '' : 'border-b border-border-subtle'}`}
+      className={`px-4 py-3 ${borderless ? '' : 'border-b border-border-subtle'}`}
+      style={{ position: 'relative', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
     >
-      {/* Equal-width side cells keep the title cell geometrically centered in
-          the bar even when the left/right actions have different widths; the
-          title stays content-sized (shrinking to truncate) so it can use more
-          than a third of the width when the sides are light. */}
-      <View className="flex-1 flex-row items-center gap-4">{leftCustom}</View>
-      <View className="shrink px-2">
+      {/* The title is a separate, absolutely-positioned layer centered on the
+          bar's full width, independent of the side cells' own flex layout —
+          the same technique native iOS/Android headers use. Centering the
+          title by giving the side cells equal flex-grow instead (so an empty
+          side matched the populated one) is what let a long title squeeze
+          both side cells to zero width in the first place: under CSS/Yoga's
+          shrink algorithm, a `flexBasis: 0%` sibling always computes a scaled
+          shrink factor of 0, so once the title overflowed the row it claimed
+          100% of the space and the side cells rendered at 0 width (confirmed
+          via on-device onLayout measurement). Decoupling the title from that
+          layout means it can never compete with the side cells for space, so
+          it can never squeeze them — and it still lands on the bar's true
+          center regardless of how the left/right content widths differ.
+          pointerEvents="box-none" keeps the title layer itself untouchable so
+          it can never sit "on top of" a button for hit-testing purposes. */}
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          left: 16,
+          right: 16,
+          top: 0,
+          bottom: 0,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         {center ?? (
           <Text
             numberOfLines={1}
@@ -682,7 +805,16 @@ export function useScreenHeader(config: ScreenHeaderConfig): React.ReactNode {
           </Text>
         )}
       </View>
-      <View className="flex-1 flex-row items-center justify-end gap-4">{rightCustom}</View>
+      {/* flexShrink: 0 (content-sized) rather than flex-1: these cells can
+          never be squeezed by the title, at the cost of no longer truncating
+          if their own content ever got wide enough to overflow — a non-issue
+          for the icon/short-text buttons this bar renders. */}
+      <View className="flex-row items-center gap-4" style={{ flexShrink: 0 }}>
+        {leftCustom}
+      </View>
+      <View className="flex-row items-center justify-end gap-4" style={{ flexShrink: 0 }}>
+        {rightCustom}
+      </View>
     </View>
   );
 

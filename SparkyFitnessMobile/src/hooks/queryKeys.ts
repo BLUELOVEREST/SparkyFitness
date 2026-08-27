@@ -3,6 +3,12 @@ export const serverConnectionQueryKey = ['serverConnection'] as const;
 export const serverConfigsQueryKey = ['serverConfigs'] as const;
 
 export const dailySummaryQueryKey = (date: string) => ['dailySummary', date] as const;
+/** Prefix for every date, so a mutation that moves a day's totals can invalidate without knowing which day. */
+export const dailySummaryRootQueryKey = ['dailySummary'] as const;
+
+export const familyUsersQueryKey = ['familyDiaryUsers'] as const;
+export const familyDailySummaryQueryKey = (familyUserId: string, date: string) =>
+  ['familyDailySummary', familyUserId, date] as const;
 
 export const activeMealPlanDayQueryKey = (date: string) =>
   ['activeMealPlanDay', date] as const;
@@ -83,8 +89,14 @@ export const exerciseStatsQueryKeyRoot = ['exerciseStats'] as const;
 export const exerciseStatsQueryKey = (
   exerciseId: string,
   excludePresetEntryId?: string,
+  presetId?: number,
 ) =>
-  [...exerciseStatsQueryKeyRoot, exerciseId, excludePresetEntryId ?? null] as const;
+  [
+    ...exerciseStatsQueryKeyRoot,
+    exerciseId,
+    excludePresetEntryId ?? null,
+    presetId ?? null,
+  ] as const;
 
 export const exerciseDetailQueryKey = (exerciseId: string) =>
   ['exerciseDetail', exerciseId] as const;

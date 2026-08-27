@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCSSVariable } from 'uniwind';
+import { useTranslation } from 'react-i18next';
 import Icon from '../components/Icon';
 import StatusView from '../components/StatusView';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
@@ -18,16 +19,6 @@ import type { MealPlanTemplate } from '../types/mealPlan';
 
 type MealPlanTemplatesScreenProps = RootStackScreenProps<'MealPlanTemplates'>;
 
-function formatItemCount(count: number) {
-  return `${count} planned ${count === 1 ? 'item' : 'items'}`;
-}
-
-function formatDateRange(template: MealPlanTemplate) {
-  const start = `Starts ${template.start_date}`;
-  if (!template.end_date) return start;
-  return `${start} · Ends ${template.end_date}`;
-}
-
 function MealPlanTemplateCard({
   template,
   onPress,
@@ -35,6 +26,7 @@ function MealPlanTemplateCard({
   template: MealPlanTemplate;
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Pressable
       className="bg-surface rounded-2xl px-4 py-4 mb-3 shadow-sm border border-border-subtle"
@@ -63,7 +55,9 @@ function MealPlanTemplateCard({
               template.is_active ? 'text-accent-primary' : 'text-text-secondary'
             }`}
           >
-            {template.is_active ? 'Active' : 'Inactive'}
+            {template.is_active
+              ? t('planTemplates.active', { defaultValue: 'Active' })
+              : t('planTemplates.inactive', { defaultValue: 'Inactive' })}
           </Text>
         </View>
       </View>
@@ -71,13 +65,27 @@ function MealPlanTemplateCard({
       <View className="flex-row items-center mt-4">
         <Icon name="calendar" size={16} color="#6B7280" />
         <Text className="text-sm text-text-secondary ml-2">
-          {formatDateRange(template)}
+          {template.end_date
+            ? t('planTemplates.dateRange', {
+                defaultValue: 'Starts {{start}} · Ends {{end}}',
+                start: template.start_date,
+                end: template.end_date,
+              })
+            : t('planTemplates.starts', {
+                defaultValue: 'Starts {{date}}',
+                date: template.start_date,
+              })}
         </Text>
       </View>
       <View className="flex-row items-center mt-2">
         <Icon name="food" size={16} color="#6B7280" />
         <Text className="text-sm text-text-secondary ml-2">
-          {formatItemCount(template.assignments.length)}
+          {t('planTemplates.mealItemCount', {
+            defaultValue: '{{count}} planned items',
+            defaultValue_one: '{{count}} planned item',
+            defaultValue_other: '{{count}} planned items',
+            count: template.assignments.length,
+          })}
         </Text>
       </View>
     </Pressable>
@@ -88,6 +96,7 @@ const MealPlanTemplatesScreen: React.FC<MealPlanTemplatesScreenProps> = ({
   navigation,
 }) => {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const activeWorkoutBarPadding = useActiveWorkoutBarPadding();
   const accentColor = useCSSVariable('--color-accent-primary') as string;
   const { templates, isLoading, isError, refetch } = useMealPlanTemplates();
@@ -105,7 +114,12 @@ const MealPlanTemplatesScreen: React.FC<MealPlanTemplatesScreenProps> = ({
   if (isLoading) {
     return (
       <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-        <StatusView loading title="Loading meal plans..." />
+        <StatusView
+          loading
+          title={t('planTemplates.meal.loading', {
+            defaultValue: 'Loading meal plans...',
+          })}
+        />
       </View>
     );
   }
@@ -115,8 +129,12 @@ const MealPlanTemplatesScreen: React.FC<MealPlanTemplatesScreenProps> = ({
       <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
         <StatusView
           icon="alert-circle"
-          title="Failed to load meal plans"
-          subtitle="Pull to refresh or check your server connection."
+          title={t('planTemplates.meal.failed', {
+            defaultValue: 'Failed to load meal plans',
+          })}
+          subtitle={t('planTemplates.connectionHint', {
+            defaultValue: 'Pull to refresh or check your server connection.',
+          })}
         />
       </View>
     );
@@ -140,31 +158,43 @@ const MealPlanTemplatesScreen: React.FC<MealPlanTemplatesScreenProps> = ({
     >
       <View className="mb-5 flex-row items-start justify-between">
         <View className="flex-1 pr-3">
-          <Text className="text-2xl font-bold text-text-primary">Meal Plans</Text>
+          <Text className="text-2xl font-bold text-text-primary">
+            {t('planTemplates.meal.title', { defaultValue: 'Meal Plans' })}
+          </Text>
           <Text className="text-sm text-text-secondary mt-1">
-            Saved weekly templates for planned eating.
+            {t('planTemplates.meal.subtitle', {
+              defaultValue: 'Saved weekly templates for planned eating.',
+            })}
           </Text>
         </View>
         <Pressable
           className="bg-accent-primary rounded-xl px-4 py-2"
-          onPress={() => navigation.navigate('MealPlanTemplateForm', { mode: 'create' })}
+          onPress={() =>
+            navigation.navigate('MealPlanTemplateForm', { mode: 'create' })
+          }
         >
-          <Text className="text-white font-semibold">New</Text>
+          <Text className="text-white font-semibold">
+            {t('planTemplates.new', { defaultValue: 'New' })}
+          </Text>
         </Pressable>
       </View>
 
       {templates.length === 0 ? (
         <View className="bg-surface rounded-2xl px-5 py-8 border border-border-subtle">
           <Text className="text-lg font-semibold text-text-primary text-center">
-            No meal plans yet
+            {t('planTemplates.meal.empty', {
+              defaultValue: 'No meal plans yet',
+            })}
           </Text>
           <Text className="text-sm text-text-secondary text-center mt-2">
-            Create a carb-cycle target plan, then add foods on web while mobile food
-            selection is being completed.
+            {t('planTemplates.meal.emptyHint', {
+              defaultValue:
+                'Create a carb-cycle target plan, then add foods on web while mobile food selection is being completed.',
+            })}
           </Text>
         </View>
       ) : (
-        templates.map((template) => (
+        templates.map(template => (
           <MealPlanTemplateCard
             key={template.id ?? template.plan_name}
             template={template}

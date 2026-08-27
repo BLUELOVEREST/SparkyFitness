@@ -220,23 +220,23 @@ describe('ActiveWorkoutExerciseCard', () => {
         } as never,
       });
 
-    it('shows KG and Reps for weight_reps', () => {
+    it('shows kg and Reps for weight_reps', () => {
       const utils = renderCard(true, { exercise: withModality('weight_reps') });
-      expect(utils.getByText('KG')).toBeTruthy();
+      expect(utils.getByText('kg')).toBeTruthy();
       expect(utils.getByText('Reps')).toBeTruthy();
       expect(utils.queryByText('Sec')).toBeNull();
     });
 
-    it('drops the KG column for reps_only', () => {
+    it('drops the kg column for reps_only', () => {
       const utils = renderCard(true, { exercise: withModality('reps_only') });
-      expect(utils.queryByText('KG')).toBeNull();
+      expect(utils.queryByText('kg')).toBeNull();
       expect(utils.getByText('Reps')).toBeTruthy();
     });
 
     it('shows a single Sec column for duration', () => {
       const utils = renderCard(true, { exercise: withModality('duration') });
       expect(utils.getByText('Sec')).toBeTruthy();
-      expect(utils.queryByText('KG')).toBeNull();
+      expect(utils.queryByText('kg')).toBeNull();
       expect(utils.queryByText('Reps')).toBeNull();
     });
 
@@ -278,7 +278,7 @@ describe('ActiveWorkoutExerciseCard', () => {
           sets: [base.sets[0], { ...base.sets[0], id: 102, set_number: 2 }],
         },
       });
-      expect(utils.getByText('Km')).toBeTruthy();
+      expect(utils.getByText('km')).toBeTruthy();
     });
 
     it('labels the view-mode distance column Mi and forwards the unit to rows', () => {
@@ -291,7 +291,7 @@ describe('ActiveWorkoutExerciseCard', () => {
           sets: [base.sets[0], { ...base.sets[0], id: 102, set_number: 2 }],
         },
       });
-      expect(utils.getByText('Mi')).toBeTruthy();
+      expect(utils.getByText('mi')).toBeTruthy();
       expect(utils.getByTestId('set-row-101').props.distanceUnit).toBe('miles');
     });
 
@@ -523,16 +523,16 @@ describe('ActiveWorkoutExerciseCard', () => {
 
     it('shows read-only calories, hidden in live mode', () => {
       const view = renderCard(true, { mode: 'view' });
-      expect(view.getByText('150 Cal')).toBeTruthy();
-      expect(view.queryByLabelText('Edit calories burned for Bench Press')).toBeNull();
+      expect(view.getByText('150 kcal')).toBeTruthy();
+      expect(view.queryByLabelText('Edit kcalories burned for Bench Press')).toBeNull();
 
       const live = renderCard(true, { mode: 'live' });
-      expect(live.queryByText('150 Cal')).toBeNull();
+      expect(live.queryByText('150 kcal')).toBeNull();
     });
 
     it('skips the exercise stats fetch', () => {
       renderCard(true, { mode: 'view' });
-      expect(mockUseExerciseStats).toHaveBeenCalledWith(null, undefined);
+      expect(mockUseExerciseStats).toHaveBeenCalledWith(null, undefined, undefined);
     });
 
     it('never labels a collapsed exercise as planned', () => {
@@ -620,7 +620,7 @@ describe('ActiveWorkoutExerciseCard', () => {
 
     it('fetches exercise stats so "Last time" works for drafts', () => {
       renderCard(true, { mode: 'edit' });
-      expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', undefined);
+      expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', undefined, undefined);
     });
 
     describe('calories chip', () => {
@@ -632,7 +632,7 @@ describe('ActiveWorkoutExerciseCard', () => {
           exercise: { ...makeExercise(), editCaloriesText: '150' },
         });
 
-        expect(getByText('150 Cal')).toBeTruthy();
+        expect(getByText('150 kcal')).toBeTruthy();
         expect(queryByLabelText('Calories burned for Bench Press')).toBeNull();
 
         fireEvent.press(getByLabelText('Edit calories burned for Bench Press'));
@@ -647,12 +647,12 @@ describe('ActiveWorkoutExerciseCard', () => {
           onChangeCalories: jest.fn(),
           exercise: { ...makeExercise(), editCaloriesText: '' },
         });
-        expect(getByText('– Cal')).toBeTruthy();
+        expect(getByText('– kcal')).toBeTruthy();
       });
 
       it('is absent without an onChangeCalories handler', () => {
         const { queryByLabelText } = renderCard(true, { mode: 'edit' });
-        expect(queryByLabelText('Edit calories burned for Bench Press')).toBeNull();
+        expect(queryByLabelText('Edit kcalories burned for Bench Press')).toBeNull();
       });
     });
 
@@ -759,7 +759,12 @@ describe('ActiveWorkoutExerciseCard', () => {
 
     it('passes the session id as excludePresetEntryId to the stats query', () => {
       renderCard(true, { mode: 'live', excludePresetEntryId: 'session-1' });
-      expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', 'session-1');
+      expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', 'session-1', undefined);
+    });
+
+    it('passes sourcePresetId through to the stats query', () => {
+      renderCard(true, { mode: 'live', sourcePresetId: 42 });
+      expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', undefined, 42);
     });
 
     it('marks the tap-focused row from focusedSetKey (distinct from the cursor)', () => {
@@ -831,7 +836,7 @@ describe('ActiveWorkoutExerciseCard', () => {
       // Without the viewed session's id to exclude, Best could show the very
       // workout being viewed — the hook stays disabled instead.
       const { queryByTestId } = renderCard(true, { mode: 'view' });
-      expect(mockUseExerciseStats).toHaveBeenCalledWith(null, undefined);
+      expect(mockUseExerciseStats).toHaveBeenCalledWith(null, undefined, undefined);
       expect(mockCapturePrBaseline).not.toHaveBeenCalled();
       expect(queryByTestId('icon-trophy-outline')).toBeNull();
     });
@@ -842,7 +847,7 @@ describe('ActiveWorkoutExerciseCard', () => {
         mode: 'view',
         excludePresetEntryId: 'session-1',
       });
-      expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', 'session-1');
+      expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', 'session-1', undefined);
       expect(mockCapturePrBaseline).not.toHaveBeenCalled();
       expect(getByTestId('icon-trophy-outline')).toBeTruthy();
       expect(getByText('100 × 5')).toBeTruthy();
@@ -934,7 +939,7 @@ describe('ActiveWorkoutExerciseCard', () => {
         excludePresetEntryId: 'session-9',
       });
 
-      expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', 'session-9');
+      expect(mockUseExerciseStats).toHaveBeenCalledWith('ex-1', 'session-9', undefined);
       expect(prevOf(utils, 101)).toBe('prev:60x8');
     });
 

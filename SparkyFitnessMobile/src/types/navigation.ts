@@ -24,6 +24,7 @@ import type { MealTypeKey } from '../utils/mealNutrition';
 import type { SaveFoodPayload } from '../services/api/foodsApi';
 import type { CompletedSetMap, PrSetMap } from '../stores/activeWorkoutStore';
 import type { AssumedSetValues } from '../utils/workoutSession';
+import type { FamilyDiaryUser } from './familyDiary';
 
 export type FoodPickerMode = 'log-entry' | 'meal-builder' | 'library';
 
@@ -38,6 +39,23 @@ export type TabParamList = {
 export type RootStackParamList = {
   Onboarding: undefined;
   Tabs: NavigatorScreenParams<TabParamList>;
+  FamilyMembers: undefined;
+  FamilyDiary: { familyUser: FamilyDiaryUser };
+  FamilyMealDetail: {
+    familyUser: FamilyDiaryUser;
+    sourceDate: string;
+    mealTypeId: string | null;
+    mealTypeName: string;
+    entries: FoodEntry[];
+  };
+  FamilyCopyReview: {
+    familyUser: FamilyDiaryUser;
+    sourceDate: string;
+    mealTypeId: string | null;
+    mealTypeName: string;
+    sourceEntries: FoodEntry[];
+    selectedEntryIds: string[];
+  };
   CycleSettings: undefined;
   CycleOnboarding: undefined;
   CycleHub: undefined;

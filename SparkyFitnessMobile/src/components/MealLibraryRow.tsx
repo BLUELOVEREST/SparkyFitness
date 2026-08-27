@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, Pressable } from 'react-native';
 import { useCSSVariable } from 'uniwind';
 import type { Meal } from '../types/meals';
@@ -7,6 +8,10 @@ import { useProfile } from '../hooks';
 import { deriveShareStatus } from '../utils/shareStatus';
 import ShareStatusBadge from './ShareStatusBadge';
 import Icon from './Icon';
+import FoodThumbnail from './FoodThumbnail';
+import { useFoodImageSourceContext } from './FoodImageSourceProvider';
+import { primaryImageOf, usableFoodImages } from '../utils/foodImages';
+import { useOpenLightbox } from './LightboxProvider';
 
 interface MealLibraryRowProps {
   meal: Meal;
@@ -31,6 +36,7 @@ const MealLibraryRow: React.FC<MealLibraryRowProps> = ({
   showBadge = false,
   isFavorite = false,
 }) => {
+  const { t } = useTranslation();
   const { profile } = useProfile();
   const status = deriveShareStatus(meal.user_id, meal.is_public, profile?.id);
   const foodInfo = useMemo(() => mealToFoodInfo(meal), [meal]);
@@ -39,14 +45,33 @@ const MealLibraryRow: React.FC<MealLibraryRowProps> = ({
   // leaving accent (blue) for tappable things. --color-cat-amber is the closest
   // token to web's yellow-500 and has a dark-mode value, unlike a raw hex.
   const [goldColor] = useCSSVariable(['--color-cat-amber']) as [string];
+  const getImageSource = useFoodImageSourceContext();
+  const images = usableFoodImages(meal.images);
 
+  const openLightbox = useOpenLightbox();
+  const openImages =
+    images.length > 0 ? () => openLightbox(images, 0, meal.name) : undefined;
+
+  // Sibling, not nested — see FoodLibraryRow for why.
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress}
-      className={`px-4 py-3 ${showDivider ? 'border-b border-border-subtle' : ''}`}
-      style={({ pressed }) => (pressed && onPress ? { opacity: 0.7 } : null)}
+    <View
+      className={`flex-row items-center ${showDivider ? 'border-b border-border-subtle' : ''}`}
     >
+      <View className="pl-4 py-3">
+        <FoodThumbnail
+          image={primaryImageOf(meal)}
+          getImageSource={getImageSource}
+          size={40}
+          onPress={openImages}
+          variant="meal"
+        />
+      </View>
+      <Pressable
+        onPress={onPress}
+        disabled={!onPress}
+        className="flex-1 pr-4 py-3"
+        style={({ pressed }) => (pressed && onPress ? { opacity: 0.7 } : null)}
+      >
       <View className="flex-row justify-between items-center">
         <View className="flex-1 mr-3">
           <View className="flex-row items-center gap-1.5">
@@ -59,7 +84,7 @@ const MealLibraryRow: React.FC<MealLibraryRowProps> = ({
             {showBadge ? (
               <View className="px-1 py-0.5 rounded border border-border-subtle flex-shrink-0">
                 <Text className="text-text-muted text-xs">
-                  Meal
+                  {t('foodSearch.labels.meal', { defaultValue: 'Meal' })}
                 </Text>
               </View>
             ) : null}
@@ -72,7 +97,7 @@ const MealLibraryRow: React.FC<MealLibraryRowProps> = ({
                 size={16}
                 color={goldColor}
                 style={{ marginTop: -1 }}
-                accessibilityLabel="Favorite"
+                accessibilityLabel={t('foodSearch.accessibility.favorite', { defaultValue: 'Favorite' })}
               />
             )}
           </View>
@@ -84,14 +109,15 @@ const MealLibraryRow: React.FC<MealLibraryRowProps> = ({
         </View>
         <View className="items-end">
           <Text className="text-text-primary text-base font-semibold">
-            {foodInfo.calories} cal
+            {foodInfo.calories} {t('foodSearch.labels.caloriesUnit', { defaultValue: 'cal' })}
           </Text>
           <Text className="text-text-secondary text-xs">
-            {itemCount} {itemCount === 1 ? 'item' : 'items'}
+            {t('foodSearch.labels.itemCount', { defaultValue: "{{count}} items", defaultValue_one: "{{count}} item", defaultValue_other: "{{count}} items", count: itemCount })}
           </Text>
         </View>
       </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 };
 

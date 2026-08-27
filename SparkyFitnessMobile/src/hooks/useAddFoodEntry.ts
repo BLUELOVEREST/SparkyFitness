@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import {
@@ -8,6 +9,7 @@ import {
   type SaveFoodPayload,
 } from '../services/api/foodsApi';
 import { createFoodEntry, type CreateFoodEntryPayload } from '../services/api/foodEntriesApi';
+import type { ImageUploadArgs } from '../utils/pickerImages';
 import { dailySummaryQueryKey, foodsQueryKey } from './queryKeys';
 import { invalidateMealUsageCaches } from './useMeals';
 import type { FoodEntry } from '../types/foodEntries';
@@ -22,6 +24,11 @@ import { persistExternalVariants } from '../utils/persistExternalVariants';
 
 export interface AddFoodEntryInput {
   saveFoodPayload?: SaveFoodPayload;
+  /**
+   * Photos to upload with the food being created. Without this, a food created
+   * from the diary saves with no picture even though the user attached one.
+   */
+  saveFoodImages?: ImageUploadArgs;
   saveThenCreateVariantPayload?: Omit<CreateFoodVariantPayload, 'food_id'>;
   /**
    * All external provider variants for the food being added.
@@ -106,12 +113,13 @@ async function resolveSelectedVariant(
 }
 
 export function useAddFoodEntry(options?: UseAddFoodEntryOptions) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
     mutationFn: async (input: AddFoodEntryInput) => {
       if (input.saveFoodPayload) {
-        const saved = await saveFood(input.saveFoodPayload);
+        const saved = await saveFood(input.saveFoodPayload, input.saveFoodImages);
 
         let variantId = saved.default_variant?.id;
         let unit = input.createEntryPayload.unit;
@@ -166,9 +174,9 @@ export function useAddFoodEntry(options?: UseAddFoodEntryOptions) {
     onError: (error) => {
       const text2 =
         error instanceof Error && error.message === SELECTED_VARIANT_RESOLUTION_ERROR
-          ? 'Choose a different serving.'
-          : 'Please try again.';
-      Toast.show({ type: 'error', text1: 'Failed to add food', text2 });
+          ? t('foodEntryAdd.errors.chooseDifferentServing', { defaultValue: 'Choose a different serving.' })
+          : t('foodEntryAdd.errors.tryAgain', { defaultValue: 'Please try again.' });
+      Toast.show({ type: 'error', text1: t('foodEntryAdd.errors.failedToAddFood', { defaultValue: 'Failed to add food' }), text2 });
     },
   });
 

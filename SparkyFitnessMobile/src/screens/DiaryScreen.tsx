@@ -5,6 +5,7 @@ import { Gesture, GestureDetector, Directions } from 'react-native-gesture-handl
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCSSVariable } from 'uniwind';
+import { hasSupplementNutrition } from '@workspace/shared';
 import DateNavigator from '../components/DateNavigator';
 import FoodSummary from '../components/FoodSummary';
 import ExerciseSummary from '../components/ExerciseSummary';
@@ -24,6 +25,7 @@ import {
   useLogActiveMealPlanMeal,
   useMealTypes,
   useServerConnection,
+  useFamilyUsers,
 } from '../hooks';
 import { useMeasurements } from '../hooks/useMeasurements';
 import { useCustomMeasurementsByDate } from '../hooks/useCustomMeasurements';
@@ -40,6 +42,7 @@ import { useDiaryDateStore } from '../stores/diaryDateStore';
 import type { MealTypeKey } from '../utils/mealNutrition';
 import type { ActiveMealPlanDayMeal } from '../types/mealPlan';
 import { getHistoricalMealTypeLabel, getMealTypeDisplayLabel } from '../utils/mealNutrition';
+import { formatDateLabel } from '../utils/dateUtils';
 import type { FoodEntry } from '../types/foodEntries';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -47,6 +50,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList, TabParamList } from '../types/navigation';
 import { useHeaderActionColors } from '../hooks/useHeaderActionColors';
 import { applyCarbCycleTargetsToDailySummary } from '../utils/carbCycleDailySummary';
+import { useTranslation } from 'react-i18next';
 
 type DiaryScreenProps = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, 'Diary'>,
@@ -63,7 +67,12 @@ const getPlannedMealTypeKey = (meal: ActiveMealPlanDayMeal): MealTypeKey => {
 };
 
 const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
+  const { t, i18n: translationI18n } = useTranslation();
+  const dateLocale = translationI18n.language.startsWith('pl') ? 'pl-PL' : 'en-US';
   const insets = useSafeAreaInsets();
+  const { isConnected, isLoading: isConnectionLoading } = useServerConnection();
+  const { data: familyUsers = [] } = useFamilyUsers({ enabled: isConnected });
+  const hasFamilyDiaries = isConnected && familyUsers.length > 0;
   const selectedDate = useDiaryDateStore((s) => s.selectedDate);
   const setSelectedDate = useDiaryDateStore((s) => s.setSelectedDate);
   const goToPreviousDay = useDiaryDateStore((s) => s.goToPreviousDay);
@@ -96,6 +105,10 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
   }, [navigation, selectedDate]);
 
   const openCalendar = useCallback(() => calendarRef.current?.present(), []);
+  const openFamilyDiaries = useCallback(() => navigation.navigate('FamilyMembers'), [navigation]);
+  const familyDiariesAccessibilityLabel = t('familyDiary.openFamilyDiaries', {
+    defaultValue: 'Open family diaries',
+  });
   const accentColor = useCSSVariable('--color-accent-primary') as string;
   const usesNativeTabs = useNativeIOSTabsActive();
   const { defaultColor: nativeHeaderActionColor } = useHeaderActionColors();
@@ -111,7 +124,20 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
         onDatePress: openCalendar,
         onNextDate: goToNextDay,
         tintColor: nativeHeaderActionColor,
-        accessibilityLabel: 'Choose diary date',
+        accessibilityLabel: t('diary.chooseDate', { defaultValue: 'Choose diary date' }),
+        previousDayLabel: t('common.previousDay', { defaultValue: ': previous day' }),
+        nextDayLabel: t('common.nextDay', { defaultValue: ': next day' }),
+        dateLabel: `${formatDateLabel(selectedDate, t, dateLocale)} ▾`,
+        t,
+        locale: dateLocale,
+        leadingAction: hasFamilyDiaries
+          ? {
+              sfSymbol: 'person.2.fill',
+              onPress: openFamilyDiaries,
+              accessibilityLabel: familyDiariesAccessibilityLabel,
+              identifier: 'family-diaries',
+            }
+          : undefined,
       },
     );
   }, [
@@ -119,9 +145,14 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
     goToPreviousDay,
     nativeHeaderActionColor,
     navigation,
+    openFamilyDiaries,
     openCalendar,
     selectedDate,
+    familyDiariesAccessibilityLabel,
+    hasFamilyDiaries,
     usesNativeTabs,
+    t,
+    dateLocale,
   ]);
 
   useLayoutEffect(() => {
@@ -147,8 +178,8 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
       // a deleted/hidden type fall back to the literal historical name.
       const definition = mealTypes.find((mt) => mt.id === mealTypeId) ?? null;
       const mealLabel = definition
-        ? getMealTypeDisplayLabel(definition)
-        : getHistoricalMealTypeLabel(mealTypeName);
+        ? getMealTypeDisplayLabel(definition, t)
+        : getHistoricalMealTypeLabel(mealTypeName, t);
       navigation.navigate('MealTypeDetail', {
         date: selectedDate,
         mealTypeId: mealTypeId ?? undefined,
@@ -156,7 +187,7 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
         mealLabel,
       });
     },
-    [navigation, selectedDate, mealTypes],
+    [navigation, selectedDate, mealTypes, t],
   );
 
   const openPlannedMealDetail = useCallback((meal: ActiveMealPlanDayMeal) => {
@@ -177,7 +208,6 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
   const heightMode = preferences?.default_measurement_unit ?? 'cm';
   const { getImageSource } = useExerciseImageSource();
 
-  const { isConnected, isLoading: isConnectionLoading } = useServerConnection();
   const {
     summary,
     isLoading,
@@ -292,15 +322,15 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
           icon="cloud-offline"
           iconTone="muted"
           iconSize={64}
-          title="No server configured"
-          subtitle="Configure your server connection in Settings to view your diary."
-          action={{ label: 'Go to Settings', onPress: () => navigation.navigate('Settings'), variant: 'primary' }}
+          title={t('diary.noServer', { defaultValue: 'No server configured' })}
+          subtitle={t('diary.configureServer', { defaultValue: 'Configure your server connection in Settings to view your diary.' })}
+          action={{ label: t('diary.goToSettings', { defaultValue: 'Go to Settings' }), onPress: () => navigation.navigate('Settings'), variant: 'primary' }}
         />
       );
     }
 
     if (isLoading || isConnectionLoading) {
-      return <StatusView loading title="Loading diary..." />;
+      return <StatusView loading title={t('diary.loading', { defaultValue: 'Loading diary...' })} />;
     }
 
     if (isError) {
@@ -309,9 +339,9 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
           icon="alert-circle"
           iconTone="danger"
           iconSize={64}
-          title="Failed to load diary"
-          subtitle="Please check your connection and try again."
-          action={{ label: 'Retry', onPress: () => refetch(), variant: 'primary' }}
+          title={t('diary.loadFailed', { defaultValue: 'Failed to load diary' })}
+          subtitle={t('diary.checkConnection', { defaultValue: 'Please check your connection and try again.' })}
+          action={{ label: t('diary.retry', { defaultValue: 'Retry' }), onPress: () => refetch(), variant: 'primary' }}
         />
       );
     }
@@ -340,7 +370,10 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
           <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={accentColor} />
         }
       >
-        {(effectiveSummary.foodEntries.length > 0 || effectiveSummary.exerciseEntries.length > 0 || effectiveSummary.calorieGoal > 0) && (
+        {(effectiveSummary.foodEntries.length > 0 ||
+          hasSupplementNutrition(effectiveSummary.supplementTotals) ||
+          effectiveSummary.exerciseEntries.length > 0 ||
+          effectiveSummary.calorieGoal > 0) && (
           <DiaryCalorieMacroSummary
             summary={effectiveSummary}
             showNetCarbs={preferences?.show_net_carbs === true}
@@ -348,7 +381,13 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
             customNutrients={customNutrients}
           />
         )}
-        {effectiveSummary.foodEntries.length === 0 && effectiveSummary.exerciseEntries.length === 0 && !hasAnyMeasurement && plannedMealsWithItems.length === 0 ? (
+        {/* A logged supplement is something the user recorded for this day, so the day is
+            not empty even with no food, exercise or measurement. */}
+        {effectiveSummary.foodEntries.length === 0 &&
+        !hasSupplementNutrition(effectiveSummary.supplementTotals) &&
+        effectiveSummary.exerciseEntries.length === 0 &&
+        !hasAnyMeasurement &&
+        plannedMealsWithItems.length === 0 ? (
           <>
             <EmptyDayIllustration />
             <Button
@@ -356,7 +395,7 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
               className="px-6 mt-4 self-center"
               onPress={() => navigation.navigate('FoodSearch', { date: selectedDate })}
             >
-              Add Food
+              {t('diary.addFood', { defaultValue: 'Add Food' })}
             </Button>
           </>
         ) : (
@@ -429,20 +468,29 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
     <>
       {!isConnectionLoading && isConnected ? (
         <DateNavigator
-          title="Diary"
+          title={t('diary.title', { defaultValue: 'Diary' })}
           selectedDate={selectedDate}
           onPreviousDay={goToPreviousDay}
           onNextDay={goToNextDay}
           onToday={goToToday}
           onDatePress={openCalendar}
           showDateAlways
+          action={
+            hasFamilyDiaries
+              ? {
+                  icon: 'people',
+                  accessibilityLabel: familyDiariesAccessibilityLabel,
+                  onPress: openFamilyDiaries,
+                }
+              : undefined
+          }
         />
       ) : !isConnectionLoading && (
         <View
           className="px-4 pb-5"
           style={{ paddingTop: insets.top + 16 }}
         >
-          <Text className="text-2xl font-bold text-text-primary">Diary</Text>
+          <Text className="text-2xl font-bold text-text-primary">{t('diary.title', { defaultValue: 'Diary' })}</Text>
         </View>
       )}
       {renderedContent}
@@ -452,11 +500,13 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
   );
 
   return (
-    <GestureDetector gesture={swipeGesture}>
-      <View className="flex-1 bg-background">
-        {content}
-      </View>
-    </GestureDetector>
+    <>
+      <GestureDetector gesture={swipeGesture}>
+        <View className="flex-1 bg-background">
+          {content}
+        </View>
+      </GestureDetector>
+    </>
   );
 };
 

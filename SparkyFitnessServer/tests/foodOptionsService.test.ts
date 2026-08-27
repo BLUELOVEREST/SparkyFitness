@@ -268,7 +268,7 @@ describe('processFoodOptionsRequest', () => {
       expect(body.generationConfig.responseMimeType).toBe('application/json');
     });
 
-    it('sends anthropic structured profile temperature and max_tokens 2048 with no system field', async () => {
+    it('sends anthropic structured profile temperature and safe max_tokens with no system field', async () => {
       mockGetBackendSetting.mockResolvedValue(
         makeAiServiceDetail({ service_type: 'anthropic', api_key: 'anth-key' })
       );
@@ -277,7 +277,7 @@ describe('processFoodOptionsRequest', () => {
       const init = m.mock.calls[0][1] as { body: string };
       const body = JSON.parse(init.body);
       expect(body.temperature).toBe(0);
-      expect(body.max_tokens).toBe(2048);
+      expect(body.max_tokens).toBe(8192);
       expect(body).not.toHaveProperty('system');
     });
 

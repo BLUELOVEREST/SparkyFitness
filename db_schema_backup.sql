@@ -1565,7 +1565,7 @@ CREATE TABLE public.exercise_entries (
     instructions text,
     images text,
     distance numeric,
-    avg_heart_rate integer,
+    avg_heart_rate numeric,
     exercise_preset_entry_id uuid,
     sort_order integer DEFAULT 0,
     steps integer,
@@ -1573,14 +1573,14 @@ CREATE TABLE public.exercise_entries (
     superset_group integer,
     entry_time time without time zone,
     modality text,
-    max_heart_rate integer,
+    max_heart_rate numeric,
     heart_rate_recovery_1min integer,
     avg_respiration_brpm numeric(5,2),
     max_respiration_brpm numeric(5,2),
     avg_speed_mps numeric(6,2),
     max_speed_mps numeric(6,2),
-    avg_cadence integer,
-    max_cadence integer,
+    avg_cadence numeric,
+    max_cadence numeric,
     avg_power_watts numeric(6,2),
     max_power_watts numeric(6,2),
     normalized_power_watts numeric(6,2),
@@ -1593,7 +1593,7 @@ CREATE TABLE public.exercise_entries (
     max_temperature_celsius numeric(4,1),
     elevation_gain_meters numeric(7,2),
     elevation_loss_meters numeric(7,2),
-    floors_climbed integer,
+    floors_climbed numeric,
     stroke_count integer,
     training_load numeric(6,2),
     aerobic_training_effect numeric(3,1),
@@ -1705,13 +1705,13 @@ CREATE TABLE public.exercise_entry_laps (
     duration_seconds integer NOT NULL,
     distance_meters numeric(10,2),
     calories numeric(8,2),
-    avg_heart_rate integer,
-    max_heart_rate integer,
+    avg_heart_rate numeric,
+    max_heart_rate numeric,
     avg_respiration_brpm numeric(5,2),
     max_respiration_brpm numeric(5,2),
     avg_speed_mps numeric(6,2),
     max_speed_mps numeric(6,2),
-    avg_cadence integer,
+    avg_cadence numeric,
     avg_power_watts numeric(6,2),
     elevation_gain_meters numeric(7,2),
     elevation_loss_meters numeric(7,2),
@@ -3540,8 +3540,12 @@ CREATE TABLE public.user_preferences (
     active_vision_ai_service_id uuid,
     added_sugar_algorithm text DEFAULT 'WHO_IDEAL'::text NOT NULL,
     time_format text DEFAULT 'h:mm A'::text NOT NULL,
+    calorie_safety_floor_mode text DEFAULT 'standard'::text NOT NULL,
+    calorie_safety_floor_value integer DEFAULT 1200 NOT NULL,
     CONSTRAINT check_energy_unit CHECK (((energy_unit)::text = ANY ((ARRAY['kcal'::character varying, 'kJ'::character varying])::text[]))),
     CONSTRAINT logging_level_check CHECK ((logging_level = ANY (ARRAY['DEBUG'::text, 'INFO'::text, 'WARN'::text, 'ERROR'::text, 'SILENT'::text]))),
+    CONSTRAINT user_preferences_calorie_safety_floor_mode_check CHECK ((calorie_safety_floor_mode = ANY (ARRAY['standard'::text, 'custom'::text, 'disabled'::text]))),
+    CONSTRAINT user_preferences_calorie_safety_floor_value_check CHECK (((calorie_safety_floor_value >= 800) AND (calorie_safety_floor_value <= 5000))),
     CONSTRAINT user_preferences_time_format_check CHECK ((time_format = ANY (ARRAY['HH:mm'::text, 'h:mm A'::text, 'h:mm a'::text]))),
     CONSTRAINT user_preferences_timezone_not_empty CHECK (((timezone IS NULL) OR (timezone <> ''::text)))
 );
@@ -3566,6 +3570,20 @@ COMMENT ON COLUMN public.user_preferences.auto_scale_online_imports IS 'When ena
 --
 
 COMMENT ON COLUMN public.user_preferences.first_day_of_week IS 'Start day of the week: 0 for Sunday (USA standard), 1 for Monday (ISO 8601).';
+
+
+--
+-- Name: COLUMN user_preferences.calorie_safety_floor_mode; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.user_preferences.calorie_safety_floor_mode IS 'Controls adaptive calorie target clamping: standard, custom, or disabled.';
+
+
+--
+-- Name: COLUMN user_preferences.calorie_safety_floor_value; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.user_preferences.calorie_safety_floor_value IS 'Custom calorie safety floor in kcal when calorie_safety_floor_mode is custom.';
 
 
 --

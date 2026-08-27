@@ -1,9 +1,17 @@
 import { NativeModules, Platform } from 'react-native';
+import type { LanguagePreference, SupportedLanguage } from '../localization/i18n';
+
+export type WidgetLocalePreference = LanguagePreference;
+export type WidgetEffectiveLanguage = SupportedLanguage;
 
 interface CalorieWidgetNativeModule {
   setCalorieSnapshot(json: string): Promise<void>;
   setMacroSnapshot(json: string): Promise<void>;
   setHydrationSnapshot(json: string): Promise<void>;
+  prepareWidgetLocale(
+    preference: WidgetLocalePreference,
+    effectiveLanguage: WidgetEffectiveLanguage,
+  ): Promise<void>;
   reloadWidget(): Promise<void>;
   reloadMacroWidget(): Promise<void>;
   reloadHydrationWidget(): Promise<void>;
@@ -38,6 +46,18 @@ export const CalorieWidgetBridge = {
   async reloadHydrationWidget(): Promise<void> {
     if (!nativeModule) return;
     await nativeModule.reloadHydrationWidget();
+  },
+  /**
+   * Commits the user preference and effective render language atomically before
+   * either widget reloads. On API 33+ the effective language is only a
+   * synchronized rendering cache; LocaleManager remains authoritative.
+   */
+  async prepareWidgetLocale(
+    preference: WidgetLocalePreference,
+    effectiveLanguage: WidgetEffectiveLanguage,
+  ): Promise<void> {
+    if (!nativeModule) return;
+    await nativeModule.prepareWidgetLocale(preference, effectiveLanguage);
   },
   get isAvailable(): boolean {
     return nativeModule !== undefined;

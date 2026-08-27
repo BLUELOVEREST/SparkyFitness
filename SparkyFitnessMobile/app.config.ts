@@ -1,5 +1,6 @@
 import "tsx/cjs";
 import { ExpoConfig, ConfigContext } from 'expo/config';
+import { nativeLanguageTags } from './src/localization/localeRegistry';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { getIosAppGroup, DEV_BUNDLE_IDENTIFIER } = require('./app.identifiers.js');
 
@@ -126,6 +127,7 @@ export default ({ config }: ConfigContext): Partial<ExpoConfig> => {
     name: APP_NAME,
     slug: APP_SLUG,
     version: packageJson.version,
+    locales: Object.fromEntries(nativeLanguageTags().map((language) => [language, `./locales/${language}.json`])),
     ios: {
       bundleIdentifier: isDev
         ? DEV_BUNDLE_IDENTIFIER
@@ -135,10 +137,24 @@ export default ({ config }: ConfigContext): Partial<ExpoConfig> => {
       infoPlist: {
         NSLocalNetworkUsageDescription:
           'SparkyFitness connects to self-hosted servers on your local network.',
+        // Required by the food/meal photo picker and the label/barcode
+        // scanner. iOS terminates the app on first use without these, and App
+        // Review rejects a binary that requests either without a purpose
+        // string.
+        NSCameraUsageDescription:
+          'SparkyFitness uses the camera to photograph foods and meals, and to scan barcodes and nutrition labels.',
+        NSPhotoLibraryUsageDescription:
+          'SparkyFitness lets you choose photos from your library for your foods, meals, and diary entries.',
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: false,
         },
         ITSAppUsesNonExemptEncryption: false,
+        // Keep the native per-app Language entry visible in iOS Settings even
+        // when the device has only one preferred system language.
+        UIPrefersShowingLanguageSettings: true,
+        // The localized InfoPlist permission strings come from `locales`; this
+        // allows the generated app metadata to use the selected localization.
+        CFBundleAllowMixedLocalizations: true,
       },
       entitlements: {
         'com.apple.security.application-groups': [getIosAppGroup()],
@@ -169,9 +185,19 @@ export default ({ config }: ConfigContext): Partial<ExpoConfig> => {
         },
       ],
       './plugins/withGlanceAndroidSupport',
+      './plugins/withAppLanguage',
       './plugins/withCalorieWidget',
       './plugins/withExactAlarmModule',
       './plugins/withEnrichedMarkdownNoMath',
+      [
+        'expo-localization',
+        {
+          supportedLocales: {
+            ios: nativeLanguageTags(),
+            android: nativeLanguageTags(),
+          },
+        },
+      ],
       [
         'expo-widgets',
         {

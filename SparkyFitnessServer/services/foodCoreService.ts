@@ -802,11 +802,15 @@ async function getFoodsNeedingReview(authenticatedUserId: string) {
 async function updateSnapshotForVariant(
   authenticatedUserId: string,
   food: FoodInput,
-  variant: FoodVariantInput
+  variant: FoodVariantInput,
+  syncImages: boolean
 ) {
   const newSnapshotData = {
     food_name: food.name,
     brand_name: food.brand,
+    // Photos are snapshotted onto entries at log time, so an explicit sync is
+    // the only thing that refreshes them — same rule as the nutrition fields.
+    images: toImageArray(food.images),
     serving_size: variant.serving_size,
     serving_unit: variant.serving_unit,
     calories: variant.calories,
@@ -829,21 +833,42 @@ async function updateSnapshotForVariant(
     glycemic_index: variant.glycemic_index,
     custom_nutrients: sanitizeCustomNutrients(variant.custom_nutrients),
   };
-  await foodRepository.updateFoodEntriesSnapshot(
-    authenticatedUserId,
-    String(food.id),
-    String(variant.id),
-    newSnapshotData
-  );
+  const { replacedEntryImages } =
+    await foodRepository.updateFoodEntriesSnapshot(
+      authenticatedUserId,
+      String(food.id),
+      String(variant.id),
+      newSnapshotData,
+      syncImages
+    );
+  // Diary-set photos the sync just overwrote are now referenced by nothing.
+  // removeOrphanedImages re-checks each path against the diary before
+  // unlinking, so a copy still in use elsewhere is left alone.
+  if (replacedEntryImages.length > 0) {
+    await removeOrphanedImages(replacedEntryImages, []).catch((error) => {
+      log(
+        'error',
+        `Error removing replaced diary entry images for food ${food.id}:`,
+        error
+      );
+    });
+  }
   await foodRepository.clearUserIgnoredUpdate(
     authenticatedUserId,
     String(variant.id)
   );
 }
+/**
+ * `syncImages` distinguishes the two "update past entries" choices: `true`
+ * forces the food's current photos onto every matching entry (replacing photos
+ * the user set on individual diary entries), `false` rewrites nutrition only
+ * and leaves every entry's photo exactly as it is.
+ */
 async function updateFoodEntriesSnapshot(
   authenticatedUserId: string,
   foodId: string,
-  variantId: string
+  variantId: string,
+  syncImages: boolean = true
 ) {
   try {
     const food = await foodRepository.getFoodById(foodId, authenticatedUserId);
@@ -859,7 +884,12 @@ async function updateFoodEntriesSnapshot(
       if (!variant) {
         throw new Error('Food variant not found.');
       }
-      await updateSnapshotForVariant(authenticatedUserId, food, variant);
+      await updateSnapshotForVariant(
+        authenticatedUserId,
+        food,
+        variant,
+        syncImages
+      );
     } else {
       // All variants path
       const variants = await foodRepository.getFoodVariantsByFoodId(
@@ -867,7 +897,12 @@ async function updateFoodEntriesSnapshot(
         authenticatedUserId
       );
       for (const variant of variants) {
-        await updateSnapshotForVariant(authenticatedUserId, food, variant);
+        await updateSnapshotForVariant(
+          authenticatedUserId,
+          food,
+          variant,
+          syncImages
+        );
       }
     }
     return { message: 'Food entries updated successfully.' };

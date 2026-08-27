@@ -41,8 +41,14 @@ export const requiresApiKey = (serviceType: string | undefined): boolean =>
 export const getModelOptions = (serviceType: string): string[] => {
   switch (serviceType) {
     case 'openai':
+      // The gpt-5.x families accept only the default temperature; the server
+      // detects that and omits the parameter (ai/modelCapabilities.ts), so
+      // they are safe to offer here.
       return [
         'gpt-4o-mini',
+        'gpt-5.6-luna',
+        'gpt-5.6-terra',
+        'gpt-5.6-sol',
         'gpt-5.4-mini',
         'gpt-5.4-nano',
         'gpt-4.1-mini',
@@ -50,7 +56,13 @@ export const getModelOptions = (serviceType: string): string[] => {
         'gpt-5.4',
       ];
     case 'anthropic':
-      return ['claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-opus-4-8'];
+      return [
+        'claude-sonnet-5',
+        'claude-sonnet-4-6',
+        'claude-haiku-4-5',
+        'claude-opus-5',
+        'claude-opus-4-8',
+      ];
     case 'google':
       return [
         'gemini-2.5-flash',

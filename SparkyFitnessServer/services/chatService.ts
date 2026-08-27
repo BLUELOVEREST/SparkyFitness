@@ -13,6 +13,11 @@ import {
   resolveAiProfileSettings,
   type ResolvedAiProfileSettings,
 } from '../ai/profileSettings.js';
+import {
+  detectRejectedParam,
+  recordRejectedParam,
+  supportsTemperature,
+} from '../ai/modelCapabilities.js';
 import { loadUserTimezone } from '../utils/timezoneLoader.js';
 import { TtlCache } from '../utils/ttlCache.js';
 import {
@@ -62,7 +67,13 @@ interface ChatMessage {
   parts?: ChatMessagePart[];
 }
 
-import { generateText, streamText, stepCountIs, hasToolCall } from 'ai';
+import {
+  APICallError,
+  generateText,
+  streamText,
+  stepCountIs,
+  hasToolCall,
+} from 'ai';
 import type { JSONValue, LanguageModelUsage, UIMessageChunk } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -749,9 +760,17 @@ export function getSystemPrompt(
     .replace(/\${customCategories}/g, customCategoriesList);
 }
 
-// OpenAI's 24h extended retention is only supported on the gpt-5.1+ families
-// (per @ai-sdk/openai), and the adapter forwards the field without gating, so
-// other models may reject it. Mirror the adapter's own family check.
+// OpenAI's 24h extended retention is supported on gpt-5.1 through gpt-5.5 only.
+// The adapter forwards `prompt_cache_retention` unchanged with no model gating,
+// so this list is the only thing standing between us and a rejected request.
+//
+// Enumerated on purpose rather than matched as a family. Retention support is
+// shrinking, not growing: gpt-5.6 deprecated `prompt_cache_retention` in favor
+// of `prompt_cache_options.ttl`, so a `/^gpt-5\.[1-9]/`-style pattern would send
+// the field to exactly the models that reject it. The failure modes are not
+// symmetric — omitting the hint for a model that would have accepted it only
+// costs cache hits, while sending it to one that refuses breaks the chat turn.
+// New entries belong here only once that model is known to accept the field.
 const RETENTION_24H_MODEL_PREFIXES = [
   'gpt-5.1',
   'gpt-5.2',
@@ -972,6 +991,90 @@ function createChatModelInstance(
   throw new Error(`Unsupported service type: ${aiService.service_type}`);
 }
 
+/**
+ * Runs an AI SDK call, and if the provider rejects `temperature` with a 400,
+ * re-runs it once without one.
+ *
+ * The static gate in `supportsTemperature` covers model families we already
+ * know about; this covers the ones we don't, so a future model that drops the
+ * parameter starts working on first use instead of after a release. The
+ * rejection is recorded, so only the first call for a given model pays the
+ * extra round-trip.
+ *
+ * `run` receives whether to send a temperature this attempt.
+ *
+ * Only for awaited calls (`generateText`). `streamText` returns its stream
+ * synchronously and reports provider errors inside it, so nothing is thrown
+ * here to catch — that path relies on the gate alone, seeded by the intent
+ * classifier which runs against the same model first.
+ */
+async function runWithTemperatureFallback<T>(
+  serviceType: string,
+  modelName: string,
+  run: (sendTemperature: boolean) => Promise<T>
+): Promise<T> {
+  const allowed = supportsTemperature(serviceType, modelName);
+  try {
+    return await run(allowed);
+  } catch (error) {
+    if (!allowed) throw error;
+    if (!APICallError.isInstance(error) || error.statusCode !== 400)
+      throw error;
+    const rejected = detectRejectedParam(400, error.responseBody ?? '');
+    if (rejected !== 'temperature') throw error;
+    recordRejectedParam(serviceType, modelName, rejected);
+    return await run(false);
+  }
+}
+
+// Provider error text is safe to surface (providerDispatch already truncates it
+// into user-facing detail), but bounded so a verbose provider cannot flood the
+// log.
+const MAX_LOGGED_ERROR_CHARS = 300;
+
+/**
+ * Renders a provider error as a log-safe one-liner.
+ *
+ * Never log the error object itself: `APICallError` carries
+ * `requestBodyValues`, which for a chat call is the entire request — the user's
+ * messages, the system prompt, and tool arguments. The logger hands objects to
+ * `console.error`, so that would put health data into ERROR-level logs, which
+ * are on by default (see config/logging.ts, where full-payload logging is
+ * deliberately gated behind an explicit DEBUG opt-in).
+ */
+function describeProviderError(error: unknown): string {
+  const truncate = (text: string) =>
+    text.length > MAX_LOGGED_ERROR_CHARS
+      ? `${text.slice(0, MAX_LOGGED_ERROR_CHARS)}…`
+      : text;
+  if (APICallError.isInstance(error)) {
+    return `APICallError status=${error.statusCode ?? 'none'}: ${truncate(error.message)}`;
+  }
+  if (error instanceof Error) {
+    return `${error.name}: ${truncate(error.message)}`;
+  }
+  return 'unknown error';
+}
+
+/**
+ * Records a parameter rejection reported through a stream rather than thrown.
+ *
+ * `streamText` cannot be retried in place — by the time the provider's 400
+ * arrives the call has already returned its stream — so the best available
+ * outcome is to remember the rejection and get the next turn right.
+ */
+function noteStreamParameterRejection(
+  serviceType: string,
+  modelName: string,
+  error: unknown
+): void {
+  if (!APICallError.isInstance(error) || error.statusCode !== 400) return;
+  const rejected = detectRejectedParam(400, error.responseBody ?? '');
+  if (rejected) {
+    recordRejectedParam(serviceType, modelName, rejected);
+  }
+}
+
 // The AI SDK part type for a sparky_ask_user tool call, as it comes back from
 // the client (and out of saved history).
 const ASK_USER_PART_TYPE = `tool-${ASK_USER_TOOL_NAME}`;
@@ -1155,17 +1258,17 @@ const KEYWORD_RULES: { category: ChatToolCategorySlug; keywords: RegExp }[] = [
   {
     category: 'exercise',
     keywords:
-      /\b(run|ran|running|walk|walked|walking|jog|jogged|jogging|lift|lifted|lifting|workout|workouts|exercise|exercises|reps|sets|cardio|strength|gym|heart rate|bpm|treadmill|squats?|bench press|swim|swam|swimming|bike|biking|cycling|cycled|yoga|hike[ds]?|hiking|steps|push-?ups?|pull-?ups?|training|trained|worked out)\b/i,
+      /\b(run|ran|running|walk|walked|walking|jog|jogged|jogging|lift|lifted|lifting|workout|workouts|exercise|exercises|reps|sets|cardio|strength|gym|heart rate|bpm|treadmill|squats?|bench press|swim|swam|swimming|bike|biking|cycling|cycled|yoga|hike[ds]?|hiking|steps|push-?ups?|pull-?ups?|training|trained|worked out|personal\s+record\w*|best\s+effort\w*|matched\s+course\w*|pace\s+record\w*|workout\s+plan\w*|workout\s+template\w*|training\s+plan\w*|training\s+program\w*)\b/i,
   },
   {
     category: 'food',
     keywords:
-      /\b(eat|ate|eating|food|foods|meal|meals|water|drink|drank|drinking|ml|oz|cup|cups|breakfast|lunch|dinner|snack|snacks|calories?|kcal|macro|macros|protein|carbs|fat|banana|apple|chicken|nutrition|nutrients?|coffee|tea|juice|smoothie|recipe)\b/i,
+      /\b(eat|ate|eating|food|foods|meal|meals|water|drink|drank|drinking|ml|oz|cup|cups|breakfast|lunch|dinner|snack|snacks|calories?|kcal|macro|macros|protein|carbs|fat|banana|apple|chicken|nutrition|nutrients?|coffee|tea|juice|smoothie|recipe|favou?rite\w*|meal\s*plan\w*|meal\s*template\w*|custom\s+nutrient\w*|micronutrient\w*|water\s+container\w*|water\s+bottle\w*|allerg\w*|intoleran\w*|anaphyla\w*|barcode|bar\s?code|UPC|EAN)\b/i,
   },
   {
     category: 'checkin',
     keywords:
-      /\b(weigh(?:t|ts|ed|ing|s)?|height|waist|hips|neck|body fat|fat%|percentage|checkin|check-in|scale|bmi|mood|sleep|slept|nap|fasting|fasted|measurements?|measured)\b/i,
+      /\b(weigh(?:t|ts|ed|ing|s)?|height|waist|hips|neck|body fat|fat%|percentage|checkin|check-in|scale|bmi|mood|sleep|slept|nap|fasting|fasted|measurements?|measured|progress\s+photo\w*|body\s+photo\w*|transformation\s+photo\w*|sleep\s+debt|sleep\s+need|chronotype|energy\s+curve|circadian|MCTQ|social\s+jetlag)\b/i,
   },
   {
     category: 'goals',
@@ -1175,7 +1278,7 @@ const KEYWORD_RULES: { category: ChatToolCategorySlug; keywords: RegExp }[] = [
   {
     category: 'reports',
     keywords:
-      /\b(report|reports|summar(?:y|ies|ize|ise|ized|ised|izing)|progress|tdee|chart|charts|analytics|recap|overview|trends?|graphs?|stats?|statistics|analy(?:ze|sis|tics)|averages?|compare|comparison|how (?:am|did|was|have) i)\b/i,
+      /\b(report|reports|summar(?:y|ies|ize|ise|ized|ised|izing)|progress|tdee|chart|charts|analytics|recap|overview|trends?|graphs?|stats?|statistics|analy(?:ze|sis|tics)|averages?|compare|comparison|how (?:am|did|was|have) i|dashboard|daily\s+summary|calorie\s+balance|calories\s+remaining|net\s+calories)\b/i,
   },
   {
     category: 'coaching',
@@ -1189,7 +1292,7 @@ const KEYWORD_RULES: { category: ChatToolCategorySlug; keywords: RegExp }[] = [
   {
     category: 'profile',
     keywords:
-      /\b(profile|habit|habits|preference|preferences|settings|timezone|unit|units)\b/i,
+      /\b(profile|habit|habits|preference|preferences|settings|timezone|unit|units|integration\w*|connected\s+(app|service|device|provider)\w*|external\s+provider\w*|wearable\w*|garmin|withings|fitbit|oura|polar|strava|hevy|synced\s+data|delete\s+synced|imported\s+data)\b/i,
   },
 ];
 
@@ -1288,13 +1391,15 @@ async function classifyUserIntent(
     const classificationPrompt = `Analyze the conversation history (especially the user's latest reply) and determine which of the following health tracking domains are relevant. Choose all that apply.
 
 Available domains:
-- exercise: tracking workouts, logging sets/reps, running, cardio, strength, steps.
-- food: logging meals, lookup foods/nutrition, tracking water intake.
-- checkin: logging daily check-ins, weight, height, body fat, or other body measurements.
+- exercise: tracking workouts, logging sets/reps, running, cardio, strength, steps, exercise stats, and workout plan templates.
+- food: logging meals, lookup foods/nutrition, tracking water intake, favorites, meal plans, custom nutrients, water containers, allergens, and barcode lookup.
+- checkin: logging daily check-ins, weight, height, body fat, other body measurements, progress photos, and sleep-science analytics.
 - goals: viewing or changing goals/targets.
-- reports: viewing progress charts, summaries, TDEE, or reports.
+- reports: viewing progress charts, summaries, TDEE, reports, or the daily dashboard.
 - coaching: general coaching advice, guidance, tips, or motivation.
-- profile: changing settings, preferences, timezone, habits, or profile details.
+- vision: analyzing food photos or scanning nutrition labels.
+- profile: changing settings, preferences, timezone, habits, profile details, connected integrations, or synced-data.
+- medications: tracking medications and GLP-1.
 
 Important rules:
 - If the user asks to design, plan, optimize, recommend, adjust, or evaluate something, include coaching.
@@ -1346,16 +1451,8 @@ Your response must contain ONLY the matched domain names as a comma-separated li
       .map((t) => t.trim().replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, ''));
 
     const categoriesList: ChatToolCategorySlug[] = [];
-    const validCategories: ChatToolCategorySlug[] = [
-      'exercise',
-      'food',
-      'checkin',
-      'goals',
-      'reports',
-      'coaching',
-      'profile',
-      'vision',
-    ];
+    const validCategories: readonly ChatToolCategorySlug[] =
+      CHAT_TOOL_CATEGORY_SLUGS;
     for (const cat of validCategories) {
       if (parts.includes(cat)) {
         categoriesList.push(cat);
@@ -1475,62 +1572,69 @@ async function processChatMessage(
     }> = [];
     const toolOutputs: string[] = [];
 
-    const result = await generateText({
-      model: modelInstance,
-      system: systemPromptContent,
-      messages: llmMessages as NonNullable<
-        Parameters<typeof generateText>[0]['messages']
-      >,
-      tools,
-      // Narrows the published/sent tool schemas to this turn's classified
-      // categories; sparky_enable_tools lets the model escalate mid-request
-      // via prepareStep if it turns out to need a dormant category.
-      activeTools: activeToolNames,
-      prepareStep,
-      providerOptions: chatProviderOptions,
-      temperature:
-        toolProfile === 'core'
-          ? CORE_PROFILE_CHAT_TEMPERATURE
-          : chatProfile.temperature,
-      ...(chatProfile.max_tokens && {
-        maxOutputTokens: chatProfile.max_tokens,
-      }),
-      // Tighter retry ceiling for cache-less core-profile backends, where every
-      // retry re-processes the full prefix.
-      stopWhen: buildChatStopConditions(toolProfile),
-      maxRetries:
-        toolProfile === 'core'
-          ? CORE_PROFILE_MAX_PROVIDER_RETRIES
-          : MAX_PROVIDER_RETRIES,
-      abortSignal: AbortSignal.timeout(
-        chatProfile.timeoutMs ?? CHAT_REQUEST_TIMEOUT_MS
-      ),
-      onStepFinish({ toolCalls, toolResults }) {
-        if (toolCalls && toolCalls.length > 0) {
-          toolCalls.forEach((call) => {
-            log(
-              'info',
-              `Agent executed tool call: ${call.toolName} with args: ${JSON.stringify(call.input)}`
-            );
-            executedToolsList.push({
-              name: call.toolName,
-              args: call.input as Record<string, unknown>,
-            });
-          });
-        }
-        if (toolResults && toolResults.length > 0) {
-          toolResults.forEach((r) => {
-            if (r.output && typeof r.output === 'string') {
-              toolOutputs.push(r.output);
+    const result = await runWithTemperatureFallback(
+      aiService.service_type,
+      modelName,
+      (sendTemperature) =>
+        generateText({
+          model: modelInstance,
+          system: systemPromptContent,
+          messages: llmMessages as NonNullable<
+            Parameters<typeof generateText>[0]['messages']
+          >,
+          tools,
+          // Narrows the published/sent tool schemas to this turn's classified
+          // categories; sparky_enable_tools lets the model escalate mid-request
+          // via prepareStep if it turns out to need a dormant category.
+          activeTools: activeToolNames,
+          prepareStep,
+          providerOptions: chatProviderOptions,
+          ...(sendTemperature && {
+            temperature:
+              toolProfile === 'core'
+                ? CORE_PROFILE_CHAT_TEMPERATURE
+                : chatProfile.temperature,
+          }),
+          ...(chatProfile.max_tokens && {
+            maxOutputTokens: chatProfile.max_tokens,
+          }),
+          // Tighter retry ceiling for cache-less core-profile backends, where every
+          // retry re-processes the full prefix.
+          stopWhen: buildChatStopConditions(toolProfile),
+          maxRetries:
+            toolProfile === 'core'
+              ? CORE_PROFILE_MAX_PROVIDER_RETRIES
+              : MAX_PROVIDER_RETRIES,
+          abortSignal: AbortSignal.timeout(
+            chatProfile.timeoutMs ?? CHAT_REQUEST_TIMEOUT_MS
+          ),
+          onStepFinish({ toolCalls, toolResults }) {
+            if (toolCalls && toolCalls.length > 0) {
+              toolCalls.forEach((call) => {
+                log(
+                  'info',
+                  `Agent executed tool call: ${call.toolName} with args: ${JSON.stringify(call.input)}`
+                );
+                executedToolsList.push({
+                  name: call.toolName,
+                  args: call.input as Record<string, unknown>,
+                });
+              });
             }
-          });
-          const sizes = toolResults
-            .map((r) => `${r.toolName}=${String(r.output ?? '').length}c`)
-            .join(' ');
-          log('info', `[chat] tool result sizes: ${sizes}`);
-        }
-      },
-    });
+            if (toolResults && toolResults.length > 0) {
+              toolResults.forEach((r) => {
+                if (r.output && typeof r.output === 'string') {
+                  toolOutputs.push(r.output);
+                }
+              });
+              const sizes = toolResults
+                .map((r) => `${r.toolName}=${String(r.output ?? '').length}c`)
+                .join(' ');
+              log('info', `[chat] tool result sizes: ${sizes}`);
+            }
+          },
+        })
+    );
 
     const usage = result.totalUsage ?? result.usage;
     log(
@@ -2039,13 +2143,27 @@ async function processChatMessageStream(
       activeTools: activeToolNames,
       prepareStep,
       providerOptions: chatProviderOptions,
-      temperature:
-        toolProfile === 'core'
-          ? CORE_PROFILE_CHAT_TEMPERATURE
-          : chatProfile.temperature,
+      ...(supportsTemperature(aiService.service_type, modelName) && {
+        temperature:
+          toolProfile === 'core'
+            ? CORE_PROFILE_CHAT_TEMPERATURE
+            : chatProfile.temperature,
+      }),
       ...(chatProfile.max_tokens && {
         maxOutputTokens: chatProfile.max_tokens,
       }),
+      onError({ error }) {
+        // The one place a stream-time parameter rejection can be learned. The
+        // intent classifier is not a reliable canary: it returns early on any
+        // keyword match, and is skipped entirely when the user picks tool
+        // categories manually, so this path can be the first request a model
+        // ever sees.
+        noteStreamParameterRejection(aiService.service_type, modelName, error);
+        log(
+          'error',
+          `[chat] stream error for user ${userId}: ${describeProviderError(error)}`
+        );
+      },
       // Tighter retry ceiling for cache-less core-profile backends, where every
       // retry re-processes the full prefix.
       stopWhen: buildChatStopConditions(toolProfile),

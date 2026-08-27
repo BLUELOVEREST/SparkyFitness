@@ -32,13 +32,13 @@ type WorkoutPlanTemplateFormScreenProps =
   RootStackScreenProps<'WorkoutPlanTemplateForm'>;
 
 const DAYS = [
-  { id: 1, label: 'Monday' },
-  { id: 2, label: 'Tuesday' },
-  { id: 3, label: 'Wednesday' },
-  { id: 4, label: 'Thursday' },
-  { id: 5, label: 'Friday' },
-  { id: 6, label: 'Saturday' },
-  { id: 0, label: 'Sunday' },
+  { id: 1 },
+  { id: 2 },
+  { id: 3 },
+  { id: 4 },
+  { id: 5 },
+  { id: 6 },
+  { id: 0 },
 ];
 
 function formatDateToYYYYMMDD(date: Date) {
@@ -66,23 +66,6 @@ function focusSessionKey(dayOfWeek: number, timeSlot: TrainingFocusTimeSlot) {
   return `${dayOfWeek}-${timeSlot}`;
 }
 
-function formatSessionCount(count: number) {
-  return `${count} session${count === 1 ? '' : 's'}`;
-}
-
-function formatSummaryLine(
-  dayLabel: string,
-  sessions: WorkoutPlanFocusSession[],
-) {
-  const activeSessions = sessions.filter(
-    session => session.training_focus !== 'rest',
-  );
-  const primary = activeSessions.find(session => session.is_primary);
-  return `${dayLabel} · ${formatSessionCount(activeSessions.length)} · Main: ${
-    primary?.time_slot ?? '—'
-  }`;
-}
-
 const WorkoutPlanTemplateFormScreen: React.FC<
   WorkoutPlanTemplateFormScreenProps
 > = ({ navigation, route }) => {
@@ -93,6 +76,24 @@ const WorkoutPlanTemplateFormScreen: React.FC<
     () => createMobileTranslator(preferences?.language),
     [preferences?.language],
   );
+  const formatSummaryLine = (
+    dayLabel: string,
+    sessions: WorkoutPlanFocusSession[],
+  ) => {
+    const activeSessions = sessions.filter(
+      session => session.training_focus !== 'rest',
+    );
+    const primary = activeSessions.find(session => session.is_primary);
+    return t('workoutPlan.summaryLine', {
+      defaultValue: '{{day}} · {{sessions}} · Main: {{slot}}',
+      day: dayLabel,
+      sessions: t('workoutPlan.sessionCount', {
+        defaultValue: '{{count}} sessions',
+        count: activeSessions.length,
+      }),
+      slot: primary?.time_slot ?? '—',
+    });
+  };
   const isEdit = route.params.mode === 'edit';
   const template = isEdit ? route.params.template : undefined;
   const today = useMemo(() => formatDateToYYYYMMDD(new Date()), []);
@@ -166,7 +167,9 @@ const WorkoutPlanTemplateFormScreen: React.FC<
     if (!trimmedName) {
       Toast.show({
         type: 'error',
-        text1: t('workoutPlan.planNameRequired'),
+        text1: t('workoutPlan.planNameRequired', {
+          defaultValue: 'Enter a plan name',
+        }),
       });
       return;
     }
@@ -189,7 +192,9 @@ const WorkoutPlanTemplateFormScreen: React.FC<
     if (!validation.valid) {
       Toast.show({
         type: 'error',
-        text1: t('workoutPlan.mainRequired'),
+        text1: t('workoutPlan.mainRequired', {
+          defaultValue: 'Set a main training session',
+        }),
         text2: validation.message,
       });
       return;
@@ -229,36 +234,43 @@ const WorkoutPlanTemplateFormScreen: React.FC<
     >
       <View className="mb-5">
         <Text className="text-2xl font-bold text-text-primary">
-          {isEdit ? t('workoutPlan.editTitle') : t('workoutPlan.newTitle')}
+          {isEdit
+            ? t('workoutPlan.editTitle', { defaultValue: 'Edit Workout Plan' })
+            : t('workoutPlan.newTitle', { defaultValue: 'New Workout Plan' })}
         </Text>
         <Text className="text-sm text-text-secondary mt-1">
-          {t('workoutPlan.subtitle')}
+          {t('workoutPlan.subtitle', {
+            defaultValue:
+              'Configure body-part training focus by weekday and time slot.',
+          })}
         </Text>
       </View>
 
       <View className="bg-surface rounded-2xl p-4 border border-border-subtle mb-4">
         <Text className="text-sm font-semibold text-text-secondary mb-2">
-          {t('workoutPlan.planName')}
+          {t('workoutPlan.planName', { defaultValue: 'Plan Name' })}
         </Text>
         <TextInput
           value={planName}
           onChangeText={setPlanName}
-          placeholder={t('workoutPlan.planNamePlaceholder')}
+          placeholder={t('workoutPlan.planNamePlaceholder', {
+            defaultValue: 'Training Focus Plan',
+          })}
           className="bg-background rounded-xl px-3 py-3 text-text-primary border border-border-subtle mb-4"
         />
         <Text className="text-sm font-semibold text-text-secondary mb-2">
-          {t('workoutPlan.description')}
+          {t('workoutPlan.description', { defaultValue: 'Description' })}
         </Text>
         <TextInput
           value={description}
           onChangeText={setDescription}
-          placeholder={t('workoutPlan.optional')}
+          placeholder={t('workoutPlan.optional', { defaultValue: 'Optional' })}
           className="bg-background rounded-xl px-3 py-3 text-text-primary border border-border-subtle mb-4"
         />
         <View className="flex-row gap-3">
           <View className="flex-1">
             <Text className="text-sm font-semibold text-text-secondary mb-2">
-              {t('workoutPlan.startDate')}
+              {t('workoutPlan.startDate', { defaultValue: 'Start Date' })}
             </Text>
             <TextInput
               value={startDate}
@@ -268,7 +280,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<
           </View>
           <View className="flex-1">
             <Text className="text-sm font-semibold text-text-secondary mb-2">
-              {t('workoutPlan.endDate')}
+              {t('workoutPlan.endDate', { defaultValue: 'End Date' })}
             </Text>
             <TextInput
               value={endDate}
@@ -291,14 +303,14 @@ const WorkoutPlanTemplateFormScreen: React.FC<
             }`}
           />
           <Text className="text-sm font-semibold text-text-primary">
-            {t('workoutPlan.setActive')}
+            {t('workoutPlan.setActive', { defaultValue: 'Set as active plan' })}
           </Text>
         </Pressable>
       </View>
 
       <View className="bg-surface rounded-2xl p-4 border border-border-subtle mb-4">
         <Text className="text-lg font-semibold text-text-primary mb-3">
-          {t('workoutPlan.weeklySummary')}
+          {t('workoutPlan.weeklySummary', { defaultValue: 'Weekly Summary' })}
         </Text>
         {DAYS.map(day => {
           const sessions = focusSessions.filter(
@@ -306,7 +318,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<
           );
           return (
             <Text key={day.id} className="text-sm text-text-secondary mt-1">
-              {formatSummaryLine(day.label, sessions)}
+              {formatSummaryLine(getDayName(day.id), sessions)}
             </Text>
           );
         })}
@@ -315,10 +327,13 @@ const WorkoutPlanTemplateFormScreen: React.FC<
       <View className="bg-surface rounded-2xl p-4 border border-border-subtle mb-4">
         <View className="flex-row items-center justify-between mb-3">
           <Text className="text-lg font-semibold text-text-primary">
-            {t('workoutPlan.sessions')}
+            {t('workoutPlan.sessions', {
+              defaultValue: 'Training Focus Sessions',
+            })}
           </Text>
           <Text className="text-sm text-text-secondary">
-            {activeSessionCount} {t('workoutPlan.active')}
+            {activeSessionCount}{' '}
+            {t('workoutPlan.active', { defaultValue: 'active' })}
           </Text>
         </View>
 
@@ -341,7 +356,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<
                     selectedDay === day.id ? 'text-white' : 'text-text-primary'
                   }`}
                 >
-                  {day.label}
+                  {getDayName(day.id)}
                 </Text>
               </Pressable>
             ))}
@@ -370,15 +385,20 @@ const WorkoutPlanTemplateFormScreen: React.FC<
                     isSelected ? 'text-white' : 'text-text-primary'
                   }`}
                 >
-                  {label}
+                  {label()}
                 </Text>
                 <Text
                   className={`text-xs mt-1 ${
                     isSelected ? 'text-white/80' : 'text-text-secondary'
                   }`}
                 >
-                  {session?.is_primary ? 'Main · ' : ''}
-                  {session?.training_focus ?? 'rest'}
+                  {session?.is_primary
+                    ? t('workoutPlan.mainPrefix', {
+                        defaultValue: 'Main · {{focus}}',
+                        focus: session.training_focus,
+                      })
+                    : session?.training_focus ??
+                      t('workoutPlan.rest', { defaultValue: 'rest' })}
                 </Text>
               </Pressable>
             );
@@ -386,7 +406,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<
         </View>
 
         <Text className="text-sm font-semibold text-text-secondary mb-2">
-          {t('workoutPlan.focus')}
+          {t('workoutPlan.focus', { defaultValue: 'Training Focus' })}
         </Text>
         <View className="flex-row flex-wrap gap-2 mb-4">
           {trainingFocusOptions.map(option => {
@@ -421,7 +441,9 @@ const WorkoutPlanTemplateFormScreen: React.FC<
                 [selectedSessionKey]: text,
               }))
             }
-            placeholder="Custom focus"
+            placeholder={t('workoutPlan.customFocus', {
+              defaultValue: 'Custom focus',
+            })}
             placeholderTextColor="#8A8F98"
           />
         )}
@@ -432,13 +454,15 @@ const WorkoutPlanTemplateFormScreen: React.FC<
           onPress={setSelectedPrimary}
         >
           {selectedSession?.is_primary
-            ? t('workoutPlan.mainSession')
-            : t('workoutPlan.setAsMain')}
+            ? t('workoutPlan.mainSession', { defaultValue: 'Main Session' })
+            : t('workoutPlan.setAsMain', { defaultValue: 'Set as Main' })}
         </Button>
       </View>
 
       <Button disabled={isSaving} onPress={savePlan}>
-        {isSaving ? t('workoutPlan.saving') : t('workoutPlan.save')}
+        {isSaving
+          ? t('workoutPlan.saving', { defaultValue: 'Saving...' })
+          : t('workoutPlan.save', { defaultValue: 'Save Workout Plan' })}
       </Button>
     </ScrollView>
   );

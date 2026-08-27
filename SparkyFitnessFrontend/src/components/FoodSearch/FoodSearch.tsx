@@ -82,6 +82,7 @@ import { interleaveTopMatches } from '@/utils/topMatches.ts';
 import { makeProviderColorResolver } from '@/utils/providerColor.ts';
 import { DataProvider } from '@/types/settings.ts';
 import {
+  ALL_PROVIDERS_VALUE,
   getProviderCategory,
   resolveFoodProviderId,
 } from '@/utils/settings.ts';
@@ -95,9 +96,9 @@ import { shouldFetchFoodDetailsBeforeEdit } from './foodDetailFetch.ts';
 // (an inline [] default would re-run the online search effect during loading).
 const EMPTY_PROVIDERS: DataProvider[] = [];
 
-// Sentinel provider id for the aggregated "All Providers" mode (offered only
-// when more than one food provider is active).
-const ALL_PROVIDERS_VALUE = '__all__';
+// ALL_PROVIDERS_VALUE (the sentinel provider id for the aggregated "All
+// Providers" mode, offered only when more than one food provider is active) is
+// imported from utils/settings so it stays in step with resolveFoodProviderId.
 
 // One page of provider results plus whether the provider reports more pages
 // behind it, so the caller can offer a "Load more" affordance.

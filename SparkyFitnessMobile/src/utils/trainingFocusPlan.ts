@@ -7,6 +7,7 @@ import {
   CUSTOM_TRAINING_FOCUS_OPTION,
   normalizeTrainingFocusValue,
 } from '@workspace/shared';
+import i18n from '../localization/i18n';
 
 export {
   BUILT_IN_TRAINING_FOCUS_OPTIONS,
@@ -21,12 +22,24 @@ export {
 
 export const TRAINING_FOCUS_TIME_SLOTS: {
   value: TrainingFocusTimeSlot;
-  label: string;
+  label: () => string;
 }[] = [
-  { value: 'morning', label: 'Morning' },
-  { value: 'noon', label: 'Noon' },
-  { value: 'afternoon', label: 'Afternoon' },
-  { value: 'evening', label: 'Evening' },
+  {
+    value: 'morning',
+    label: () => i18n.t('workoutPlan.morning', { defaultValue: 'Morning' }),
+  },
+  {
+    value: 'noon',
+    label: () => i18n.t('workoutPlan.noon', { defaultValue: 'Noon' }),
+  },
+  {
+    value: 'afternoon',
+    label: () => i18n.t('workoutPlan.afternoon', { defaultValue: 'Afternoon' }),
+  },
+  {
+    value: 'evening',
+    label: () => i18n.t('workoutPlan.evening', { defaultValue: 'Evening' }),
+  },
 ];
 
 export const TRAINING_FOCUS_OPTIONS = [
@@ -35,19 +48,34 @@ export const TRAINING_FOCUS_OPTIONS = [
 ];
 
 const DAYS_OF_WEEK = [
-  { id: 0, label: 'Sunday' },
-  { id: 1, label: 'Monday' },
-  { id: 2, label: 'Tuesday' },
-  { id: 3, label: 'Wednesday' },
-  { id: 4, label: 'Thursday' },
-  { id: 5, label: 'Friday' },
-  { id: 6, label: 'Saturday' },
+  { id: 0 },
+  { id: 1 },
+  { id: 2 },
+  { id: 3 },
+  { id: 4 },
+  { id: 5 },
+  { id: 6 },
 ];
 
 export function getDayName(dayOfWeek: number) {
-  return (
-    DAYS_OF_WEEK.find(day => day.id === dayOfWeek)?.label ?? `Day ${dayOfWeek}`
-  );
+  switch (dayOfWeek) {
+    case 0:
+      return i18n.t('medications.weekdays.sun', { defaultValue: 'Sunday' });
+    case 1:
+      return i18n.t('medications.weekdays.mon', { defaultValue: 'Monday' });
+    case 2:
+      return i18n.t('medications.weekdays.tue', { defaultValue: 'Tuesday' });
+    case 3:
+      return i18n.t('medications.weekdays.wed', { defaultValue: 'Wednesday' });
+    case 4:
+      return i18n.t('medications.weekdays.thu', { defaultValue: 'Thursday' });
+    case 5:
+      return i18n.t('medications.weekdays.fri', { defaultValue: 'Friday' });
+    case 6:
+      return i18n.t('medications.weekdays.sat', { defaultValue: 'Saturday' });
+    default:
+      return String(dayOfWeek);
+  }
 }
 
 export function buildDefaultFocusSessions(
@@ -163,7 +191,10 @@ export function validateTrainingFocusSessions(
     if (activeSessions.length > 0 && primarySessions.length !== 1) {
       return {
         valid: false,
-        message: `${day.label} must have exactly one main training session.`,
+        message: i18n.t('workoutPlan.mainSessionValidation', {
+          defaultValue: '{{day}} must have exactly one main training session.',
+          day: getDayName(day.id),
+        }),
       };
     }
   }

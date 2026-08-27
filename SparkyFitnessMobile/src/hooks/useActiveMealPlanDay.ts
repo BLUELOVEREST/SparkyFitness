@@ -4,10 +4,8 @@ import {
   fetchActiveMealPlanDay,
   logActiveMealPlanMealToDiary,
 } from '../services/api/mealPlanTemplatesApi';
-import {
-  activeMealPlanDayQueryKey,
-  dailySummaryQueryKey,
-} from './queryKeys';
+import { activeMealPlanDayQueryKey, dailySummaryQueryKey } from './queryKeys';
+import i18n from '../localization/i18n';
 
 interface UseActiveMealPlanDayOptions {
   date: string;
@@ -37,13 +35,8 @@ export function useLogActiveMealPlanMeal() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      date,
-      mealTypeId,
-    }: {
-      date: string;
-      mealTypeId: string;
-    }) => logActiveMealPlanMealToDiary(date, mealTypeId),
+    mutationFn: ({ date, mealTypeId }: { date: string; mealTypeId: string }) =>
+      logActiveMealPlanMealToDiary(date, mealTypeId),
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({
         queryKey: activeMealPlanDayQueryKey(variables.date),
@@ -53,14 +46,23 @@ export function useLogActiveMealPlanMeal() {
       });
       Toast.show({
         type: 'success',
-        text1: 'Planned meal logged',
+        text1: i18n.t('planTemplates.toast.plannedMealLogged', {
+          defaultValue: 'Planned meal logged',
+        }),
       });
     },
-    onError: (error) => {
-      const message = error instanceof Error ? error.message : 'Please try again.';
+    onError: error => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : i18n.t('planTemplates.tryAgain', {
+              defaultValue: 'Please try again.',
+            });
       Toast.show({
         type: 'error',
-        text1: 'Failed to log planned meal',
+        text1: i18n.t('planTemplates.toast.plannedMealLogFailed', {
+          defaultValue: 'Failed to log planned meal',
+        }),
         text2: message,
       });
     },

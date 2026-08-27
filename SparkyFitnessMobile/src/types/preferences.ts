@@ -1,3 +1,5 @@
+import type { CalorieSafetyFloorMode } from '@workspace/shared';
+
 export interface UserPreferences {
   bmr_algorithm?: string;
   body_fat_algorithm?: string;
@@ -27,9 +29,13 @@ export interface UserPreferences {
   exercise_calorie_percentage?: number;
   activity_level?: string;
   tdee_allow_negative_adjustment?: boolean;
+  calorie_safety_floor_mode?: CalorieSafetyFloorMode;
+  calorie_safety_floor_value?: number;
   auto_clear_history?: string;
   logging_level?: string;
   timezone?: string | null;
+  /** Clock display preference: 'HH:mm' (24-hour), 'h:mm A'/'h:mm a' (12-hour). */
+  time_format?: 'HH:mm' | 'h:mm A' | 'h:mm a';
   item_display_limit?: number;
   language?: string;
   first_day_of_week?: number;

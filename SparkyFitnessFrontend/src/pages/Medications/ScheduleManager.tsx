@@ -3,7 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { Settings, Clock, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePreferences } from '@/contexts/PreferencesContext';
-import { todayInZone, formatDose } from '@workspace/shared';
+import {
+  todayInZone,
+  formatDose,
+  type MedicationWithMeal,
+} from '@workspace/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +33,7 @@ import {
 import {
   formatScheduleDescription,
   positiveDoseOrNull,
+  supplementDoseScaling,
 } from './medicationUtils';
 import type { MedicationDetail, MedicationSchedule } from '@/types/medications';
 
@@ -44,7 +49,7 @@ export default function ScheduleManager({ med }: { med: MedicationDetail }) {
   const [scheduleTypeId, setScheduleTypeId] = useState('daily');
   const [timeOfDay, setTimeOfDay] = useState('09:00');
   const [doseAmount, setDoseAmount] = useState('');
-  const [withMeal, setWithMeal] = useState<string | null>(null);
+  const [withMeal, setWithMeal] = useState<MedicationWithMeal | null>(null);
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([]);
   const [intervalDays, setIntervalDays] = useState('1');
   const [dayOfMonth, setDayOfMonth] = useState('1');
@@ -114,6 +119,10 @@ export default function ScheduleManager({ med }: { med: MedicationDetail }) {
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
     );
   };
+
+  // Surfaces the multiplication the entry snapshot performs, at the point the dose is
+  // chosen. Null unless it would actually say something (see supplementDoseScaling).
+  const doseScaling = supplementDoseScaling(med, doseAmount, med.dose_amount);
 
   return (
     <Card>
@@ -186,10 +195,15 @@ export default function ScheduleManager({ med }: { med: MedicationDetail }) {
               {/* Dose Amount */}
               <div className="space-y-2">
                 <Label>
-                  {t(
-                    'medications.schedule.doseAmount',
-                    'Dose Amount (override)'
-                  )}
+                  {med.is_supplement
+                    ? t(
+                        'medications.schedule.servingsPerLog',
+                        'Servings per log'
+                      )
+                    : t(
+                        'medications.schedule.doseAmount',
+                        'Dose Amount (override)'
+                      )}
                 </Label>
                 <div className="flex items-center gap-2">
                   <Input
@@ -203,9 +217,37 @@ export default function ScheduleManager({ med }: { med: MedicationDetail }) {
                     onChange={(e) => setDoseAmount(e.target.value)}
                   />
                   <span className="text-sm text-muted-foreground capitalize">
-                    {med.dose_unit ?? med.type_id}
+                    {/* A supplement's stored dose_unit is a sentinel rather than a real
+                        unit, and supplements created before this read 'dose'. Labels
+                        state amounts per SERVING, so that is the word to echo back: it
+                        is the one printed on the bottle the user is holding. */}
+                    {med.is_supplement
+                      ? t('medications.schedule.servingUnit', 'serving')
+                      : (med.dose_unit ?? med.type_id)}
                   </span>
                 </div>
+                {doseScaling && (
+                  <p className="text-xs text-muted-foreground">
+                    {doseScaling.calories != null
+                      ? t(
+                          'medications.schedule.supplementDoseScalingCalories',
+                          'Each log counts {{dose}} servings: {{dose}} x {{perDose}} kcal = {{total}} kcal.',
+                          {
+                            dose: doseScaling.dose,
+                            perDose: doseScaling.calories,
+                            total:
+                              Math.round(
+                                doseScaling.calories * doseScaling.dose * 100
+                              ) / 100,
+                          }
+                        )
+                      : t(
+                          'medications.schedule.supplementDoseScaling',
+                          'Each log counts {{dose}} servings, so {{dose}} times the nutrition entered per serving.',
+                          { dose: doseScaling.dose }
+                        )}
+                  </p>
+                )}
               </div>
 
               {/* Food relation */}
@@ -215,7 +257,9 @@ export default function ScheduleManager({ med }: { med: MedicationDetail }) {
                 </Label>
                 <Select
                   value={withMeal || 'none'}
-                  onValueChange={(v) => setWithMeal(v === 'none' ? null : v)}
+                  onValueChange={(v) =>
+                    setWithMeal(v === 'none' ? null : (v as MedicationWithMeal))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -235,6 +279,12 @@ export default function ScheduleManager({ med }: { med: MedicationDetail }) {
                     </SelectItem>
                     <SelectItem value="after">
                       {t('medications.mealRelation.after', 'After meal')}
+                    </SelectItem>
+                    <SelectItem value="away_from_meals">
+                      {t(
+                        'medications.mealRelation.awayFromMeals',
+                        'Away from meals'
+                      )}
                     </SelectItem>
                   </SelectContent>
                 </Select>

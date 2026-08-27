@@ -1,5 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateNavigator from '../components/DateNavigator';
 import StatusView from '../components/StatusView';
@@ -50,12 +56,13 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
     () => createMobileTranslator(preferences?.language),
     [preferences?.language],
   );
-  const { activeMealPlanDay, isLoading, isError, refetch } = useActiveMealPlanDay({
-    date: selectedDate,
-  });
+  const { activeMealPlanDay, isLoading, isError, refetch } =
+    useActiveMealPlanDay({
+      date: selectedDate,
+    });
 
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
-  const weekDates = useMemo(() => weekDays.map((day) => day.date), [weekDays]);
+  const weekDates = useMemo(() => weekDays.map(day => day.date), [weekDays]);
   const {
     activeMealPlanDays: activeMealPlanWeekDays,
     isLoading: isWeekLoading,
@@ -65,25 +72,26 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
   });
 
   const meals = useMemo(
-    () => (
+    () =>
       activeMealPlanDay?.mode === 'carbCycle'
-        ? activeMealPlanDay.meals.filter((meal) => meal.items.length > 0)
-        : []
-    ),
+        ? activeMealPlanDay.meals.filter(meal => meal.items.length > 0)
+        : [],
     [activeMealPlanDay],
   );
 
-  const totals = useMemo(() => (
-    meals.reduce(
-      (sum, meal) => ({
-        calories: sum.calories + meal.target.calories,
-        carbs: sum.carbs + meal.target.carbs,
-        protein: sum.protein + meal.target.protein,
-        fat: sum.fat + meal.target.fat,
-      }),
-      { calories: 0, carbs: 0, protein: 0, fat: 0 },
-    )
-  ), [meals]);
+  const totals = useMemo(
+    () =>
+      meals.reduce(
+        (sum, meal) => ({
+          calories: sum.calories + meal.target.calories,
+          carbs: sum.carbs + meal.target.carbs,
+          protein: sum.protein + meal.target.protein,
+          fat: sum.fat + meal.target.fat,
+        }),
+        { calories: 0, carbs: 0, protein: 0, fat: 0 },
+      ),
+    [meals],
+  );
   const ingredientSummary = useMemo(
     () => buildKitchenIngredientSummary(meals),
     [meals],
@@ -97,7 +105,9 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
     return (
       <View className="flex-1 items-center justify-center bg-background">
         <ActivityIndicator size="large" color="#3B82F6" />
-        <Text className="text-text-muted mt-4">{t('kitchen.loading')}</Text>
+        <Text className="text-text-muted mt-4">
+          {t('kitchen.loading', { defaultValue: 'Loading kitchen plan...' })}
+        </Text>
       </View>
     );
   }
@@ -108,9 +118,17 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
         icon="alert-circle"
         iconColor="#EF4444"
         iconSize={64}
-        title={t('kitchen.failedTitle')}
-        subtitle={t('kitchen.failedSubtitle')}
-        action={{ label: t('common.retry'), onPress: () => refetch(), variant: 'primary' }}
+        title={t('kitchen.failedTitle', {
+          defaultValue: 'Failed to load Kitchen',
+        })}
+        subtitle={t('kitchen.failedSubtitle', {
+          defaultValue: 'Please check your connection and try again.',
+        })}
+        action={{
+          label: t('common.retry', { defaultValue: 'Retry' }),
+          onPress: () => refetch(),
+          variant: 'primary',
+        }}
       />
     );
   }
@@ -118,10 +136,10 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
       <DateNavigator
-        title={t('kitchen.title')}
+        title={t('kitchen.title', { defaultValue: 'Kitchen' })}
         selectedDate={selectedDate}
-        onPreviousDay={() => setSelectedDate((date) => addDays(date, -1))}
-        onNextDay={() => setSelectedDate((date) => addDays(date, 1))}
+        onPreviousDay={() => setSelectedDate(date => addDays(date, -1))}
+        onNextDay={() => setSelectedDate(date => addDays(date, 1))}
         onToday={() => setSelectedDate(getTodayDate())}
         onDatePress={() => setSelectedDate(getTodayDate())}
         showDateAlways
@@ -132,7 +150,7 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerClassName="gap-2"
         >
-          {weekDays.map((day) => {
+          {weekDays.map(day => {
             const isSelected = day.date === selectedDate;
             const isToday = day.date === todayDate;
             return (
@@ -141,7 +159,11 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
                 testID={`kitchen-week-day-${day.date}`}
                 onPress={() => setSelectedDate(day.date)}
                 accessibilityRole="button"
-                accessibilityLabel={`Select ${day.label}, ${day.date}`}
+                accessibilityLabel={t('kitchen.selectDay', {
+                  defaultValue: 'Select {{day}}, {{date}}',
+                  day: day.label,
+                  date: day.date,
+                })}
                 accessibilityState={{ selected: isSelected }}
                 className={`min-w-14 rounded-2xl px-3 py-2 border ${
                   isSelected
@@ -161,8 +183,8 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
                     isSelected
                       ? 'text-white'
                       : isToday
-                        ? 'text-accent-primary'
-                        : 'text-text-primary'
+                      ? 'text-accent-primary'
+                      : 'text-text-primary'
                   }`}
                 >
                   {day.dayOfMonth}
@@ -182,31 +204,50 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
           {meals.length === 0 ? (
             <View className="bg-surface rounded-xl p-4 shadow-sm">
               <Text className="text-text-primary font-bold">
-                {t('kitchen.noPlannedMeals')}
+                {t('kitchen.noPlannedMeals', {
+                  defaultValue: 'No planned meals',
+                })}
               </Text>
               <Text className="text-text-muted mt-1">
-                {t('kitchen.noPlannedMealsSubtitle')}
+                {t('kitchen.noPlannedMealsSubtitle', {
+                  defaultValue:
+                    'Create and activate a carb-cycle meal plan on Web first.',
+                })}
               </Text>
             </View>
           ) : (
             <>
               <View className="bg-surface rounded-xl p-4 shadow-sm">
                 <Text className="text-text-primary font-bold">
-                  {activeMealPlanDay?.planName ?? t('kitchen.activeMealPlan')}
+                  {activeMealPlanDay?.planName ??
+                    t('kitchen.activeMealPlan', {
+                      defaultValue: 'Active Meal Plan',
+                    })}
                 </Text>
                 <Text className="text-text-muted mt-1">
-                  {Math.round(totals.calories)} Cal · C {formatMacro(totals.carbs)} · P {formatMacro(totals.protein)} · F {formatMacro(totals.fat)}
+                  {t('kitchen.macroSummary', {
+                    defaultValue:
+                      '{{calories}} Cal · C {{carbs}} · P {{protein}} · F {{fat}}',
+                    calories: Math.round(totals.calories),
+                    carbs: formatMacro(totals.carbs),
+                    protein: formatMacro(totals.protein),
+                    fat: formatMacro(totals.fat),
+                  })}
                 </Text>
               </View>
               {ingredientSummary.length > 0 ? (
                 <View className="bg-surface rounded-xl p-4 shadow-sm">
                   <Text className="text-text-primary font-bold mb-1">
-                    {t('kitchen.ingredientSummary')}
+                    {t('kitchen.ingredientSummary', {
+                      defaultValue: 'Ingredient Summary',
+                    })}
                   </Text>
                   <Text className="text-text-muted text-xs mb-2">
-                    {t('kitchen.ingredientSummarySubtitle')}
+                    {t('kitchen.ingredientSummarySubtitle', {
+                      defaultValue: 'Total amount needed for the selected day.',
+                    })}
                   </Text>
-                  {ingredientSummary.map((item) => (
+                  {ingredientSummary.map(item => (
                     <View
                       key={item.key}
                       className="flex-row items-start justify-between mt-2"
@@ -232,18 +273,20 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
             <View className="bg-surface rounded-xl p-4 shadow-sm">
               <View className="flex-row items-center justify-between mb-1">
                 <Text className="text-text-primary font-bold">
-                  {t('kitchen.weeklyPrep')}
+                  {t('kitchen.weeklyPrep', { defaultValue: 'Weekly Prep' })}
                 </Text>
                 {isWeekLoading ? (
                   <Text className="text-text-muted text-xs">
-                    {t('kitchen.updating')}
+                    {t('kitchen.updating', { defaultValue: 'Updating...' })}
                   </Text>
                 ) : null}
               </View>
               <Text className="text-text-muted text-xs mb-2">
-                {t('kitchen.weeklyPrepSubtitle')}
+                {t('kitchen.weeklyPrepSubtitle', {
+                  defaultValue: 'Total amount needed for the current week.',
+                })}
               </Text>
-              {weeklyIngredientSummary.map((item) => (
+              {weeklyIngredientSummary.map(item => (
                 <View
                   key={item.key}
                   className="flex-row items-start justify-between mt-2"
@@ -265,23 +308,39 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
           ) : null}
           {meals.length > 0 ? (
             <>
-              {meals.map((meal) => (
-                <View key={meal.key} className="bg-surface rounded-xl p-4 shadow-sm">
+              {meals.map(meal => (
+                <View
+                  key={meal.key}
+                  className="bg-surface rounded-xl p-4 shadow-sm"
+                >
                   <View className="flex-row items-center mb-1">
                     <Text className="text-text-primary font-bold flex-1">
                       {meal.label}
                     </Text>
                     <Text className="text-xs text-accent-primary font-semibold">
-                      {Math.round(meal.target.calories)} Cal
+                      {Math.round(meal.target.calories)}{' '}
+                      {t('kitchen.caloriesUnit', { defaultValue: 'Cal' })}
                     </Text>
                   </View>
                   <Text className="text-text-muted text-xs mb-2">
-                    C {formatMacro(meal.target.carbs)} · P {formatMacro(meal.target.protein)} · F {formatMacro(meal.target.fat)}
+                    {t('kitchen.mealMacroSummary', {
+                      defaultValue: 'C {{carbs}} · P {{protein}} · F {{fat}}',
+                      carbs: formatMacro(meal.target.carbs),
+                      protein: formatMacro(meal.target.protein),
+                      fat: formatMacro(meal.target.fat),
+                    })}
                   </Text>
-                  {meal.items.map((item) => (
-                    <View key={`${item.type}-${item.id}`} className="flex-row justify-between mt-2">
-                      <Text className="text-text-primary flex-1">{item.name}</Text>
-                      <Text className="text-text-muted">{item.amountLabel}</Text>
+                  {meal.items.map(item => (
+                    <View
+                      key={`${item.type}-${item.id}`}
+                      className="flex-row justify-between mt-2"
+                    >
+                      <Text className="text-text-primary flex-1">
+                        {item.name}
+                      </Text>
+                      <Text className="text-text-muted">
+                        {item.amountLabel}
+                      </Text>
                     </View>
                   ))}
                 </View>

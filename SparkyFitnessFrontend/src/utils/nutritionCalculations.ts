@@ -1,32 +1,27 @@
+import type { SupplementTotals } from '@workspace/shared';
+import {
+  resolveSupplementTotals,
+  addSupplementCustomNutrients,
+  FOOD_VARIANT_NUTRIENT_FIELDS,
+} from '@workspace/shared';
 import { getDietTemplate } from '@/constants/dietTemplates';
 import { EMPTY_MEAL_TOTALS } from '@/constants/nutrients';
 import i18n from '@/i18n';
 import type { FoodEntry, FoodVariant } from '@/types/food';
 import { FoodEntryMeal, MealTotals } from '@/types/meal';
-import { CALORIE_CALCULATION_CONSTANTS } from '@workspace/shared';
+import {
+  ACTIVITY_MULTIPLIERS,
+  DEFAULT_CUSTOM_CALORIE_SAFETY_FLOOR,
+  calculateBmr,
+  computeCalorieTarget,
+  goalModeFromPrimaryGoal,
+  calculateAge,
+  type CalorieSafetyFloorMode,
+} from '@workspace/shared';
 import { getMealPercentage } from './goals';
 import { CarbCycleMealTarget, ExpandedGoals } from '@/types/goals';
 
 // Utility functions for nutrition calculations
-
-export const convertStepsToCalories = (
-  steps: number,
-  weightKg: number = CALORIE_CALCULATION_CONSTANTS.DEFAULT_WEIGHT_KG,
-  heightCm: number = CALORIE_CALCULATION_CONSTANTS.DEFAULT_HEIGHT_CM
-): number => {
-  // Stride length estimation
-  const strideLengthM =
-    (heightCm * CALORIE_CALCULATION_CONSTANTS.STRIDE_LENGTH_MULTIPLIER) / 100;
-  const distanceKm = (steps * strideLengthM) / 1000;
-
-  // Net calories burned per km is approx 0.39 - 0.45 kcal/kg above BMR
-  // We use a conservative "background" movement estimate
-  return Math.round(
-    distanceKm *
-      weightKg *
-      CALORIE_CALCULATION_CONSTANTS.NET_CALORIES_PER_KG_PER_KM
-  );
-};
 
 export const estimateStepsFromWalkingExercise = (
   durationMinutes: number,
@@ -299,6 +294,56 @@ export const calculateNutrition = (
   }
 
   return nutrition;
+};
+
+/**
+ * Folds a day's logged supplement doses into its food totals.
+ *
+ * Covers every field in `FOOD_VARIANT_NUTRIENT_FIELDS`, not just the macros. It added only
+ * the five macro fields until #2145: a supplement carrying 10000mg of calcium showed its
+ * calcium in Reports, which sums all seventeen, and nothing in the Diary summary card
+ * beside it, which is the surface the user was actually looking at.
+ *
+ * The older reasoning for the narrow version was that no other surface summed a
+ * supplement's sodium either, so widening here alone would make the Diary the odd one out.
+ * That was already untrue of the range query in `reportRepository`, and the inconsistency
+ * it was avoiding is the one users hit.
+ *
+ * Custom nutrients are folded in as well, and they are where most micronutrients actually
+ * live: only six of the catalog's entries have a fixed column, so a magnesium or vitamin D
+ * supplement contributes nothing the loop below can reach. `NutritionSummaryCard` already
+ * falls back to `dayTotals.custom_nutrients` for a nutrient with no fixed field, so this
+ * needs no display change to become visible.
+ *
+ * Returns the argument itself when there is no supplement arm at all, which now means an
+ * older server or a failed fetch rather than a day without supplements: this server always
+ * sends the arm, so a supplement-free day arrives present-and-zero and takes the merge
+ * below instead. That path adds nothing to the seventeen, but it does leave a
+ * `custom_nutrients` key on totals that may not have carried one. Downstream reads it as
+ * `custom_nutrients?.[nutrient] ?? 0`, so an empty map and an absent one mean the same
+ * thing there.
+ */
+export const addSupplementTotals = <T extends MealTotals>(
+  foodTotals: T,
+  supplementTotals: Partial<SupplementTotals> | undefined | null
+): T => {
+  if (!supplementTotals) return foodTotals;
+  // Merges against a full-width zero object, so an older server answering with only the
+  // five macro keys yields 0 for the rest rather than `number + undefined` = NaN.
+  const supplements = resolveSupplementTotals(supplementTotals);
+  const combined = { ...foodTotals };
+  for (const field of FOOD_VARIANT_NUTRIENT_FIELDS) {
+    const food = Number(foodTotals[field]) || 0;
+    (combined as MealTotals)[field] = food + supplements[field];
+  }
+  // Replaced with a new map rather than mutated: `foodTotals.custom_nutrients` is the
+  // object the caller's food totals hold, and adding doses into it in place would
+  // double-count as soon as anything folds the same day again.
+  combined.custom_nutrients = addSupplementCustomNutrients(
+    foodTotals.custom_nutrients,
+    supplements
+  );
+  return combined;
 };
 
 export const calculateDayTotals = (
@@ -592,16 +637,22 @@ export interface BasePlan {
 export const calculateBasePlan = (
   formData: CalculatorFormData,
   localSelectedDiet: string,
-  customPercentages: { carbs: number; protein: number; fat: number }
+  customPercentages: { carbs: number; protein: number; fat: number },
+  safetyFloor: {
+    calorieSafetyFloorMode: CalorieSafetyFloorMode;
+    calorieSafetyFloorValue: number;
+  } = {
+    calorieSafetyFloorMode: 'standard',
+    calorieSafetyFloorValue: DEFAULT_CUSTOM_CALORIE_SAFETY_FLOOR,
+  }
 ): BasePlan | null => {
   // formData values are already in Metric (kg/cm) because they come from UnitInput or normalized state
   const weightKg = Number(formData.currentWeight) || 0;
   const heightCm = Number(formData.height) || 0;
 
-  const birthDate = formData.birthDate
-    ? new Date(formData.birthDate)
-    : new Date();
-  const age = new Date().getFullYear() - birthDate.getFullYear();
+  // Year subtraction is a year off until the birthday passes; calculateAge
+  // accounts for the month and day.
+  const age = formData.birthDate ? calculateAge(formData.birthDate) : 30;
 
   if (
     isNaN(weightKg) ||
@@ -614,24 +665,34 @@ export const calculateBasePlan = (
     return null;
   }
 
-  let bmr = 10 * weightKg + 6.25 * heightCm - 5 * age;
-  bmr += formData.sex === 'male' ? 5 : -161;
+  const gender = formData.sex === 'male' ? 'male' : 'female';
+  const bmr = calculateBmr('Mifflin-St Jeor', weightKg, heightCm, age, gender);
 
-  const activityMultipliers: Record<string, number> = {
-    not_much: 1.2,
-    light: 1.375,
-    moderate: 1.55,
-    heavy: 1.725,
-  };
+  // Route through the same engine the rest of the app uses, so the plan produced
+  // here matches what Calculation Settings will show afterwards. Presenting it as
+  // adaptive-with-no-history makes the baseline BMR x activity multiplier and
+  // applies the safety floors, which the previous ad-hoc math skipped entirely.
+  const targetResult = computeCalorieTarget({
+    goalMode: goalModeFromPrimaryGoal(formData.primaryGoal),
+    calculationMethod: 'adaptive',
+    customPercentage: 0,
+    bmr,
+    activityLevelMultiplier:
+      ACTIVITY_MULTIPLIERS[formData.activityLevel] ?? 1.2,
+    adaptiveTdee: null,
+    adaptiveTdeeFallback: true,
+    adaptiveTdeeDaysOfData: 0,
+    weightKg,
+    heightCm,
+    age,
+    gender,
+    currentGoalCalories: 0,
+    calculateBmrFn: calculateBmr,
+    calorieSafetyFloorMode: safetyFloor.calorieSafetyFloorMode,
+    calorieSafetyFloorValue: safetyFloor.calorieSafetyFloorValue,
+  });
 
-  const multiplier = activityMultipliers[formData.activityLevel] || 1.2;
-  const tdee = bmr * multiplier;
-
-  let targetCalories = tdee;
-  if (formData.primaryGoal === 'lose_weight') targetCalories = tdee * 0.8;
-  if (formData.primaryGoal === 'gain_weight') targetCalories = tdee + 500;
-
-  const finalDailyCalories = Math.round(targetCalories / 10) * 10;
+  const finalDailyCalories = Math.round(targetResult.finalTarget / 10) * 10;
 
   const dietTemplate =
     localSelectedDiet === 'custom'
@@ -658,5 +719,10 @@ export const calculateBasePlan = (
     fiber: fiberGrams,
   };
 
-  return { bmr, tdee, finalDailyCalories, macros };
+  return {
+    bmr,
+    tdee: targetResult.baselineTdee,
+    finalDailyCalories,
+    macros,
+  };
 };

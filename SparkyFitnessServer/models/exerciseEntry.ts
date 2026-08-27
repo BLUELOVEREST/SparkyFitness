@@ -1440,7 +1440,8 @@ async function getRecentSessionsForExercise(
   userId: string,
   exerciseId: string,
   excludePresetEntryId: string | null = null,
-  limit = 3
+  limit = 3,
+  presetId: number | null = null
 ): Promise<RecentSessionRow[]> {
   const client = await getClient(userId);
   try {
@@ -1459,6 +1460,14 @@ async function getRecentSessionsForExercise(
        WHERE ee.user_id = $1
          AND ee.exercise_id = $2
          AND ($3::uuid IS NULL OR ee.exercise_preset_entry_id IS DISTINCT FROM $3)
+         AND (
+           $5::integer IS NULL
+           OR EXISTS (
+             SELECT 1 FROM exercise_preset_entries epe
+              WHERE epe.id = ee.exercise_preset_entry_id
+                AND epe.workout_preset_id = $5
+           )
+         )
          AND EXISTS (
            SELECT 1 FROM exercise_entry_sets ees
             WHERE ees.exercise_entry_id = ee.id
@@ -1466,7 +1475,7 @@ async function getRecentSessionsForExercise(
          )
        ORDER BY ee.entry_date DESC, ee.created_at DESC, ee.id DESC
        LIMIT $4`,
-      [userId, exerciseId, excludePresetEntryId, limit]
+      [userId, exerciseId, excludePresetEntryId, limit, presetId]
     );
     return result.rows;
   } finally {
@@ -1592,6 +1601,62 @@ async function getDailyExerciseTotalsRange(
       [userId, startDate, endDate]
     );
     return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
+export interface DailyExerciseCalorieSplit {
+  entry_date: string;
+  active_calories: number;
+  other_calories: number;
+  activity_steps: number;
+}
+
+/**
+ * Per-day active / logged / step splits for a whole range, in one query.
+ *
+ * This is the ranged equivalent of walking `getExerciseEntriesByDateV2`'s session tree
+ * through `extractExerciseStats`. The tree exists for the Diary's UI; the calorie balance
+ * only ever reduces it to these three sums, and both individual entries and preset
+ * children live in this one table, so a GROUP BY reproduces it exactly.
+ *
+ * Two predicates carry the whole correctness of #2094:
+ *
+ *  - `IS DISTINCT FROM`, never `<>`. `exercise_name` is nullable, and `<>` yields NULL for
+ *    a null-named row, so its calories would land in neither bucket and silently vanish --
+ *    the same class of undercount this fix exists to remove.
+ *  - `exercise_preset_entry_id IS NULL` on the active bucket, because `extractExerciseStats`
+ *    folds every preset child into the logged arm regardless of its name. Without it, an
+ *    "Active Calories" row inside a preset would be classified one way by the Diary and
+ *    another way here.
+ *
+ * Deliberately not `getDailyExerciseTotalsRange`: that cannot separate the device summary
+ * row from logged workouts, which is precisely the discrimination this needs.
+ */
+async function getDailyExerciseCalorieSplitRange(
+  userId: string,
+  startDate: string,
+  endDate: string
+): Promise<DailyExerciseCalorieSplit[]> {
+  const client = await getClient(userId);
+  try {
+    const result = await client.query(
+      `SELECT TO_CHAR(entry_date, 'YYYY-MM-DD') AS entry_date,
+              COALESCE(SUM(calories_burned) FILTER (
+                WHERE exercise_name = 'Active Calories'
+                  AND exercise_preset_entry_id IS NULL), 0)::float8 AS active_calories,
+              COALESCE(SUM(calories_burned) FILTER (
+                WHERE exercise_name IS DISTINCT FROM 'Active Calories'
+                   OR exercise_preset_entry_id IS NOT NULL), 0)::float8 AS other_calories,
+              COALESCE(SUM(steps), 0)::int AS activity_steps
+       FROM exercise_entries
+       WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3
+       GROUP BY entry_date
+       ORDER BY entry_date ASC`,
+      [userId, startDate, endDate]
+    );
+    return result.rows as DailyExerciseCalorieSplit[];
   } finally {
     client.release();
   }
@@ -1747,12 +1812,14 @@ export { getRecentSessionsForExercise };
 export { deleteExerciseEntriesByEntrySourceAndDate };
 export { deleteExerciseEntriesByEntrySourceAndDateWithClient };
 export { getDailyExerciseTotalsRange };
+export { getDailyExerciseCalorieSplitRange };
 export { getExerciseDiaryRange };
 export { getRecentExerciseEntries };
 export { getExerciseUsage };
 export { getWaterEstimatedSumForDate };
 export { getWaterEstimatedSumForDateRange };
 export default {
+  getDailyExerciseCalorieSplitRange,
   upsertExerciseEntryData,
   _createExerciseEntryWithClient,
   _updateExerciseEntryWithClient,

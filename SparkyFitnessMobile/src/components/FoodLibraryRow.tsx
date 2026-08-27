@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, Pressable } from 'react-native';
 import { useCSSVariable } from 'uniwind';
 import type { FoodItem } from '../types/foods';
@@ -8,6 +9,10 @@ import { deriveShareStatus } from '../utils/shareStatus';
 import ShareStatusBadge from './ShareStatusBadge';
 import Icon from './Icon';
 import VerifiedBadge from './VerifiedBadge';
+import FoodThumbnail from './FoodThumbnail';
+import { useFoodImageSourceContext } from './FoodImageSourceProvider';
+import { primaryImageOf, usableFoodImages } from '../utils/foodImages';
+import { useOpenLightbox } from './LightboxProvider';
 
 interface FoodLibraryRowProps {
   food: FoodItem;
@@ -24,17 +29,38 @@ const FoodLibraryRow: React.FC<FoodLibraryRowProps> = ({
   showDivider = false,
   isFavorite = false,
 }) => {
+  const { t } = useTranslation();
   const { profile } = useProfile();
   const status = deriveShareStatus(food.user_id, food.shared_with_public, profile?.id);
   // Gold, not accent: a passive indicator, not a tap target. See MealLibraryRow.
   const [goldColor] = useCSSVariable(['--color-cat-amber']) as [string];
+  const getImageSource = useFoodImageSourceContext();
+  const images = usableFoodImages(food.images);
+  const openLightbox = useOpenLightbox();
+  const openImages =
+    images.length > 0 ? () => openLightbox(images, 0, food.name) : undefined;
+
+  // The thumbnail is a SIBLING of the row's pressable, never nested inside it:
+  // a Pressable within a Pressable leaves both live, so a tap on the photo can
+  // open the detail screen instead of the viewer. Mirrors the exercise rows.
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress}
-      className={`px-4 py-3 ${showDivider ? 'border-b border-border-subtle' : ''}`}
-      style={({ pressed }) => (pressed && onPress ? { opacity: 0.7 } : null)}
+    <View
+      className={`flex-row items-center ${showDivider ? 'border-b border-border-subtle' : ''}`}
     >
+      <View className="pl-4 py-3">
+        <FoodThumbnail
+          image={primaryImageOf(food)}
+          getImageSource={getImageSource}
+          size={40}
+          onPress={openImages}
+        />
+      </View>
+      <Pressable
+        onPress={onPress}
+        disabled={!onPress}
+        className="flex-1 pr-4 py-3"
+        style={({ pressed }) => (pressed && onPress ? { opacity: 0.7 } : null)}
+      >
       <View className="flex-row justify-between items-center">
         <View className="flex-1 mr-3">
           <View className="flex-row items-center gap-1.5">
@@ -53,7 +79,7 @@ const FoodLibraryRow: React.FC<FoodLibraryRowProps> = ({
                 size={16}
                 color={goldColor}
                 style={{ marginTop: -1 }}
-                accessibilityLabel="Favorite"
+                accessibilityLabel={t('foodSearch.accessibility.favorite', { defaultValue: 'Favorite' })}
               />
             )}
           </View>
@@ -65,14 +91,15 @@ const FoodLibraryRow: React.FC<FoodLibraryRowProps> = ({
         </View>
         <View className="items-end">
           <Text className="text-text-primary text-base font-semibold">
-            {food.default_variant.calories} cal
+            {food.default_variant.calories} {t('foodSearch.labels.caloriesUnit', { defaultValue: 'cal' })}
           </Text>
           <Text className="text-text-secondary text-xs">
             {food.default_variant.serving_size} {formatServingUnit(food.default_variant.serving_unit)}
           </Text>
         </View>
       </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 };
 

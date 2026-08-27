@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, Pressable } from 'react-native';
 import { useCSSVariable } from 'uniwind';
 import type { FoodEntry } from '../types/foodEntries';
@@ -31,7 +32,11 @@ interface FoodSummaryProps {
   onPressPlannedMeal?: (meal: ActiveMealPlanDayMeal) => void;
   onAddFood?: () => void;
   onAdjustServing?: (entry: FoodEntry) => void;
-  onPressMealType?: (mealTypeId: string | null, mealTypeName: string, entries: FoodEntry[]) => void;
+  onPressMealType?: (
+    mealTypeId: string | null,
+    mealTypeName: string,
+    entries: FoodEntry[],
+  ) => void;
 }
 
 interface MealSectionProps {
@@ -41,23 +46,34 @@ interface MealSectionProps {
   label?: string;
   target?: ActiveMealPlanDayMeal['target'];
   onAdjustServing?: (entry: FoodEntry) => void;
-  onPressMealType?: (mealTypeId: string | null, mealTypeName: string, entries: FoodEntry[]) => void;
+  onPressMealType?: (
+    mealTypeId: string | null,
+    mealTypeName: string,
+    entries: FoodEntry[],
+  ) => void;
   targetLabel?: string;
 }
 
 const EmptyState: React.FC<{ label?: string; onAddFood?: () => void }> = ({
-  label = 'Tap to add food',
+  label,
   onAddFood,
-}) => (
-  <Pressable
-    onPress={onAddFood}
-    accessibilityRole="button"
-    accessibilityLabel="Tap to add food"
-    className="bg-surface rounded-xl p-4 mb-2 shadow-sm items-center py-6"
-  >
-    <Text className="text-text-muted text-base">{label}</Text>
-  </Pressable>
-);
+}) => {
+  const { t } = useTranslation();
+  const displayLabel =
+    label ?? t('foodSummary.tapToAddFood', { defaultValue: 'Tap to add food' });
+  return (
+    <Pressable
+      onPress={onAddFood}
+      accessibilityRole="button"
+      accessibilityLabel={t('foodSummary.tapToAddFood', {
+        defaultValue: 'Tap to add food',
+      })}
+      className="bg-surface rounded-xl p-4 mb-2 shadow-sm items-center py-6"
+    >
+      <Text className="text-text-muted text-base">{displayLabel}</Text>
+    </Pressable>
+  );
+};
 
 const MealSection: React.FC<MealSectionProps> = ({
   group,
@@ -69,9 +85,10 @@ const MealSection: React.FC<MealSectionProps> = ({
   onPressMealType,
   targetLabel = 'Target',
 }) => {
+  const { t } = useTranslation();
   const accentPrimary = useCSSVariable('--color-accent-primary') as string;
 
-  const displayLabel = label ?? getMealGroupLabel(group);
+  const displayLabel = label ?? getMealGroupLabel(group, t);
   // Single canonical MEAL_CONFIG lookup (read once, reuse both fields). A
   // custom category named "breakfast" still gets the neutral icon, never the
   // system one — ownership is decided by isSystem, not by the name.
@@ -93,12 +110,15 @@ const MealSection: React.FC<MealSectionProps> = ({
   const headerContent = (
     <>
       <Icon name={icon} size={18} color={accentPrimary} />
-      <Text className="text-base font-bold text-text-secondary flex-1">{displayLabel}</Text>
+      <Text className="text-base font-bold text-text-secondary flex-1">
+        {displayLabel}
+      </Text>
       {(totalCalories > 0 || targetCalories > 0) && (
         <View className="bg-accent-primary/5 rounded-full px-2.5 py-0.5">
           <Text className="text-xs text-accent-primary font-semibold">
             {totalCalories}
-            {targetCalories > 0 ? ` / ${targetCalories}` : ''} Cal
+            {targetCalories > 0 ? ` / ${targetCalories}` : ''}{' '}
+            {t('foodSummary.caloriesUnit', { defaultValue: 'Cal' })}
           </Text>
         </View>
       )}
@@ -112,10 +132,15 @@ const MealSection: React.FC<MealSectionProps> = ({
     <View className="bg-surface rounded-xl p-4 overflow-hidden shadow-sm">
       {onPressMealType ? (
         <Pressable
-          onPress={() => onPressMealType(group.mealTypeId, group.name, group.entries)}
+          onPress={() =>
+            onPressMealType(group.mealTypeId, group.name, group.entries)
+          }
           className="flex-row gap-2 mb-3 items-center"
           accessibilityRole="button"
-          accessibilityLabel={`${displayLabel} nutrition breakdown`}
+          accessibilityLabel={t('foodSummary.nutritionBreakdown', {
+            defaultValue: '{{label}} nutrition breakdown',
+            label: displayLabel,
+          })}
         >
           {headerContent}
         </Pressable>
@@ -126,7 +151,13 @@ const MealSection: React.FC<MealSectionProps> = ({
       )}
       {target && (
         <Text className="text-xs text-text-muted mb-3">
-          {targetLabel}: C {formatMacroTarget(target.carbs)} / P {formatMacroTarget(target.protein)} / F {formatMacroTarget(target.fat)}
+          {t('foodSummary.macroTarget', {
+            defaultValue: '{{target}}: C {{carbs}} / P {{protein}} / F {{fat}}',
+            target: targetLabel,
+            carbs: formatMacroTarget(target.carbs),
+            protein: formatMacroTarget(target.protein),
+            fat: formatMacroTarget(target.fat),
+          })}
         </Text>
       )}
       {group.entries.map((entry, index) => {
@@ -153,16 +184,18 @@ const matchesPlannedMeal = (
   entry: FoodEntry,
   plannedMeal: ActiveMealPlanDayMeal,
 ) => {
-  if (entry.meal_type_id && plannedMeal.mealTypeId && entry.meal_type_id === plannedMeal.mealTypeId) {
+  if (
+    entry.meal_type_id &&
+    plannedMeal.mealTypeId &&
+    entry.meal_type_id === plannedMeal.mealTypeId
+  ) {
     return true;
   }
 
   const entryMealType = normalizeMealName(entry.meal_type);
-  return [
-    plannedMeal.mealType,
-    plannedMeal.key,
-    plannedMeal.label,
-  ].some((value) => normalizeMealName(value) === entryMealType);
+  return [plannedMeal.mealType, plannedMeal.key, plannedMeal.label].some(
+    value => normalizeMealName(value) === entryMealType,
+  );
 };
 
 const PlannedMealCard: React.FC<{
@@ -182,8 +215,10 @@ const PlannedMealCard: React.FC<{
   logFromPlanLabel,
   loggedFromPlanLabel,
 }) => {
+  const { t } = useTranslation();
   const accentPrimary = useCSSVariable('--color-accent-primary') as string;
-  const isLogDisabled = meal.logged || meal.items.length === 0 || !meal.mealTypeId || isLogging;
+  const isLogDisabled =
+    meal.logged || meal.items.length === 0 || !meal.mealTypeId || isLogging;
 
   return (
     <View className="bg-surface rounded-xl p-4 overflow-hidden shadow-sm border border-accent-primary/20">
@@ -192,7 +227,10 @@ const PlannedMealCard: React.FC<{
         disabled={!onPress}
         className="flex-row items-center gap-2 mb-2"
         accessibilityRole={onPress ? 'button' : undefined}
-        accessibilityLabel={`${meal.label} planned meal details`}
+        accessibilityLabel={t('foodSummary.plannedMealDetails', {
+          defaultValue: '{{label}} planned meal details',
+          label: meal.label,
+        })}
       >
         <Icon name="meal" size={18} color={accentPrimary} />
         <Text className="text-base font-bold text-text-secondary flex-1">
@@ -200,16 +238,28 @@ const PlannedMealCard: React.FC<{
         </Text>
         <View className="bg-accent-primary/5 rounded-full px-2.5 py-0.5">
           <Text className="text-xs text-accent-primary font-semibold">
-            {Math.round(meal.target.calories)} Cal
+            {Math.round(meal.target.calories)}{' '}
+            {t('foodSummary.caloriesUnit', { defaultValue: 'Cal' })}
           </Text>
         </View>
-        {onPress && <Icon name="chevron-forward" size={14} color={accentPrimary} />}
+        {onPress && (
+          <Icon name="chevron-forward" size={14} color={accentPrimary} />
+        )}
       </Pressable>
       <Text className="text-xs text-text-muted mb-3">
-        {targetLabel}: C {formatMacroTarget(meal.target.carbs)} / P {formatMacroTarget(meal.target.protein)} / F {formatMacroTarget(meal.target.fat)}
+        {t('foodSummary.macroTarget', {
+          defaultValue: '{{target}}: C {{carbs}} / P {{protein}} / F {{fat}}',
+          target: targetLabel,
+          carbs: formatMacroTarget(meal.target.carbs),
+          protein: formatMacroTarget(meal.target.protein),
+          fat: formatMacroTarget(meal.target.fat),
+        })}
       </Text>
-      {meal.items.map((item) => (
-        <View key={`${item.type}-${item.id}`} className="flex-row justify-between py-1">
+      {meal.items.map(item => (
+        <View
+          key={`${item.type}-${item.id}`}
+          className="flex-row justify-between py-1"
+        >
           <Text className="text-sm text-text-primary flex-1">{item.name}</Text>
           <Text className="text-sm text-text-muted">{item.amountLabel}</Text>
         </View>
@@ -241,68 +291,93 @@ const FoodSummary: React.FC<FoodSummaryProps> = ({
 }) => {
   const { preferences } = usePreferences();
   const t = createMobileTranslator(preferences?.language);
-  const plannedMealsWithItems = plannedMeals?.filter((meal) => meal.items.length > 0) ?? [];
+  const plannedMealsWithItems =
+    plannedMeals?.filter(meal => meal.items.length > 0) ?? [];
 
   if (foodEntries.length === 0 && plannedMealsWithItems.length === 0) {
-    return <EmptyState label={t('foodSummary.tapToAddFood')} onAddFood={onAddFood} />;
+    return (
+      <EmptyState
+        label={t('foodSummary.tapToAddFood', {
+          defaultValue: 'Tap to add food',
+        })}
+        onAddFood={onAddFood}
+      />
+    );
   }
 
   const groups = groupFoodEntriesByMealType(foodEntries, mealTypes);
   const plannedLoggedMealSections = plannedMealsWithItems
-    .map((meal) => ({
+    .map(meal => ({
       meal,
-      entries: foodEntries.filter((entry) => matchesPlannedMeal(entry, meal)),
+      entries: foodEntries.filter(entry => matchesPlannedMeal(entry, meal)),
     }))
-    .filter((section) => section.entries.length > 0);
+    .filter(section => section.entries.length > 0);
   const plannedLoggedMealKeys = new Set(
-    plannedLoggedMealSections.map((section) => section.meal.key),
+    plannedLoggedMealSections.map(section => section.meal.key),
   );
   const plannedMealCards = plannedMealsWithItems.filter(
-    (meal) => !plannedLoggedMealKeys.has(meal.key),
+    meal => !plannedLoggedMealKeys.has(meal.key),
   );
   const plannedLoggedEntryIds = new Set(
-    plannedLoggedMealSections.flatMap((section) => section.entries.map((entry) => entry.id)),
+    plannedLoggedMealSections.flatMap(section =>
+      section.entries.map(entry => entry.id),
+    ),
   );
   const filteredGroups = groups
-    .map((group) => ({
+    .map(group => ({
       ...group,
-      entries: group.entries.filter((entry) => !plannedLoggedEntryIds.has(entry.id)),
+      entries: group.entries.filter(
+        entry => !plannedLoggedEntryIds.has(entry.id),
+      ),
     }))
-    .filter((group) => group.entries.length > 0);
-  const plannedLoggedGroups = plannedLoggedMealSections.map(({ meal, entries }) => {
-    const matchingType = meal.mealTypeId
-      ? mealTypes.find((mealType) => mealType.id === meal.mealTypeId)
-      : null;
-    const group: MealGroup = {
-      mealTypeId: meal.mealTypeId ?? null,
-      name: matchingType?.name ?? meal.mealType ?? meal.label,
-      sortOrder: matchingType?.sort_order ?? 9999,
-      entries,
-      isSystem: matchingType?.user_id === null,
-    };
-    return { meal, group };
-  });
+    .filter(group => group.entries.length > 0);
+  const plannedLoggedGroups = plannedLoggedMealSections.map(
+    ({ meal, entries }) => {
+      const matchingType = meal.mealTypeId
+        ? mealTypes.find(mealType => mealType.id === meal.mealTypeId)
+        : null;
+      const group: MealGroup = {
+        mealTypeId: meal.mealTypeId ?? null,
+        name: matchingType?.name ?? meal.mealType ?? meal.label,
+        sortOrder: matchingType?.sort_order ?? 9999,
+        entries,
+        isSystem: matchingType?.user_id === null,
+      };
+      return { meal, group };
+    },
+  );
 
   if (
     filteredGroups.length === 0 &&
     plannedMealCards.length === 0 &&
     plannedLoggedGroups.length === 0
   ) {
-    return <EmptyState label={t('foodSummary.tapToAddFood')} onAddFood={onAddFood} />;
+    return (
+      <EmptyState
+        label={t('foodSummary.tapToAddFood', {
+          defaultValue: 'Tap to add food',
+        })}
+        onAddFood={onAddFood}
+      />
+    );
   }
 
   return (
     <View className="gap-2 mb-2">
-      {plannedMealCards.map((meal) => (
+      {plannedMealCards.map(meal => (
         <PlannedMealCard
           key={meal.key}
           meal={meal}
           isLogging={isLoggingPlannedMeal}
           onLog={onLogPlannedMeal}
           onPress={onPressPlannedMeal}
-          targetLabel={t('foodSummary.target')}
-          logFromPlanLabel={t('foodSummary.logFromPlan')}
-          loggedFromPlanLabel={t('foodSummary.loggedFromPlan')}
+          targetLabel={t('foodSummary.target', { defaultValue: 'Target' })}
+          logFromPlanLabel={t('foodSummary.logFromPlan', {
+            defaultValue: 'Log from Plan',
+          })}
+          loggedFromPlanLabel={t('foodSummary.loggedFromPlan', {
+            defaultValue: 'Logged from Plan',
+          })}
         />
       ))}
       {plannedLoggedGroups.map(({ meal, group }) => (
@@ -315,10 +390,10 @@ const FoodSummary: React.FC<FoodSummaryProps> = ({
           calorieGoal={calorieGoal}
           onAdjustServing={onAdjustServing}
           onPressMealType={onPressMealType}
-          targetLabel={t('foodSummary.target')}
+          targetLabel={t('foodSummary.target', { defaultValue: 'Target' })}
         />
       ))}
-      {filteredGroups.map((group) => (
+      {filteredGroups.map(group => (
         <MealSection
           key={
             group.mealTypeId

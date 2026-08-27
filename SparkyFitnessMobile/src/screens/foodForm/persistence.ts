@@ -1,4 +1,5 @@
 import { Alert } from 'react-native';
+import i18n from '../../localization/i18n';
 import Toast from 'react-native-toast-message';
 import type { QueryClient } from '@tanstack/react-query';
 import type { FoodFormData } from '../../components/FoodForm';
@@ -75,13 +76,76 @@ export function equivalentsDiffer(a: EquivalentUnit[], b: EquivalentUnit[]): boo
 export function confirmDiscardEquivalents(): Promise<boolean> {
   return new Promise((resolve) => {
     Alert.alert(
-      'Discard unsaved equivalents?',
-      'You have unsaved equivalent sizes. Discard them to continue?',
+      i18n.t('foodFormPersistence.discardTitle', { defaultValue: 'Discard unsaved equivalents?' }),
+      i18n.t('foodFormPersistence.discardMessage', { defaultValue: 'You have unsaved equivalent sizes. Discard them to continue?' }),
       [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Discard', style: 'destructive', onPress: () => resolve(true) },
+        { text: i18n.t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel', onPress: () => resolve(false) },
+        { text: i18n.t('foodFormPersistence.discard', { defaultValue: 'Discard' }), style: 'destructive', onPress: () => resolve(true) },
       ],
       { onDismiss: () => resolve(false) },
+    );
+  });
+}
+
+export type SyncPastEntriesChoice = 'none' | 'nutrition' | 'nutrition-and-photos';
+
+/**
+ * Asks whether to rewrite past diary entries with the food's new values.
+ *
+ * Entries store a snapshot from when they were logged, so editing a food
+ * leaves history untouched by default — a logged meal records what was eaten.
+ * Mirrors the web "Sync Past Entries?" dialog, including asking only after the
+ * save has succeeded, so the food is saved either way.
+ *
+ * `photosChanged` splits the prompt in two. When the save left the food's
+ * photos alone there is nothing to decide about them, so the dialog stays a
+ * plain yes/no about nutrition. When photos did change, the user gets the
+ * third option, because the two photo outcomes are genuinely different:
+ *
+ *  - `nutrition-and-photos` forces the new photo onto every past entry,
+ *    INCLUDING entries where the user picked their own photo in the diary.
+ *    Those replaced photos are deleted server-side; this is not reversible.
+ *  - `nutrition` rewrites nutrition only, so every entry keeps the photo it
+ *    is showing today, custom or inherited.
+ */
+export function confirmSyncPastEntries(
+  photosChanged = false,
+): Promise<SyncPastEntriesChoice> {
+  if (!photosChanged) {
+    return new Promise((resolve) => {
+      Alert.alert(
+        i18n.t('foodFormPersistence.updateTitle', { defaultValue: 'Update past entries?' }),
+        i18n.t('foodFormPersistence.updateMessage', { defaultValue: "Your library food is saved. Do you also want to update past diary entries for this food with the new nutrition? Entries you don't update keep their original values." }),
+        [
+          // "Update"/"Don't Update" rather than two parallel "… past entries"
+          // labels: the negation lands on the first word, so the options are
+          // told apart at a glance instead of by diffing similar phrases.
+          { text: i18n.t('foodFormPersistence.dontUpdate', { defaultValue: "Don't Update" }), style: 'cancel', onPress: () => resolve('none') },
+          // Photos did not change, so syncing them would be a no-op — ask for
+          // the nutrition-only sync and leave every entry's photo alone.
+          { text: i18n.t('foodFormPersistence.update', { defaultValue: 'Update' }), onPress: () => resolve('nutrition') },
+        ],
+        { onDismiss: () => resolve('none') },
+      );
+    });
+  }
+
+  return new Promise((resolve) => {
+    Alert.alert(
+      i18n.t('foodFormPersistence.updateTitle', { defaultValue: 'Update past entries?' }),
+      i18n.t('foodFormPersistence.updatePhotosMessage', { defaultValue: 'Your library food is saved. What should past diary entries for this food use?' }),
+      [
+        { text: i18n.t('foodFormPersistence.dontUpdate', { defaultValue: "Don't Update" }), style: 'cancel', onPress: () => resolve('none') },
+        { text: i18n.t('foodFormPersistence.updateNutrition', { defaultValue: 'Update nutrition only' }), onPress: () => resolve('nutrition') },
+        // Destructive: this is the one path that discards a photo the user
+        // chose for a specific diary entry, so it is styled as such.
+        {
+          text: i18n.t('foodFormPersistence.updateNutritionPhotos', { defaultValue: 'Update nutrition & photos' }),
+          style: 'destructive',
+          onPress: () => resolve('nutrition-and-photos'),
+        },
+      ],
+      { onDismiss: () => resolve('none') },
     );
   });
 }
@@ -89,12 +153,12 @@ export function confirmDiscardEquivalents(): Promise<boolean> {
 export function confirmVariantOverwrite(unitLabel: string): Promise<'overwrite' | 'new' | 'cancel'> {
   return new Promise((resolve) => {
     Alert.alert(
-      'Save nutrition',
-      `"${unitLabel}" is already a saved variant. Do you want to update it with these values, or save as a new variant?`,
+      i18n.t('foodFormPersistence.saveNutritionTitle', { defaultValue: 'Save nutrition' }),
+      i18n.t('foodFormPersistence.overwriteMessage', { defaultValue: '"{{unitLabel}}" is already a saved variant. Do you want to update it with these values, or save as a new variant?', unitLabel }),
       [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve('cancel') },
-        { text: 'Save as new', onPress: () => resolve('new') },
-        { text: 'Update existing', style: 'destructive', onPress: () => resolve('overwrite') },
+        { text: i18n.t('common.cancel', { defaultValue: 'Cancel' }), style: 'cancel', onPress: () => resolve('cancel') },
+        { text: i18n.t('foodFormPersistence.saveAsNew', { defaultValue: 'Save as new' }), onPress: () => resolve('new') },
+        { text: i18n.t('foodFormPersistence.updateExisting', { defaultValue: 'Update existing' }), style: 'destructive', onPress: () => resolve('overwrite') },
       ],
       { onDismiss: () => resolve('cancel') },
     );
@@ -103,13 +167,13 @@ export function confirmVariantOverwrite(unitLabel: string): Promise<'overwrite' 
 
 export function validateFoodForm(data: FoodFormData): boolean {
   if (!data.name.trim()) {
-    Toast.show({ type: 'error', text1: 'Missing name', text2: 'Please enter a food name.' });
+    Toast.show({ type: 'error', text1: i18n.t('foodFormPersistence.missingName', { defaultValue: 'Missing name' }), text2: i18n.t('foodFormPersistence.nameRequired', { defaultValue: 'Please enter a food name.' }) });
     return false;
   }
 
   const servingSize = parseDecimalInput(data.servingSize);
   if (!Number.isFinite(servingSize) || servingSize <= 0) {
-    Toast.show({ type: 'error', text1: 'Invalid serving size', text2: 'Serving size must be greater than zero.' });
+    Toast.show({ type: 'error', text1: i18n.t('foodFormPersistence.invalidServingSize', { defaultValue: 'Invalid serving size' }), text2: i18n.t('foodFormPersistence.servingSizeRequired', { defaultValue: 'Serving size must be greater than zero.' }) });
     return false;
   }
 

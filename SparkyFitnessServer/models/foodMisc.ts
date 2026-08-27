@@ -1,5 +1,15 @@
 import { getClient, getSystemClient } from '../db/poolManager.js';
+import { FOOD_VARIANT_NUTRIENT_FIELDS } from '@workspace/shared';
+import type { FoodVariantNutrientField } from '@workspace/shared';
 import type { FoodEntrySnapshot } from '../types/nutrition.js';
+import {
+  supplementScanWhere,
+  supplementFixedAgg,
+  supplementCountable,
+  supplementFixedSubquery,
+  supplementCustomUnion,
+  supplementCustomTotals,
+} from './supplementSql.js';
 
 const DEFAULT_VARIANT_JSON_SQL = `
   json_build_object(
@@ -220,26 +230,75 @@ async function removeFoodFavorite(userId: string, foodId: string) {
     client.release();
   }
 }
-// A logged supplement contributes its per-dose snapshot, scaled by the dose count taken
-// (GREATEST-clamped so a non-positive value can't subtract). These fragments let the diary
-// daily-summary aggregations count supplements exactly the way the report already does, so
-// they show against goals. userExpr/dateExpr are the SQL expressions to correlate on: bind
-// params ($1/$2) for the single-date query, or the grouped columns (fe.user_id/fe.entry_date)
-// for the per-date query.
-function supplementFixed(
-  key: string,
-  userExpr: string,
-  dateExpr: string
-): string {
-  return `COALESCE((SELECT SUM(public.sf_try_numeric(me.nutrients_snapshot->>'${key}') * GREATEST(COALESCE(me.dose_amount_snapshot, 1), 0)) FROM medication_entries me WHERE me.user_id = ${userExpr} AND me.entry_date = ${dateExpr} AND me.status IN ('taken', 'prn_taken') AND me.nutrients_snapshot IS NOT NULL), 0)`;
-}
-function supplementCustomUnion(userExpr: string, dateExpr: string): string {
-  return `
-                UNION ALL
-                SELECT key, public.sf_try_numeric(value) * GREATEST(COALESCE(me2.dose_amount_snapshot, 1), 0) AS scaled
-                FROM medication_entries me2
-                CROSS JOIN LATERAL jsonb_each_text(me2.nutrients_snapshot->'custom_nutrients')
-                WHERE me2.user_id = ${userExpr} AND me2.entry_date = ${dateExpr} AND me2.status IN ('taken', 'prn_taken') AND me2.nutrients_snapshot IS NOT NULL`;
+/**
+ * The supplement arm of a day's intake, on its own.
+ *
+ * `getDailyNutritionSummary` already folds these into its food totals, but the Diary
+ * computes eaten calories and its macro totals separately (in JS, from food entries), so
+ * it needs the supplement contribution as a distinct number: once to add into the totals,
+ * and once to show as its own line, so what is displayed still reconciles against the
+ * food rows the user can see.
+ *
+ * Fields are `FOOD_VARIANT_NUTRIENT_FIELDS`, the same list `reportRepository` applies
+ * `supplementFixedSubquery` to for the range query and the same fixed fields the Diary's summary
+ * card can render. This selected only the five macro fields until #2145, which is how a
+ * supplement's calcium reached Reports but not the Diary card beside it. Returns zeros
+ * rather than nulls on a day with no supplements, so callers can add unconditionally.
+ *
+ * Custom nutrients come back alongside them, aggregated by name. Most micronutrients are
+ * custom: only six catalog entries have a fixed column, so magnesium, vitamin D, zinc and
+ * the B vitamins reach the client through `custom_nutrients` or not at all. This endpoint
+ * carried none of them until #2145; `getDailyNutritionSummary` already unions them into
+ * its food totals, but the Diary does not call that.
+ *
+ * Unlike the callers that add a supplement total onto a food SUM, this one has no food arm
+ * to correlate against, so the seventeen fields are summed in a single pass over the day's
+ * doses rather than as seventeen scalar subqueries that each rescan the same rows. The
+ * outer COALESCE is what the per-subquery COALESCE used to do: with no GROUP BY the inner
+ * aggregate still yields exactly one row on a day with no doses, but a row of NULLs.
+ */
+async function getDailySupplementTotals(userId: string, date: string) {
+  const client = await getClient(userId);
+  try {
+    const sums = FOOD_VARIANT_NUTRIENT_FIELDS.map(
+      (field) => `${supplementFixedAgg(field, 'me')} AS ${field}`
+    ).join(',\n          ');
+    const selects = FOOD_VARIANT_NUTRIENT_FIELDS.map(
+      (field) => `COALESCE(supplement_fixed.${field}, 0) AS ${field}`
+    ).join(',\n        ');
+    const result = await client.query(
+      `SELECT
+        ${selects},
+        ${supplementCustomTotals('$1', '$2')} AS custom_nutrients
+      FROM (
+        SELECT
+          ${sums}
+        FROM medication_entries me
+        WHERE ${supplementScanWhere('me', '$1', '$2')}
+      ) supplement_fixed`,
+      [userId, date]
+    );
+    const row = result.rows[0] ?? {};
+    const customRow = (row.custom_nutrients ?? {}) as Record<string, unknown>;
+    return {
+      ...(Object.fromEntries(
+        FOOD_VARIANT_NUTRIENT_FIELDS.map((field) => [
+          field,
+          Number(row[field]) || 0,
+        ])
+      ) as Record<FoodVariantNutrientField, number>),
+      // A key whose every contribution failed `sf_try_numeric` sums to NULL and arrives as
+      // JSON null, so these are coerced the same way the fixed columns are.
+      custom_nutrients: Object.fromEntries(
+        Object.entries(customRow).map(([name, value]) => [
+          name,
+          Number(value) || 0,
+        ])
+      ),
+    };
+  } finally {
+    client.release();
+  }
 }
 
 async function getDailyNutritionSummary(userId: string, date: string) {
@@ -247,11 +306,11 @@ async function getDailyNutritionSummary(userId: string, date: string) {
   try {
     const result = await client.query(
       `SELECT
-        COALESCE(SUM(fe.calories * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixed('calories', '$1', '$2')} AS total_calories,
-        COALESCE(SUM(fe.protein * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixed('protein', '$1', '$2')} AS total_protein,
-        COALESCE(SUM(fe.carbs * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixed('carbs', '$1', '$2')} AS total_carbs,
-        COALESCE(SUM(fe.fat * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixed('fat', '$1', '$2')} AS total_fat,
-        COALESCE(SUM(fe.dietary_fiber * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixed('dietary_fiber', '$1', '$2')} AS total_dietary_fiber,
+        COALESCE(SUM(fe.calories * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixedSubquery('calories', '$1', '$2')} AS total_calories,
+        COALESCE(SUM(fe.protein * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixedSubquery('protein', '$1', '$2')} AS total_protein,
+        COALESCE(SUM(fe.carbs * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixedSubquery('carbs', '$1', '$2')} AS total_carbs,
+        COALESCE(SUM(fe.fat * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixedSubquery('fat', '$1', '$2')} AS total_fat,
+        COALESCE(SUM(fe.dietary_fiber * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixedSubquery('dietary_fiber', '$1', '$2')} AS total_dietary_fiber,
         COALESCE(
           (
             SELECT jsonb_object_agg(key, value)
@@ -291,11 +350,11 @@ async function getDailyNutritionSummariesByDates(
     const result = await client.query(
       `SELECT
         d.entry_date,
-        COALESCE(SUM(fe.calories * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixed('calories', 'd.user_id', 'd.entry_date')} AS total_calories,
-        COALESCE(SUM(fe.protein * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixed('protein', 'd.user_id', 'd.entry_date')} AS total_protein,
-        COALESCE(SUM(fe.carbs * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixed('carbs', 'd.user_id', 'd.entry_date')} AS total_carbs,
-        COALESCE(SUM(fe.fat * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixed('fat', 'd.user_id', 'd.entry_date')} AS total_fat,
-        COALESCE(SUM(fe.dietary_fiber * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixed('dietary_fiber', 'd.user_id', 'd.entry_date')} AS total_dietary_fiber,
+        COALESCE(SUM(fe.calories * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixedSubquery('calories', 'd.user_id', 'd.entry_date')} AS total_calories,
+        COALESCE(SUM(fe.protein * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixedSubquery('protein', 'd.user_id', 'd.entry_date')} AS total_protein,
+        COALESCE(SUM(fe.carbs * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixedSubquery('carbs', 'd.user_id', 'd.entry_date')} AS total_carbs,
+        COALESCE(SUM(fe.fat * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixedSubquery('fat', 'd.user_id', 'd.entry_date')} AS total_fat,
+        COALESCE(SUM(fe.dietary_fiber * fe.quantity / NULLIF(fe.serving_size, 0)), 0) + ${supplementFixedSubquery('dietary_fiber', 'd.user_id', 'd.entry_date')} AS total_dietary_fiber,
         COALESCE(
           (
             SELECT jsonb_object_agg(key, value)
@@ -317,11 +376,10 @@ async function getDailyNutritionSummariesByDates(
            FROM food_entries
           WHERE user_id = $1 AND entry_date = ANY($2::date[])
          UNION
-         SELECT DISTINCT user_id, entry_date
-           FROM medication_entries
-          WHERE user_id = $1 AND entry_date = ANY($2::date[])
-            AND status IN ('taken', 'prn_taken')
-            AND nutrients_snapshot IS NOT NULL
+         SELECT DISTINCT me.user_id, me.entry_date
+           FROM medication_entries me
+          WHERE me.user_id = $1 AND me.entry_date = ANY($2::date[])
+            AND ${supplementCountable('me')}
        ) d
        LEFT JOIN food_entries fe
               ON fe.user_id = d.user_id AND fe.entry_date = d.entry_date
@@ -363,14 +421,61 @@ async function getFoodsNeedingReview(userId: string) {
     client.release();
   }
 }
+/**
+ * Rewrites the snapshot past diary entries were logged with.
+ *
+ * `syncImages` decides what happens to the photo column:
+ *  - `false` - `images` is left out of the UPDATE entirely, so every entry
+ *    keeps whatever photo it is showing today (inherited or diary-set).
+ *  - `true` - every matching entry is forced onto the food's current photos,
+ *    including entries where the user picked their own photo in the diary.
+ *
+ * The diary-set photos that get replaced are returned so the caller can unlink
+ * their files: nothing else references `/uploads/food_entries/<entryId>/...`,
+ * so they would otherwise sit on disk forever.
+ */
 async function updateFoodEntriesSnapshot(
   userId: string,
   foodId: string,
   variantId: string,
-  newSnapshotData: FoodEntrySnapshot
-) {
+  newSnapshotData: FoodEntrySnapshot,
+  syncImages: boolean = true
+): Promise<{ rowCount: number; replacedEntryImages: string[] }> {
   const client = await getClient(userId); // User-specific operation
   try {
+    // The read and the overwrite share one transaction, and the read takes row
+    // locks. Without them a diary photo saved between the two statements would
+    // be overwritten by the UPDATE while going unreported here, leaking its
+    // file: nothing would ever reference it again, and nothing would delete it.
+    await client.query('BEGIN');
+
+    // Scoped to the same rows the UPDATE touches, and to diary-set paths only —
+    // an inherited path points at the food's own upload directory and must
+    // never be unlinked from here.
+    let replacedEntryImages: string[] = [];
+    if (syncImages) {
+      // The whole column, not the unnested paths: FOR UPDATE cannot be applied
+      // to a set-returning function or a DISTINCT query, so the rows are locked
+      // as they are and filtered below.
+      const existing = await client.query(
+        `SELECT images
+           FROM food_entries
+          WHERE user_id = $1
+            AND food_id = $2
+            AND variant_id = $3
+            FOR UPDATE`,
+        [userId, foodId, variantId]
+      );
+      const seen = new Set<string>();
+      for (const row of existing.rows as { images: unknown }[]) {
+        for (const image of Array.isArray(row.images) ? row.images : []) {
+          const path = String(image);
+          if (path.startsWith('/uploads/food_entries/')) seen.add(path);
+        }
+      }
+      replacedEntryImages = [...seen];
+    }
+
     const result = await client.query(
       `UPDATE food_entries
        SET
@@ -397,6 +502,9 @@ async function updateFoodEntriesSnapshot(
           iron = $21,
           glycemic_index = $22,
           custom_nutrients = $23
+          -- The user picked "nutrition only", so the photo column is left out
+          -- of the statement and every entry keeps the photo it shows today.
+          ${syncImages ? ', images = $27::jsonb' : ''}
        WHERE user_id = $24 AND food_id = $25 AND variant_id = $26
        RETURNING id`,
       [
@@ -426,9 +534,27 @@ async function updateFoodEntriesSnapshot(
         userId,
         foodId,
         variantId,
+        // Postgres rejects a bind with more parameters than the statement
+        // references, so $27 is only supplied when the SET clause uses it.
+        ...(syncImages ? [JSON.stringify(newSnapshotData.images ?? [])] : []),
       ]
     );
-    return result.rowCount;
+    // Committed before the caller unlinks anything: a file deleted for a
+    // transaction that then rolled back would be gone with its row intact.
+    await client.query('COMMIT');
+
+    return {
+      rowCount: result.rowCount ?? 0,
+      // Only report photos that actually stopped being referenced.
+      replacedEntryImages: replacedEntryImages.filter(
+        (image) => !(newSnapshotData.images ?? []).includes(image)
+      ),
+    };
+  } catch (error) {
+    // Best-effort: the connection may already be unusable, and the original
+    // error is the one worth surfacing.
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
   } finally {
     client.release();
   }
@@ -450,6 +576,7 @@ export { getRecentFoods };
 export { getTopFoods };
 export { getFavoriteFoods, addFoodFavorite, removeFoodFavorite };
 export { getDailyNutritionSummary, getDailyNutritionSummariesByDates };
+export { getDailySupplementTotals };
 export { getFoodsNeedingReview };
 export { updateFoodEntriesSnapshot };
 export { clearUserIgnoredUpdate };
@@ -461,6 +588,7 @@ export default {
   addFoodFavorite,
   removeFoodFavorite,
   getDailyNutritionSummary,
+  getDailySupplementTotals,
   getDailyNutritionSummariesByDates,
   getFoodsNeedingReview,
   updateFoodEntriesSnapshot,

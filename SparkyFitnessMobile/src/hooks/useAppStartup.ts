@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import i18n from '../localization/i18n';
 import { Platform } from 'react-native';
-import * as SplashScreen from 'expo-splash-screen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initWorkoutNotificationActions } from '../stores/activeWorkoutStore';
+import { loadBackgroundSyncEnabled } from '../services/storage';
 import {
-  loadBackgroundSyncEnabled,
-  getActiveServerConfig,
-} from '../services/storage';
-import { startObservers, stopObservers } from '../services/healthConnectService';
+  startObservers,
+  stopObservers,
+} from '../services/healthConnectService';
 import {
   configureBackgroundSync,
   performBackgroundSync,
@@ -16,42 +16,13 @@ import {
 import { tryClaimAutoSync } from '../services/autoSyncCoordinator';
 import { initializeTheme } from '../services/themeService';
 import { addLog, initLogService } from '../services/LogService';
-import { initNotifications } from '../services/notifications';
+import {
+  initNotifications,
+  registerLocalizedNotificationPresentation,
+} from '../services/notifications';
 import { initMedicationNotificationActions } from '../services/medicationNotificationHandler';
 import { initWorkoutLiveActivity } from '../services/workoutLiveActivity';
 import { ensureTimezoneBootstrapped } from '../services/api/preferencesApi';
-
-export type InitialRoute = 'Tabs' | 'Onboarding';
-
-/**
- * Resolves the app's initial route from the active server config and hides the
- * splash screen once decided. Deep linking stays disabled until the user is on
- * Tabs so widget links cannot bypass first-run onboarding.
- */
-export function useInitialRoute() {
-  const [initialRoute, setInitialRoute] = useState<InitialRoute | null>(null);
-  const [linkingEnabled, setLinkingEnabled] = useState(false);
-
-  useEffect(() => {
-    const determine = async () => {
-      try {
-        const config = await getActiveServerConfig();
-        const route = config ? 'Tabs' : 'Onboarding';
-        setInitialRoute(route);
-        setLinkingEnabled(route === 'Tabs');
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        addLog(`[App] Failed to load active server config on startup: ${message}`, 'ERROR');
-        setInitialRoute('Onboarding');
-      } finally {
-        await SplashScreen.hideAsync();
-      }
-    };
-    determine();
-  }, []);
-
-  return { initialRoute, linkingEnabled, setLinkingEnabled };
-}
 
 interface AppStartupArgs {
   /**
@@ -69,6 +40,16 @@ interface AppStartupArgs {
 export function useAppStartup({ shouldYieldObserverSync }: AppStartupArgs) {
   useEffect(() => {
     let cancelled = false;
+    const onLanguageChanged = () => {
+      void registerLocalizedNotificationPresentation().catch(error => {
+        const message = error instanceof Error ? error.message : String(error);
+        addLog(
+          `[App] Failed to refresh localized notification presentation: ${message}`,
+          'ERROR',
+        );
+      });
+    };
+    i18n.on('languageChanged', onLanguageChanged);
 
     // Initialize theme from storage on app start
     initializeTheme();
@@ -82,7 +63,10 @@ export function useAppStartup({ shouldYieldObserverSync }: AppStartupArgs) {
 
     initializeApp().catch(error => {
       const message = error instanceof Error ? error.message : String(error);
-      addLog(`[App] Failed to initialize app startup state: ${message}`, 'ERROR');
+      addLog(
+        `[App] Failed to initialize app startup state: ${message}`,
+        'ERROR',
+      );
     });
 
     initWorkoutNotificationActions();
@@ -92,7 +76,10 @@ export function useAppStartup({ shouldYieldObserverSync }: AppStartupArgs) {
     // with the active-workout store.
     initWorkoutLiveActivity().catch(error => {
       const message = error instanceof Error ? error.message : String(error);
-      addLog(`[App] Failed to initialize workout Live Activity: ${message}`, 'ERROR');
+      addLog(
+        `[App] Failed to initialize workout Live Activity: ${message}`,
+        'ERROR',
+      );
     });
 
     // Initialize log service (warms cache, prunes old logs, registers AppState listener)
@@ -106,7 +93,10 @@ export function useAppStartup({ shouldYieldObserverSync }: AppStartupArgs) {
       // has a stable timezone for the very first sync.
       const timezone = await ensureTimezoneBootstrapped();
       if (!timezone) {
-        addLog('[App] Timezone bootstrap did not resolve a timezone before sync setup.', 'WARNING');
+        addLog(
+          '[App] Timezone bootstrap did not resolve a timezone before sync setup.',
+          'WARNING',
+        );
       }
 
       if (cancelled) return;
@@ -115,7 +105,10 @@ export function useAppStartup({ shouldYieldObserverSync }: AppStartupArgs) {
         await configureBackgroundSync();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        addLog(`[App] Failed to configure background sync: ${message}`, 'ERROR');
+        addLog(
+          `[App] Failed to configure background sync: ${message}`,
+          'ERROR',
+        );
       }
 
       if (cancelled || Platform.OS !== 'ios') return;
@@ -132,8 +125,12 @@ export function useAppStartup({ shouldYieldObserverSync }: AppStartupArgs) {
 
           performBackgroundSync('healthkit-observer')
             .catch(error => {
-              const message = error instanceof Error ? error.message : String(error);
-              addLog(`[App] Observer-triggered sync failed: ${message}`, 'ERROR');
+              const message =
+                error instanceof Error ? error.message : String(error);
+              addLog(
+                `[App] Observer-triggered sync failed: ${message}`,
+                'ERROR',
+              );
             })
             .finally(() => {
               release();
@@ -141,7 +138,10 @@ export function useAppStartup({ shouldYieldObserverSync }: AppStartupArgs) {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        addLog(`[App] Failed to configure HealthKit observers: ${message}`, 'ERROR');
+        addLog(
+          `[App] Failed to configure HealthKit observers: ${message}`,
+          'ERROR',
+        );
       }
     };
 
@@ -152,11 +152,15 @@ export function useAppStartup({ shouldYieldObserverSync }: AppStartupArgs) {
 
     flushPendingHealthSyncCacheRefresh().catch(error => {
       const message = error instanceof Error ? error.message : String(error);
-      addLog(`[App] Failed to flush pending health sync refresh: ${message}`, 'ERROR');
+      addLog(
+        `[App] Failed to flush pending health sync refresh: ${message}`,
+        'ERROR',
+      );
     });
 
     return () => {
       cancelled = true;
+      i18n.off('languageChanged', onLanguageChanged);
       if (Platform.OS === 'ios') {
         stopObservers();
       }

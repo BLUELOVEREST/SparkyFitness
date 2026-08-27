@@ -15,6 +15,12 @@ jest.mock('../../src/components/SwipeableFoodRow', () => {
   return { __esModule: true, default: () => <View testID="food-row" /> };
 });
 
+jest.mock('../../src/hooks/usePreferences', () => ({
+  usePreferences: jest.fn(() => ({
+    preferences: { language: 'en' },
+  })),
+}));
+
 const mealTypes: MealType[] = [
   { id: 'sys-b', name: 'breakfast', sort_order: 0, user_id: null, created_at: '', is_visible: true, show_in_quick_log: true },
   { id: 'sys-l', name: 'lunch', sort_order: 1, user_id: null, created_at: '', is_visible: true, show_in_quick_log: true },

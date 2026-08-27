@@ -14,6 +14,7 @@ import type {
   SaveWorkoutPlanTemplatePayload,
   WorkoutPlanTemplate,
 } from '../types/workoutPlan';
+import i18n from '../localization/i18n';
 
 export function useWorkoutPlanTemplates(options?: { enabled?: boolean }) {
   const { enabled = true } = options ?? {};
@@ -63,7 +64,7 @@ export function useCreateWorkoutPlanTemplate(options?: {
   const mutation = useMutation({
     mutationFn: (payload: SaveWorkoutPlanTemplatePayload) =>
       createWorkoutPlanTemplate(payload),
-    onSuccess: (template) => {
+    onSuccess: template => {
       queryClient.invalidateQueries({ queryKey: workoutPlanTemplatesQueryKey });
       queryClient.invalidateQueries({
         queryKey: activeTrainingFocusPlanQueryKey(template.start_date),
@@ -73,8 +74,12 @@ export function useCreateWorkoutPlanTemplate(options?: {
     onError: () => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to create workout plan',
-        text2: 'Please try again.',
+        text1: i18n.t('planTemplates.toast.workoutCreateFailed', {
+          defaultValue: 'Failed to create workout plan',
+        }),
+        text2: i18n.t('planTemplates.tryAgain', {
+          defaultValue: 'Please try again.',
+        }),
       });
     },
   });
@@ -101,7 +106,7 @@ export function useUpdateWorkoutPlanTemplate(options?: {
       }
       return updateWorkoutPlanTemplate({ ...payload, id });
     },
-    onSuccess: (template) => {
+    onSuccess: template => {
       queryClient.invalidateQueries({ queryKey: workoutPlanTemplatesQueryKey });
       queryClient.invalidateQueries({
         queryKey: activeTrainingFocusPlanQueryKey(template.start_date),
@@ -111,8 +116,12 @@ export function useUpdateWorkoutPlanTemplate(options?: {
     onError: () => {
       Toast.show({
         type: 'error',
-        text1: 'Failed to update workout plan',
-        text2: 'Please try again.',
+        text1: i18n.t('planTemplates.toast.workoutUpdateFailed', {
+          defaultValue: 'Failed to update workout plan',
+        }),
+        text2: i18n.t('planTemplates.tryAgain', {
+          defaultValue: 'Please try again.',
+        }),
       });
     },
   });

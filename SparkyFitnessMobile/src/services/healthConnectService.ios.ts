@@ -12,6 +12,7 @@ import {
 } from '../types/healthRecords';
 import { SyncDuration } from './healthkit/preferences';
 import { migrateEnabledMetricPermissionsIfNeeded } from './shared/healthPermissionMigration';
+import { enabledWritebackPermissions } from './shared/healthPermissionSets';
 
 // Tell the read transformers which bundle id is "us" so they skip HealthKit records
 // this app wrote (hydration writeback feedback-loop guard). Parallels Android's
@@ -35,6 +36,9 @@ export const getSyncStartDate = HealthKit.getSyncStartDate;
 
 // Locked-device detection (HealthKit database inaccessible)
 export const resetDatabaseInaccessibleCount = HealthKit.resetDatabaseInaccessibleCount;
+// HealthKit has no equivalent: its store is not a separate client that can
+// disconnect. Locked-device failures are covered by databaseInaccessibleCount.
+export const getClientUnavailableCount = (): number => 0;
 export const getDatabaseInaccessibleCount = HealthKit.getDatabaseInaccessibleCount;
 
 export const aggregateByDay = HealthKitAggregation.aggregateByDay;
@@ -74,9 +78,11 @@ export const saveSyncDuration = HealthKitPreferences.saveSyncDuration;
 export const loadSyncDuration = HealthKitPreferences.loadSyncDuration;
 export const refreshEnabledMetricPermissions = async (
   healthMetricStates: HealthMetricStates,
+  writebackStates: Record<string, boolean> = {},
 ): Promise<boolean> =>
   migrateEnabledMetricPermissionsIfNeeded({
     healthMetricStates,
+    extraPermissions: enabledWritebackPermissions(writebackStates),
     metrics: HEALTH_METRICS,
     loadHealthPreference,
     saveHealthPreference,
