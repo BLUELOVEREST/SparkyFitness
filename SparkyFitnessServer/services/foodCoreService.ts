@@ -106,7 +106,10 @@ async function searchFoods(
         authenticatedUserId,
         authenticatedUserId
       );
-      const limit = userPreferences?.food_display_limit || limitFromRequest; // Use food_display_limit for search results
+      // item_display_limit, not food_display_limit: the column was renamed by
+      // migration 20250720201800 and this read was never updated, so it
+      // resolved to undefined and the preference silently did nothing.
+      const limit = userPreferences?.item_display_limit || limitFromRequest;
       const foods = await foodRepository.searchFoods(
         name,
         targetUserId || authenticatedUserId,
@@ -1071,7 +1074,8 @@ async function lookupBarcode(
           undefined,
           language,
           credentialUserId,
-          provider.id
+          provider.id,
+          provider.is_public === true ? 'global' : 'personal'
         );
         if (offData?.status === 1 && offData.product) {
           const food = mapOpenFoodFactsProduct(offData.product, {
@@ -1103,15 +1107,24 @@ async function lookupBarcode(
       // Only look up a credentialed OFF provider when none is already
       // resolved. Avoids an extra DB round-trip on every OFF barcode lookup
       // for users without configured credentials.
-      let offProviderId = null;
+      let offProvider: {
+        id: string;
+        scope: 'personal' | 'global';
+      } | null = null;
       if (provider?.provider_type === 'openfoodfacts') {
-        offProviderId = provider.id;
+        offProvider = {
+          id: provider.id,
+          scope: provider.is_public === true ? 'global' : 'personal',
+        };
       } else {
         try {
-          offProviderId =
+          const offProviderId =
             await externalProviderService.getActiveOpenFoodFactsProviderId(
               credentialUserId
             );
+          offProvider = offProviderId
+            ? { id: offProviderId, scope: 'personal' }
+            : null;
         } catch (fallbackError) {
           log(
             'debug',
@@ -1125,8 +1138,9 @@ async function lookupBarcode(
           barcode,
           undefined,
           language,
-          offProviderId ? credentialUserId : undefined,
-          offProviderId || undefined
+          offProvider ? credentialUserId : undefined,
+          offProvider?.id,
+          offProvider?.scope ?? 'personal'
         );
         if (offData?.status === 1 && offData.product) {
           const food = mapOpenFoodFactsProduct(offData.product, {

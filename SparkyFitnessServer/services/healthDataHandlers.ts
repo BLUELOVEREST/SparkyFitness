@@ -4,8 +4,8 @@ import exerciseDb from '../models/exercise.js';
 import exerciseEntryDb, {
   EXERCISE_ENTRY_TELEMETRY_COLUMNS,
 } from '../models/exerciseEntry.js';
-import activityDetailsRepository from '../models/activityDetailsRepository.js';
 import foodRepository from '../models/foodRepository.js';
+import * as genericHealthRepository from '../models/genericHealthRepository.js';
 import moodRepository from '../models/moodRepository.js';
 import waterContainerRepository from '../models/waterContainerRepository.js';
 import * as workoutTelemetryRepo from '../models/workoutTelemetryRepository.js';
@@ -28,6 +28,7 @@ import {
   instantToDay,
   lengthToCm,
   round,
+  MAX_HEALTH_TOTAL_CALORIES_PER_DAY,
 } from '@workspace/shared';
 
 /**
@@ -591,7 +592,8 @@ export function createCategoryResolver(): HealthBatchContext['resolveCategory'] 
 function prepareCheckInMeasurement(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   entry: any
-): // eslint-disable-next-line @typescript-eslint/no-explicit-any
+):
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   { measurements: Record<string, any> } | { error: string } {
   const canonical = TYPE_ALIASES[entry.type] ?? entry.type;
   switch (canonical) {
@@ -646,13 +648,28 @@ function prepareCheckInMeasurement(
     case 'right_calf':
     case 'muscle_mass_kg':
     case 'bone_mass_kg': {
-      // The smart-scale masses (muscle/bone) are always stored in kg;
+      // The smart-scale masses (muscle/bone) are stored in check_in_measurements;
       // providers normalize before dispatch — Garmin via grams_to_kg in the
       // Python service, Withings via its kg-denominated measure types.
       const numericValue = parseFloat(entry.value);
       if (isNaN(numericValue) || numericValue <= 0) {
         return {
           error: `Invalid value for ${entry.type}. Must be a positive number.`,
+        };
+      }
+      return { measurements: { [canonical]: numericValue } };
+    }
+    case 'bmr': {
+      const trimmed = String(entry.value).trim();
+      const numericValue = Number(trimmed);
+      if (
+        trimmed === '' ||
+        !Number.isFinite(numericValue) ||
+        numericValue < 300 ||
+        numericValue > 10000
+      ) {
+        return {
+          error: `Invalid value for ${entry.type}. Must be between 300 and 10000 kcal.`,
         };
       }
       return { measurements: { [canonical]: numericValue } };
@@ -897,6 +914,53 @@ const activeCaloriesHandler: HealthTypeHandler = {
   },
 };
 
+const normalizeHealthSourceProvider = (source: unknown): string => {
+  if (typeof source !== 'string' || source.trim() === '') {
+    return 'health_connect';
+  }
+  const normalized = source
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  return normalized === 'healthconnect' ? 'health_connect' : normalized;
+};
+
+const totalCaloriesHandler: HealthTypeHandler = {
+  async handle(entry, ctx) {
+    const rawValue: unknown = entry.value;
+    const totalCaloriesValue =
+      typeof rawValue === 'number'
+        ? rawValue
+        : typeof rawValue === 'string' && rawValue.trim() !== ''
+          ? Number(rawValue)
+          : Number.NaN;
+
+    if (
+      !Number.isFinite(totalCaloriesValue) ||
+      totalCaloriesValue < 0 ||
+      totalCaloriesValue > MAX_HEALTH_TOTAL_CALORIES_PER_DAY
+    ) {
+      return {
+        status: 'error',
+        error: `Invalid value for total_calories. Must be between 0 and ${MAX_HEALTH_TOTAL_CALORIES_PER_DAY}.`,
+      };
+    }
+
+    const result = await genericHealthRepository.upsertDailyHealthMetrics(
+      String(ctx.userId),
+      String(ctx.actingUserId),
+      {
+        user_id: String(ctx.userId),
+        entry_date: ctx.parsedDate,
+        source_provider: normalizeHealthSourceProvider(entry.source),
+        total_calories: totalCaloriesValue,
+        total_calories_captured_at: new Date(ctx.entryTimestamp),
+      }
+    );
+    return { status: 'success', data: result };
+  },
+};
+
 const weightHandler: HealthTypeHandler = {
   handle: handleCheckInEntry,
   handleBatch: checkInHandleBatch,
@@ -1048,6 +1112,11 @@ const boneMassHandler: HealthTypeHandler = {
 };
 
 const bodyWaterHandler: HealthTypeHandler = {
+  handle: handleCheckInEntry,
+  handleBatch: checkInHandleBatch,
+};
+
+const bmrHandler: HealthTypeHandler = {
   handle: handleCheckInEntry,
   handleBatch: checkInHandleBatch,
 };
@@ -1588,6 +1657,7 @@ const workoutHandler: HealthTypeHandler = {
         duration,
         raw_data,
         source_id,
+        steps,
       } = entry;
       const exerciseName = activityType || `${source} Exercise`;
       const { category, modality } = resolveActivityMapping(
@@ -1657,10 +1727,30 @@ const workoutHandler: HealthTypeHandler = {
           distance: distance,
           sets, // Pass sets if present for mobile workout sync
           source_id: source_id || null,
+          ...(typeof steps === 'number' && Number.isFinite(steps) && steps > 0
+            ? { steps: Math.round(steps) }
+            : {}),
           ...telemetry,
         },
         ctx.actingUserId,
-        source
+        source,
+        null,
+        // Stored inside the entry's own transaction rather than afterwards: a
+        // second sync of the same source range-deletes and re-inserts these
+        // rows, so a detail written against an already committed parent can hit
+        // a parent that is gone, which its RLS policy reports as a row-level
+        // security violation and the workout loses its raw data.
+        raw_data
+          ? {
+              activityDetail: {
+                provider_name: source,
+                detail_type: `${type}_raw_data`,
+                detail_data: JSON.stringify(raw_data),
+                created_by_user_id: ctx.actingUserId,
+                updated_by_user_id: ctx.actingUserId,
+              },
+            }
+          : {}
       );
       if (gpsPoints.length > 0 || hrSamples.length > 0 || entry.laps) {
         try {
@@ -1685,16 +1775,6 @@ const workoutHandler: HealthTypeHandler = {
             `[processHealthData] Saved workout ${exerciseEntry.id} but failed to persist its telemetry: ${message}`
           );
         }
-      }
-      if (raw_data) {
-        await activityDetailsRepository.createActivityDetail(ctx.userId, {
-          exercise_entry_id: exerciseEntry.id,
-          provider_name: source,
-          detail_type: `${type}_raw_data`,
-          detail_data: JSON.stringify(raw_data),
-          created_by_user_id: ctx.actingUserId,
-          updated_by_user_id: ctx.actingUserId,
-        });
       }
       return { status: 'success', data: exerciseEntry };
     } catch (workoutError) {
@@ -1871,6 +1951,7 @@ export const HEALTH_TYPE_HANDLERS: Record<string, HealthTypeHandler> = {
   steps: stepsHandler,
   water: waterHandler,
   active_calories: activeCaloriesHandler,
+  total_calories: totalCaloriesHandler,
   weight: weightHandler,
   body_fat: bodyFatHandler,
   height: heightHandler,
@@ -1890,6 +1971,7 @@ export const HEALTH_TYPE_HANDLERS: Record<string, HealthTypeHandler> = {
   muscle_mass_kg: muscleMassHandler,
   bone_mass_kg: boneMassHandler,
   body_water_percentage: bodyWaterHandler,
+  bmr: bmrHandler,
   SleepSession: sleepSessionHandler,
   Stress: stressHandler,
   Workout: workoutHandler,
@@ -1905,6 +1987,7 @@ export const TYPE_ALIASES: Record<string, string> = {
   step: 'steps',
   'Active Calories': 'active_calories',
   ActiveCaloriesBurned: 'active_calories',
+  TotalCaloriesBurned: 'total_calories',
   body_fat_percentage: 'body_fat',
   BodyCircumference: 'body_circumference',
   // Health Connect spellings for bone mass; both already arrive in kg.
@@ -1914,6 +1997,9 @@ export const TYPE_ALIASES: Record<string, string> = {
   BoneMass: 'bone_mass_kg',
   muscle_mass: 'muscle_mass_kg',
   Height: 'height',
+  basal_metabolic_rate: 'bmr',
+  BasalMetabolicRate: 'bmr',
+  resting_energy: 'bmr',
   ExerciseSession: 'Workout',
   mood: 'Mood',
 };

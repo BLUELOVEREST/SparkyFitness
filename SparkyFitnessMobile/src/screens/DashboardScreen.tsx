@@ -13,7 +13,7 @@ import {
   usePreferences,
   useMeasurements,
   useWaterIntakeMutation,
-  useMeasurementsRange,
+  useHealthTrends,
   useWidgetSync,
   useCustomNutrients,
   useNutrientDisplayPreferences,
@@ -154,9 +154,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
     enabled: isConnected,
   });
 
-  const { stepsData, weightData: rawWeightData, isLoading: isStepsLoading, isError: isStepsError, refetch: refetchSteps } = useMeasurementsRange({
+  const trends = useHealthTrends({
     range: stepsRange,
     enabled: isConnected,
+    activeTrends: ['steps', 'weight', 'sleep'],
   });
 
   const { customNutrients, refetch: refetchCustomNutrients } = useCustomNutrients({ enabled: isConnected });
@@ -172,10 +173,19 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
   // The chart is a single-axis line graph; if the user picked stones+lbs, plot lbs.
   const weightUnit: 'kg' | 'lbs' =
     (preferences?.default_weight_unit ?? 'kg') === 'kg' ? 'kg' : 'lbs';
-  const weightData = useMemo(() => {
-    if (weightUnit === 'kg') return rawWeightData;
-    return rawWeightData.map(p => ({ ...p, weight: weightFromKg(p.weight, weightUnit) }));
-  }, [rawWeightData, weightUnit]);
+  const weightTrend = useMemo(
+    () => ({
+      ...trends.weight,
+      data:
+        weightUnit === 'kg'
+          ? trends.weight.data
+          : trends.weight.data.map((p) => ({
+              ...p,
+              weight: weightFromKg(p.weight, weightUnit),
+            })),
+    }),
+    [trends.weight, weightUnit]
+  );
 
   // CSS variable macro colors are theme-aware (lower saturation than hardcoded hex)
   const [proteinColor, carbsColor, fatColor, fiberColor, progressTrackOverfillColor] = useCSSVariable([
@@ -213,7 +223,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
       refetch(),
       refetchPreferences(),
       refetchMeasurements(),
-      refetchSteps(),
+      trends.refetch(),
       refetchCustomNutrients(),
       refetchNutrientPrefs(),
       refetchActiveMealPlanDay(),
@@ -223,7 +233,16 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
       queryClient.invalidateQueries({ queryKey: medicationsRootQueryKey }),
     ]);
     setRefreshing(false);
-  }, [refetch, refetchPreferences, refetchMeasurements, refetchSteps, refetchCustomNutrients, refetchNutrientPrefs, refetchActiveMealPlanDay, queryClient]);
+  }, [
+    refetch,
+    refetchPreferences,
+    refetchMeasurements,
+    trends,
+    refetchCustomNutrients,
+    refetchNutrientPrefs,
+    refetchActiveMealPlanDay,
+    queryClient,
+  ]);
 
   // Render content based on state
   const renderContent = () => {
@@ -467,12 +486,12 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
         <SegmentedControl segments={RANGE_SEGMENTS(t)} activeKey={stepsRange} onSelect={setStepsRange} />
 
         <HealthTrendsPager
-          stepsData={stepsData}
-          weightData={weightData}
-          isLoading={isStepsLoading}
-          isError={isStepsError}
+          steps={trends.steps}
+          weight={weightTrend}
+          sleep={trends.sleep}
           range={stepsRange}
           weightUnit={weightUnit}
+          visibleTrends={['steps', 'weight', 'sleep']}
           activePage={chartPage}
           onPageSelected={setChartPage}
         />

@@ -35,31 +35,8 @@ export {
   activeAiServiceSettingQueryKey,
   userAiConfigAllowedQueryKey,
   fastingRootQueryKey,
-  fastingCurrentQueryKey,
-  fastingStatsQueryKey,
-  fastingHistoryQueryKey,
-  customNutrientsQueryKey,
-  nutrientDisplayPreferencesQueryKey,
   chatHistoryQueryKey,
-  cycleSettingsQueryKey,
-  cycleLogQueryKey,
-  cycleLogsRangeQueryKey,
-  cyclesQueryKey,
-  cycleOverviewQueryKey,
-  cycleInsightsQueryKey,
-  cycleFertilityQueryKey,
-  cycleTestsQueryKey,
-  cycleCorrelationsQueryKey,
-  pregnancyCurrentQueryKey,
-  pregnancyOverviewQueryKey,
-  pregnancyChecklistQueryKey,
-  pregnancyPhotosQueryKey,
   medicationsRootQueryKey,
-  medicationsListQueryKey,
-  medicationDetailQueryKey,
-  medicationEntriesQueryKey,
-  customCategoriesQueryKey,
-  customMeasurementsByDateQueryKey,
 } from './queryKeys';
 export { useServerConnection } from './useServerConnection';
 export { useServerConfigs } from './useServerConfigs';
@@ -68,10 +45,13 @@ export { useDailySummary } from './useDailySummary';
 export { useActiveMealPlanDay, useLogActiveMealPlanMeal } from './useActiveMealPlanDay';
 export { useActiveMealPlanWeek } from './useActiveMealPlanWeek';
 export { useFamilyUsers, useFamilyDailySummary } from './useFamilyDiary';
-export { useCopyFamilyFoodEntries } from './useCopyFamilyFoodEntries';
-export type { FamilyCopyRequest } from './useCopyFamilyFoodEntries';
 export { useMeasurements } from './useMeasurements';
-export { useUpsertCheckIn } from './useUpsertCheckIn';
+export { useMeasurementsRange } from './useMeasurementsRange';
+export type {
+  StepsDataPoint,
+  StepsRange,
+  WeightDataPoint,
+} from './useMeasurementsRange';
 export { usePreferences } from './usePreferences';
 export { useRefetchOnFocus } from './useRefetchOnFocus';
 export { useWaterIntakeMutation } from './useWaterIntakeMutation';
@@ -90,37 +70,29 @@ export {
   useUpdateMealPlanTemplate,
   useDeleteMealPlanTemplate,
 } from './useMealPlanTemplates';
+export {
+  useMealPlans,
+  useCreateMealPlan,
+  useUpdateMealPlan,
+  useDuplicateMealPlan,
+  useDeleteMealPlan,
+} from './useMealPlans';
+export { useMealPlanNutrition } from './useMealPlanNutrition';
 export { useMealSearch } from './useMealSearch';
 export { useExternalProviders } from './useExternalProviders';
 export { useExternalFoodSearch } from './useExternalFoodSearch';
 export { useAllProvidersSearch } from './useAllProvidersSearch';
 export type { ProviderSearchResult } from './useAllProvidersSearch';
 export { useMealTypes } from './useMealTypes';
-export { useDeleteFoodEntry } from './useDeleteFoodEntry';
 export { useDeleteFood } from './useDeleteFood';
-export { useUpdateFoodEntry } from './useUpdateFoodEntry';
 export { useFoodVariants } from './useFoodVariants';
-export { useSaveFood } from './useSaveFood';
-export { useAddFoodEntry } from './useAddFoodEntry';
-export { useMeasurementsRange } from './useMeasurementsRange';
-export type { StepsDataPoint, StepsRange, WeightDataPoint } from './useMeasurementsRange';
-export { useExerciseHistory } from './useExerciseHistory';
+export { useHealthTrends } from './useHealthTrends';
 export { useSuggestedExercises } from './useSuggestedExercises';
 export { useExerciseSearch } from './useExerciseSearch';
 export { useExercisesLibrary } from './useExercisesLibrary';
-export { useExternalExerciseSearch } from './useExternalExerciseSearch';
 export {
-  useCreateWorkout,
-  useCreateExerciseEntry,
-  useUpdateExerciseEntry,
   useCreateExercise,
   useUpdateExercise,
-} from './useExerciseMutations';
-export { useActivityForm } from './useActivityForm';
-export {
-  useDeleteExerciseEntry,
-  useDeleteWorkout,
-  useUpdateWorkout,
   useDeleteExerciseLibrary,
 } from './useExerciseMutations';
 export { useWorkoutPresets } from './useWorkoutPresets';
@@ -131,31 +103,13 @@ export {
   useUpdateWorkoutPreset,
   useDeleteWorkoutPreset,
 } from './useWorkoutPresetMutations';
-export { useExerciseSetEditing } from './useExerciseSetEditing';
 export { useWidgetSync } from './useWidgetSync';
 export { useProfile } from './useProfile';
 export { useActiveAiServiceSetting } from './useActiveAiServiceSetting';
-export { useUserAiConfigAllowed } from './useUserAiConfigAllowed';
-export {
-  useCurrentFast,
-  useFastingStats,
-  useFastingHistory,
-  useStartFast,
-  useEndFast,
-  useFastingGoalReconciler,
-} from './useFasting';
-export { useFastingTimer } from './useFastingTimer';
-export type { FastTimerValues } from './useFastingTimer';
-export { useCustomCategories, useCustomMeasurementsByDate, useSaveCustomMeasurement, useDeleteCustomMeasurement } from './useCustomMeasurements';
 export { useCustomNutrients } from './useCustomNutrients';
 export type { UserCustomNutrient } from './useCustomNutrients';
 export { useNutrientDisplayPreferences } from './useNutrientDisplayPreferences';
 export { useChatHistory } from './useChatHistory';
-export { useNutritionTrends } from './useNutritionTrends';
-export type { TrendRange } from './useNutritionTrends';
-
-// --- Cycle & Pregnancy Hooks ---
-export { useCycleSettings } from './useCycleSettings';
 export { useCycleMode } from './useCycleMode';
 export { useCycleLog, useCycleLogsRange } from './useCycleLogs';
 export { useUpsertCycleLog } from './useUpsertCycleLog';

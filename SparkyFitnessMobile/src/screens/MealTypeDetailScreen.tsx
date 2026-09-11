@@ -94,9 +94,9 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({
         summary?.foodEntries ?? [],
         mealTypeId,
         mealTypeName,
-        mealTypes,
+        mealTypes
       ),
-    [summary?.foodEntries, mealTypeId, mealTypeName, mealTypes],
+    [summary?.foodEntries, mealTypeId, mealTypeName, mealTypes]
   );
   const nutrition = useMemo(() => calculateMealNutrition(entries), [entries]);
   const isSystemMealType = resolvedType ? resolvedType.user_id === null : false;

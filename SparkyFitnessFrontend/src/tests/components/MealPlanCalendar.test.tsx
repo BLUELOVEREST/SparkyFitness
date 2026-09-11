@@ -28,6 +28,7 @@ jest.mock('@/contexts/PreferencesContext', () => ({
   usePreferences: () => ({
     loggingLevel: 'debug',
     foodDisplayLimit: 100,
+    itemDisplayLimit: 100,
     firstDayOfWeek: 1,
   }),
 }));
@@ -86,7 +87,7 @@ describe('MealPlanCalendar', () => {
     renderWithClient(<MealPlanCalendar />);
 
     await waitFor(() => {
-      expect(screen.getByText('No results.')).toBeInTheDocument();
+      expect(screen.getAllByText('No results found.')).toHaveLength(2);
     });
   });
 

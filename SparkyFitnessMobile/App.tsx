@@ -41,6 +41,8 @@ import {
   SafeOnboarding,
   SafeFoodsLibrary,
   SafeMealsLibrary,
+  SafeMealPlans,
+  SafeMealPlanForm,
   SafeExercisesLibrary,
   SafeWorkoutPresetsLibrary,
   SafeKitchen,
@@ -73,15 +75,20 @@ import {
   SafeWorkoutComplete,
   SafeActivityDetail,
   SafeFastingDetail,
+  SafeSleepDetail,
   SafeLogs,
   SafeSync,
   SafeImportHistory,
   SafeMeasurementsAdd,
+  SafeProgressPhotos,
+  SafeProgressPhotoCompare,
+  SafeProgressPhotoTimelapse,
   SafeChat,
   SafeCalorieSettings,
   SafeMealTypeSettings,
   SafeFoodSettings,
   SafeDashboardSettings,
+  SafeHealthTrendsSettings,
   SafeDiarySettings,
   SafeWorkoutSettings,
   SafeServerSettings,
@@ -196,6 +203,7 @@ function AppContent() {
     handleLogWorkout,
     handleAddActivity,
     handleAddMeasurements,
+    handleAddProgressPhotos,
     handleAskSparky,
     handleOpenCycle,
     handleSyncHealthData,
@@ -467,6 +475,28 @@ function AppContent() {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
+                },
+              )}
+            />
+            <Stack.Screen
+              name="MealPlans"
+              component={SafeMealPlans}
+              options={createStackScreenOptions(
+                t('mealPlans.title', { defaultValue: 'Meal plans' }),
+                {
+                  headerBackTitle: t('navigation.library', {
+                    defaultValue: 'Library',
+                  }),
+                },
+              )}
+            />
+            <Stack.Screen
+              name="MealPlanForm"
+              component={SafeMealPlanForm}
+              options={createStackScreenOptions(
+                t('mealPlans.title', { defaultValue: 'Meal plans' }),
+                {
+                  headerBackTitle: t('common.back', { defaultValue: 'Back' }),
                 },
               )}
             />
@@ -931,6 +961,18 @@ function AppContent() {
               }}
             />
             <Stack.Screen
+              name="SleepDetail"
+              component={SafeSleepDetail}
+              options={createStackScreenOptions(
+                t('screens.sleep', { defaultValue: 'Sleep' }),
+                {
+                  headerBackTitle: t('navigation.diary', {
+                    defaultValue: 'Diary',
+                  }),
+                },
+              )}
+            />
+            <Stack.Screen
               name="Logs"
               component={SafeLogs}
               options={createStackScreenOptions(
@@ -975,6 +1017,34 @@ function AppContent() {
                   presentation: 'modal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
                 },
+              )}
+            />
+            <Stack.Screen
+              name="ProgressPhotos"
+              component={SafeProgressPhotos}
+              options={createStackScreenOptions(
+                t('screens.progressPhotos', {
+                  defaultValue: 'Progress Photos',
+                }),
+                { headerBackButtonDisplayMode: 'minimal' },
+              )}
+            />
+            <Stack.Screen
+              name="ProgressPhotoCompare"
+              component={SafeProgressPhotoCompare}
+              options={createStackScreenOptions(
+                t('screens.progressPhotoCompare', { defaultValue: 'Compare' }),
+                { headerBackButtonDisplayMode: 'minimal' },
+              )}
+            />
+            <Stack.Screen
+              name="ProgressPhotoTimelapse"
+              component={SafeProgressPhotoTimelapse}
+              options={createStackScreenOptions(
+                t('screens.progressPhotoTimelapse', {
+                  defaultValue: 'Time-lapse',
+                }),
+                { headerBackButtonDisplayMode: 'minimal' },
               )}
             />
             <Stack.Screen
@@ -1025,6 +1095,20 @@ function AppContent() {
                 {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
+                  }),
+                },
+              )}
+            />
+            <Stack.Screen
+              name="HealthTrendsSettings"
+              component={SafeHealthTrendsSettings}
+              options={createStackScreenOptions(
+                t('screens.healthTrendsSettings', {
+                  defaultValue: 'Health Trends',
+                }),
+                {
+                  headerBackTitle: t('screens.dashboardSettings', {
+                    defaultValue: 'Dashboard Settings',
                   }),
                 },
               )}
@@ -1247,6 +1331,7 @@ function AppContent() {
             onSyncHealthData={handleSyncHealthData}
             onBarcodeScan={handleBarcodeScan}
             onAddMeasurements={handleAddMeasurements}
+            onAddProgressPhotos={handleAddProgressPhotos}
             onAskSparky={handleAskSparky}
             onOpenCycle={handleOpenCycle}
             showCycleCard={cycleEnabled}

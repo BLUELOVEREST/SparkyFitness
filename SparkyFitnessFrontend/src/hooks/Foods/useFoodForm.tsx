@@ -7,9 +7,7 @@ import { useUpdateFoodEntriesSnapshotMutation } from '@/hooks/Foods/useFoods';
 
 /** The three outcomes of the "Sync Past Entries?" prompt. */
 export type SyncPastEntriesChoice =
-  | 'none'
-  | 'nutrition'
-  | 'nutrition-and-photos';
+  'none' | 'nutrition' | 'nutrition-and-photos';
 import { useCustomNutrients } from '@/hooks/Foods/useCustomNutrients';
 import {
   pickerImagesDiffer,
@@ -382,6 +380,7 @@ export function useCustomFoodForm({
     is_quick_food: false,
     barcode: '',
     macro_role: '',
+    notes: '',
   });
 
   // Provider nutrient values the user mapped onto this food (custom nutrient
@@ -465,6 +464,7 @@ export function useCustomFoodForm({
       is_quick_food: false,
       barcode: '',
       macro_role: '',
+      notes: '',
     });
     setImageItems([]);
     const defaultVariant = createDefaultFormVariant(customNutrients);
@@ -555,6 +555,7 @@ export function useCustomFoodForm({
         is_quick_food: food.is_quick_food || false,
         barcode: food.barcode || '',
         macro_role: food.macro_role || '',
+        notes: food.notes || '',
       });
       // A provider search result has no `images` array yet — its photo is the
       // single upstream `image_url`. Seed the picker with it so importing
@@ -595,6 +596,7 @@ export function useCustomFoodForm({
         is_quick_food: false,
         barcode: '',
         macro_role: '',
+        notes: '',
       });
       const mapped = initialVariants.map((variant) =>
         foodVariantToFormVariant({
@@ -1184,6 +1186,9 @@ export function useCustomFoodForm({
         is_quick_food: formData.is_quick_food,
         is_custom: true,
         barcode: formData.barcode.trim() || null,
+        // Always send the key, even when empty: the server treats an omitted
+        // `notes` as "leave unchanged", so clearing a note must send null.
+        notes: formData.notes.trim() || null,
         provider_external_id: food?.provider_external_id,
         provider_type: food?.provider_type,
         provider_verified: food?.provider_verified,

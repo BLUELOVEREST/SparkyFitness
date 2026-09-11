@@ -4,6 +4,13 @@ import { estimateFoodPhotoNutrition } from '../services/foodPhotoEstimationServi
 
 vi.mock('../models/chatRepository');
 vi.mock('../config/logging', () => ({ log: vi.fn() }));
+// Matching is a separate service with its own tests and its own DB access;
+// this file covers prompt building and provider dispatch.
+vi.mock('../services/foodPhotoMatchService.js', () => ({
+  attachFoodMatches: vi.fn(
+    async (_userId: string, estimate: unknown) => estimate
+  ),
+}));
 
 // Mock the undici Agent so the Ollama path never constructs a real agent.
 // (global.fetch is mocked per-test; the dispatcher option is ignored by it.)
@@ -547,6 +554,20 @@ describe('estimateFoodPhotoNutrition', () => {
       if (result.success) {
         expect(result.estimate.totals.calories_kcal).toBe(250);
       }
+    });
+
+    it('returns PARSE_ERROR when the payload cannot be repaired', async () => {
+      mockGetVisionSetting.mockResolvedValue(makeSetting());
+      mockGetBackendSetting.mockResolvedValue(makeServiceDetail());
+      // No items and no totals: there is nothing to sum and nothing to log.
+      mockFetch(googleBody({ meal_summary: 'A plate', items: 'not-an-array' }));
+      const result = await estimateFoodPhotoNutrition({
+        base64Image: TEST_BASE64,
+        mimeType: TEST_MIME,
+        userId: TEST_USER_ID,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.code).toBe('PARSE_ERROR');
     });
   });
 });

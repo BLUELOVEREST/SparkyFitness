@@ -10,6 +10,7 @@ import { MealFilter } from '@/types/meal';
 interface FoodPayload {
   name: string;
   brand?: string;
+  notes?: string | null;
   calories: number;
   protein: number;
   carbs: number;
@@ -152,12 +153,27 @@ export const searchDatabaseFoods = async (
     return { searchResults: response.foods };
   }
 
+/**
+ * Name lookup used to match an incoming meal food against an existing food
+ * before creating a duplicate. Not the dialog's user-facing search: that one
+ * paginates through `loadFoods`.
+ */
   const params = new URLSearchParams({
     name: term,
     broadMatch: 'true',
     limit: limit.toString(),
   });
   if (mealType) params.append('mealType', mealType);
+
+  return apiCall(`/foods?${params.toString()}`);
+};
+
+export const lookupFoodsByName = async (term: string, limit: number) => {
+  const params = new URLSearchParams({
+    name: term,
+    broadMatch: 'true',
+    limit: limit.toString(),
+  });
 
   return apiCall(`/foods?${params.toString()}`);
 };
