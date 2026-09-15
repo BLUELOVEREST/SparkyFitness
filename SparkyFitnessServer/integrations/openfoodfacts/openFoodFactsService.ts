@@ -3,6 +3,7 @@ import {
   invalidateOpenFoodFactsSession,
   DEFAULT_OFF_BASE_URL,
 } from './openFoodFactsAuth.js';
+import type { OpenFoodFactsCredentialScope } from './openFoodFactsAuth.js';
 import { log } from '../../config/logging.js';
 import { normalizeNutrientUnit } from '@workspace/shared';
 import package$0 from '../../package.json' with { type: 'json' };
@@ -11,6 +12,10 @@ import {
   normalizeServingUnit,
   altBarcode,
 } from '../../utils/foodUtils.js';
+import {
+  OPENFOODFACTS_INTERACTIVE_PRODUCT_READ_MAX_WAIT_MS,
+  withOpenFoodFactsProductReadPermit,
+} from '../../services/openFoodFactsProductReadRateLimitService.js';
 const { name, version } = package$0;
 const USER_AGENT = `${name}/${version} (https://github.com/CodeWithCJ/SparkyFitness)`;
 const SEARCH_A_LICIOUS_URL = 'https://search.openfoodfacts.org/search';
@@ -73,6 +78,32 @@ const OFF_FIELDS = [
   'image_front_url',
   'image_url',
 ];
+
+const OFF_CORE_NUTRIENT_100G_KEYS = [
+  'energy-kcal_100g',
+  'energy-kj_100g',
+  'energy_100g',
+  'proteins_100g',
+  'carbohydrates_100g',
+  'fat_100g',
+] as const;
+const OFF_CORE_NUTRIENT_SERVING_KEYS = [
+  'energy-kcal_serving',
+  'energy-kj_serving',
+  'energy_serving',
+  'proteins_serving',
+  'carbohydrates_serving',
+  'fat_serving',
+] as const;
+const OFF_CORE_NUTRIENT_100G_SEARCH_CLAUSE = `(${OFF_CORE_NUTRIENT_100G_KEYS.map(
+  (key) => `nutriments.${key}:*`
+).join(' OR ')})`;
+const OFF_CORE_NUTRIENT_SERVING_SEARCH_CLAUSE = `(${OFF_CORE_NUTRIENT_SERVING_KEYS.map(
+  (key) => `nutriments.${key}:*`
+).join(' OR ')})`;
+const OFF_CORE_NUTRITION_SEARCH_CLAUSE = `(${OFF_CORE_NUTRIENT_100G_SEARCH_CLAUSE} OR (serving_quantity:[0.000001 TO *] AND ${OFF_CORE_NUTRIENT_SERVING_SEARCH_CLAUSE}))`;
+const LEGACY_SEARCH_BATCH_SIZE = 100;
+const LEGACY_SEARCH_MAX_BATCHES = 10;
 
 interface OffProduct {
   product_name?: string;
@@ -227,7 +258,8 @@ function rankSearchHits(
  */
 async function resolveOffRequestContext(
   authenticatedUserId?: string,
-  providerId?: string
+  providerId?: string,
+  credentialScope: OpenFoodFactsCredentialScope = 'personal'
 ): Promise<{ sessionCookie: string | null; baseUrl: string }> {
   if (!authenticatedUserId || !providerId) {
     return { sessionCookie: null, baseUrl: DEFAULT_OFF_BASE_URL };
@@ -235,7 +267,8 @@ async function resolveOffRequestContext(
   try {
     const { session, baseUrl } = await resolveOpenFoodFactsProvider(
       authenticatedUserId,
-      providerId
+      providerId,
+      credentialScope
     );
     return { sessionCookie: session, baseUrl };
   } catch (error) {
@@ -255,13 +288,15 @@ async function fetchOpenFoodFacts(
     providerId,
     sessionCookie,
     timeoutMs = OFF_FETCH_TIMEOUT_MS,
+    rateLimitProductRead = false,
   }: {
     authenticatedUserId?: string;
     providerId?: string;
     sessionCookie?: string | null;
     timeoutMs?: number;
+    rateLimitProductRead?: boolean;
   } = {}
-) {
+): Promise<Response> {
   const baseHeaders = { ...OFF_HEADERS };
 
   const headers = sessionCookie
@@ -272,14 +307,41 @@ async function fetchOpenFoodFacts(
   // answered near the end of the budget cannot double the wall-clock time.
   const requestDeadline = Date.now() + timeoutMs;
 
-  const response = await fetchWithTimeout(
-    url,
-    {
-      method: 'GET',
-      headers,
-    },
-    timeoutMs
-  );
+  const performGet = async (
+    requestHeaders: Record<string, string>
+  ): Promise<Response> => {
+    const operation = (): Promise<Response> => {
+      const remainingTimeoutMs = requestDeadline - Date.now();
+      if (remainingTimeoutMs <= 0) {
+        log('warn', `OpenFoodFacts request deadline exhausted: ${url}`);
+        return Promise.reject(
+          Object.assign(new Error('OpenFoodFacts request timed out'), {
+            status: 504,
+          })
+        );
+      }
+      return fetchWithTimeout(
+        url,
+        {
+          method: 'GET',
+          headers: requestHeaders,
+          redirect: 'manual',
+        },
+        remainingTimeoutMs
+      );
+    };
+
+    if (!rateLimitProductRead) return operation();
+    const remainingWaitBudget = Math.max(0, requestDeadline - Date.now());
+    return withOpenFoodFactsProductReadPermit(operation, {
+      maxWaitMs: Math.min(
+        OPENFOODFACTS_INTERACTIVE_PRODUCT_READ_MAX_WAIT_MS,
+        remainingWaitBudget
+      ),
+    });
+  };
+
+  const response = await performGet(headers);
 
   if (sessionCookie && (response.status === 429 || response.status >= 500)) {
     log(
@@ -296,14 +358,7 @@ async function fetchOpenFoodFacts(
         status: 504,
       });
     }
-    return fetchWithTimeout(
-      url,
-      {
-        method: 'GET',
-        headers: baseHeaders,
-      },
-      remainingTimeoutMs
-    );
+    return performGet(baseHeaders);
   }
 
   return response;
@@ -394,9 +449,15 @@ async function hydrateSearchHits(
       .find((product) => product !== undefined);
   return hits.map((hit) => {
     const code = String(hit.code || '').trim();
-    return (
-      (code ? lookupProduct(code) : undefined) ?? productFromSearchHit(hit)
-    );
+    const indexedProduct = productFromSearchHit(hit);
+    const currentProduct = code ? lookupProduct(code) : undefined;
+
+    // The full-text index can still hold nutrition while Product Opener is
+    // temporarily stale or incomplete. Keep the qualified ranked hit in that
+    // case so hydration cannot underfill an otherwise valid search page.
+    return currentProduct && hasUsableOffCoreNutrition(currentProduct)
+      ? currentProduct
+      : indexedProduct;
   });
 }
 
@@ -441,7 +502,8 @@ async function searchOpenFoodFacts(
   language = 'en',
   authenticatedUserId?: string,
   providerId?: string,
-  pageSize = 20
+  pageSize = 20,
+  credentialScope: OpenFoodFactsCredentialScope = 'personal'
 ): Promise<{
   products: OffProduct[];
   pagination: {
@@ -459,7 +521,8 @@ async function searchOpenFoodFacts(
     const fields = [...fieldSet];
     const { sessionCookie, baseUrl } = await resolveOffRequestContext(
       authenticatedUserId,
-      providerId
+      providerId,
+      credentialScope
     );
 
     // Search-a-licious is Open Food Facts' relevance-ranked full-text search
@@ -468,31 +531,73 @@ async function searchOpenFoodFacts(
     const isPublicOpenFoodFacts =
       baseUrl.replace(/\/+$/, '') === DEFAULT_OFF_BASE_URL.replace(/\/+$/, '');
     if (!isPublicOpenFoodFacts) {
-      const searchUrl = `${baseUrl}/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=${pageSize}&page=${page}&fields=${fields.join(',')}&lc=${language}`;
-      const response = await fetchOpenFoodFacts(searchUrl, {
-        authenticatedUserId,
-        providerId,
-        sessionCookie,
-      });
-      if (!response.ok) {
-        log(
-          'error',
-          `OpenFoodFacts legacy search failed with HTTP ${response.status}`
+      // Legacy Product Opener combines multiple nutriment filters with AND, so
+      // it cannot express the same energy-or-macro rule as
+      // hasUsableOffCoreNutrition. Scan provider pages in larger batches and
+      // apply the rule before slicing the requested page. The one-item
+      // lookahead keeps hasMore truthful without scanning an entire catalogue.
+      const requestedStart = (page - 1) * pageSize;
+      const requestedEnd = page * pageSize;
+      const usableProducts: OffProduct[] = [];
+      const scanDeadline = Date.now() + OFF_FETCH_TIMEOUT_MS;
+      let providerPage = 1;
+      let hasMoreCandidates = true;
+
+      while (hasMoreCandidates && usableProducts.length <= requestedEnd) {
+        const remainingTimeoutMs = scanDeadline - Date.now();
+        if (
+          providerPage > LEGACY_SEARCH_MAX_BATCHES ||
+          remainingTimeoutMs <= 0
+        ) {
+          throw Object.assign(
+            new Error('OpenFoodFacts legacy search scan limit reached'),
+            { status: 504, statusCode: 504 }
+          );
+        }
+        const searchUrl = `${baseUrl}/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=${LEGACY_SEARCH_BATCH_SIZE}&page=${providerPage}&fields=${fields.join(',')}&lc=${language}`;
+        const response = await fetchOpenFoodFacts(searchUrl, {
+          authenticatedUserId,
+          providerId,
+          sessionCookie,
+          timeoutMs: remainingTimeoutMs,
+        });
+        if (!response.ok) {
+          log(
+            'error',
+            `OpenFoodFacts legacy search failed with HTTP ${response.status}`
+          );
+          throw new Error(
+            `OpenFoodFacts search failed (HTTP ${response.status})`
+          );
+        }
+        const data = await parseSearchResponse(
+          response,
+          isLegacySearchResponse
         );
-        throw new Error(
-          `OpenFoodFacts search failed (HTTP ${response.status})`
-        );
+        usableProducts.push(...data.products.filter(hasUsableOffCoreNutrition));
+
+        const providerPageSize =
+          typeof data.page_size === 'number' && data.page_size > 0
+            ? data.page_size
+            : LEGACY_SEARCH_BATCH_SIZE;
+        const providerCount =
+          typeof data.count === 'number' && data.count >= 0 ? data.count : null;
+        hasMoreCandidates =
+          data.products.length > 0 &&
+          (providerCount !== null
+            ? providerPage * providerPageSize < providerCount
+            : data.products.length === providerPageSize);
+        providerPage += 1;
       }
-      const data = await parseSearchResponse(response, isLegacySearchResponse);
+
+      const hasMore = usableProducts.length > requestedEnd;
       return {
-        products: data.products || [],
+        products: usableProducts.slice(requestedStart, requestedEnd),
         pagination: {
-          page: data.page || page,
-          pageSize: data.page_size || pageSize,
-          totalCount: data.count || 0,
-          hasMore:
-            (data.page || page) * (data.page_size || pageSize) <
-            (data.count || 0),
+          page,
+          pageSize,
+          totalCount: usableProducts.length,
+          hasMore,
         },
       };
     }
@@ -514,7 +619,10 @@ async function searchOpenFoodFacts(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        q: query,
+        // Search-a-licious treats adjacent free-text and field clauses as
+        // required terms. Grouping the free text itself (or inserting AND
+        // after a multi-word phrase) currently yields an empty result set.
+        q: `${query} ${OFF_CORE_NUTRITION_SEARCH_CLAUSE}`,
         page,
         page_size: pageSize,
         boost_phrase: true,
@@ -531,12 +639,14 @@ async function searchOpenFoodFacts(
     }
     const data = await parseSearchResponse(response, isSearchALiciousResponse);
     const rankedHits = rankSearchHits(data.hits, query, language);
-    const products = await hydrateSearchHits(rankedHits, fields, language, {
-      authenticatedUserId,
-      providerId,
-      sessionCookie,
-      baseUrl,
-    });
+    const products = (
+      await hydrateSearchHits(rankedHits, fields, language, {
+        authenticatedUserId,
+        providerId,
+        sessionCookie,
+        baseUrl,
+      })
+    ).filter(hasUsableOffCoreNutrition);
     return {
       products,
       pagination: getSearchALiciousPagination(data, page, pageSize),
@@ -555,7 +665,8 @@ async function searchOpenFoodFactsByBarcodeFields(
   fields = OFF_FIELDS,
   language = 'en',
   authenticatedUserId?: string,
-  providerId?: string
+  providerId?: string,
+  credentialScope: OpenFoodFactsCredentialScope = 'personal'
 ): Promise<{
   status: number;
   status_verbose: string;
@@ -571,13 +682,15 @@ async function searchOpenFoodFactsByBarcodeFields(
     const fieldsParam = finalFields.join(',');
     const { sessionCookie, baseUrl } = await resolveOffRequestContext(
       authenticatedUserId,
-      providerId
+      providerId,
+      credentialScope
     );
     const searchUrl = `${baseUrl}/api/v2/product/${barcode}.json?fields=${fieldsParam}&lc=${language}`;
     const response = await fetchOpenFoodFacts(searchUrl, {
       authenticatedUserId,
       providerId,
       sessionCookie,
+      rateLimitProductRead: true,
     });
     if (!response.ok) {
       if (response.status === 404) {
@@ -607,6 +720,7 @@ async function searchOpenFoodFactsByBarcodeFields(
           authenticatedUserId,
           providerId,
           sessionCookie,
+          rateLimitProductRead: true,
         });
         if (altResponse.ok) {
           const altData = (await altResponse.json()) as {
@@ -728,6 +842,28 @@ function parseOffNumber(val: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+/** Returns true when OFF declares nutrition that the core mapper can use. */
+function hasUsableOffCoreNutrition(product: OffProduct): boolean {
+  if (!isRecord(product.nutriments)) return false;
+
+  if (
+    OFF_CORE_NUTRIENT_100G_KEYS.some(
+      (key) => parseOffNumber(product.nutriments?.[key]) !== null
+    )
+  ) {
+    return true;
+  }
+
+  const servingQuantity = parseOffNumber(product.serving_quantity);
+  return (
+    servingQuantity !== null &&
+    servingQuantity > 0 &&
+    OFF_CORE_NUTRIENT_SERVING_KEYS.some(
+      (key) => parseOffNumber(product.nutriments?.[key]) !== null
+    )
+  );
 }
 
 function getOffNutrient100g(

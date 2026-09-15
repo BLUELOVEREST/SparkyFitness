@@ -6,6 +6,8 @@ export interface Meal {
   user_id?: string;
   name: string;
   description?: string;
+  /** Owner-authored markdown reference note, e.g. a recipe. */
+  notes?: string | null;
   is_public?: boolean;
   serving_size?: number;
   serving_unit?: string;
@@ -62,6 +64,7 @@ export interface MealFood {
 export interface MealPayload {
   name: string;
   description?: string;
+  notes?: string | null;
   is_public?: boolean;
   serving_size?: number;
   serving_unit?: string;
@@ -174,11 +177,16 @@ export interface FoodEntryMeal {
   entry_time?: string | null;
   name: string;
   description?: string;
+  /** Per-occurrence markdown note; independent of the template's `notes`. */
+  notes?: string | null;
   quantity?: number;
   unit?: string;
   legacy_serving_unit_math?: boolean;
+  entry_total_servings?: number | null;
   /** Images from the meal template this entry was logged from. */
   meal_images?: string[] | null;
+  /** The meal template's own note, shown read-only beside this entry's note. */
+  meal_notes?: string | null;
   /**
    * Per-entry override photos. Apply only to this diary entry and never change
    * the meal template. Empty means "fall back to `meal_images`".

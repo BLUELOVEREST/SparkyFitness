@@ -137,13 +137,6 @@ export const resetPassword = async (
   if (error) throw error;
 };
 
-export const logoutUser = async (): Promise<void> => {
-  await authClient.signOut();
-  localStorage.removeItem('authToken');
-  localStorage.removeItem('refreshToken');
-  window.location.href = '/';
-};
-
 export interface OidcLoginParams {
   providerId: string;
   requestSignUp?: boolean;
@@ -238,4 +231,27 @@ export const getAccessibleUsers = async (): Promise<AccessibleUser[]> => {
           },
     access_end_date: item.access_end_date,
   }));
+};
+
+export const demoLogin = async (): Promise<AuthResponse> => {
+  const data = await apiCall<{
+    user?: BetterAuthUser;
+    message?: string;
+  }>('/auth/demo-login', {
+    method: 'POST',
+  });
+
+  if (!data?.user) {
+    throw new Error(
+      'Demo login succeeded but no user data was received from the server.'
+    );
+  }
+
+  return {
+    message: data.message || 'Demo login successful',
+    userId: data.user.id,
+    role: data.user.role || 'user',
+    fullName: data.user.name || 'Demo User',
+    email: data.user.email,
+  };
 };

@@ -63,7 +63,10 @@ function ActiveWorkoutTransitionProgressProbe({
       }
 
       const startProgress = startProgressRef.current ?? currentProgress;
-      const revealProgress = getTabRevealProgress(startProgress, currentProgress);
+      const revealProgress = getTabRevealProgress(
+        startProgress,
+        currentProgress
+      );
       revealProgressRef.current = revealProgress;
       notifyActiveWorkoutBarSwipeProgress(revealProgress);
     };

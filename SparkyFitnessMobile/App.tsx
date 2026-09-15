@@ -41,6 +41,8 @@ import {
   SafeOnboarding,
   SafeFoodsLibrary,
   SafeMealsLibrary,
+  SafeMealPlans,
+  SafeMealPlanForm,
   SafeExercisesLibrary,
   SafeWorkoutPresetsLibrary,
   SafeKitchen,
@@ -196,6 +198,7 @@ function AppContent() {
     handleLogWorkout,
     handleAddActivity,
     handleAddMeasurements,
+    handleAddProgressPhotos,
     handleAskSparky,
     handleOpenCycle,
     handleSyncHealthData,
@@ -467,6 +470,28 @@ function AppContent() {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
+                },
+              )}
+            />
+            <Stack.Screen
+              name="MealPlans"
+              component={SafeMealPlans}
+              options={createStackScreenOptions(
+                t('mealPlans.title', { defaultValue: 'Meal plans' }),
+                {
+                  headerBackTitle: t('navigation.library', {
+                    defaultValue: 'Library',
+                  }),
+                },
+              )}
+            />
+            <Stack.Screen
+              name="MealPlanForm"
+              component={SafeMealPlanForm}
+              options={createStackScreenOptions(
+                t('mealPlans.title', { defaultValue: 'Meal plans' }),
+                {
+                  headerBackTitle: t('common.back', { defaultValue: 'Back' }),
                 },
               )}
             />
@@ -1247,6 +1272,7 @@ function AppContent() {
             onSyncHealthData={handleSyncHealthData}
             onBarcodeScan={handleBarcodeScan}
             onAddMeasurements={handleAddMeasurements}
+            onAddProgressPhotos={handleAddProgressPhotos}
             onAskSparky={handleAskSparky}
             onOpenCycle={handleOpenCycle}
             showCycleCard={cycleEnabled}

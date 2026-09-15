@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import {
+  HEALTH_TREND_KEYS,
+  type HealthTrendKey,
+} from '../constants/healthTrends';
 import type { LanguagePreference } from '../localization';
 import type { OwnershipFilter } from '../utils/shareStatus';
 
@@ -41,6 +45,7 @@ export const PREFERENCE_DEFAULTS = {
   cycleCardVisible: true,
   askSparkyVisible: true,
   medicationsCardVisible: true,
+  progressPhotosCardVisible: true,
   medicationRemindersEnabled: true,
   medicationReminderRepeats: true,
   medicationReminderHideNames: false,
@@ -52,6 +57,8 @@ export const PREFERENCE_DEFAULTS = {
   restTimerSoundEnabled: true,
   workoutKeepAwakeEnabled: false,
   languagePreference: 'system' as LanguagePreference,
+  healthTrendOrder: [...HEALTH_TREND_KEYS] as HealthTrendKey[],
+  hiddenHealthTrends: [] as HealthTrendKey[],
   foodSearchOwnershipFilter: 'all' as OwnershipFilter,
   foodsLibraryOwnershipFilter: 'all' as OwnershipFilter,
   mealsLibraryOwnershipFilter: 'all' as OwnershipFilter,
@@ -72,6 +79,7 @@ export type AppPreferencesData = {
   cycleCardVisible: boolean;
   askSparkyVisible: boolean;
   medicationsCardVisible: boolean;
+  progressPhotosCardVisible: boolean;
   medicationRemindersEnabled: boolean;
   medicationReminderRepeats: boolean;
   medicationReminderHideNames: boolean;
@@ -83,6 +91,8 @@ export type AppPreferencesData = {
   restTimerSoundEnabled: boolean;
   workoutKeepAwakeEnabled: boolean;
   languagePreference: LanguagePreference;
+  healthTrendOrder: HealthTrendKey[];
+  hiddenHealthTrends: HealthTrendKey[];
   foodSearchOwnershipFilter: OwnershipFilter;
   foodsLibraryOwnershipFilter: OwnershipFilter;
   mealsLibraryOwnershipFilter: OwnershipFilter;
@@ -103,6 +113,7 @@ export interface AppPreferencesState extends AppPreferencesData {
   setCycleCardVisible: (value: boolean) => void;
   setAskSparkyVisible: (value: boolean) => void;
   setMedicationsCardVisible: (value: boolean) => void;
+  setProgressPhotosCardVisible: (value: boolean) => void;
   setMedicationRemindersEnabled: (value: boolean) => void;
   setMedicationReminderRepeats: (value: boolean) => void;
   setMedicationReminderHideNames: (value: boolean) => void;
@@ -114,6 +125,10 @@ export interface AppPreferencesState extends AppPreferencesData {
   setRestTimerSoundEnabled: (value: boolean) => void;
   setWorkoutKeepAwakeEnabled: (value: boolean) => void;
   setLanguagePreference: (value: LanguagePreference) => void;
+  setHealthTrendLayout: (
+    order: HealthTrendKey[],
+    hiddenKeys: HealthTrendKey[]
+  ) => void;
   setFoodSearchOwnershipFilter: (value: OwnershipFilter) => void;
   setFoodsLibraryOwnershipFilter: (value: OwnershipFilter) => void;
   setMealsLibraryOwnershipFilter: (value: OwnershipFilter) => void;
@@ -137,10 +152,12 @@ const legacyAwareStorage = {
 
     // No combined key yet — check whether any legacy per-key values exist.
     const entries = await Promise.all(
-      (Object.entries(LEGACY_KEYS) as [LegacyKey, string][]).map(async ([field, key]) => {
-        const val = await AsyncStorage.getItem(key);
-        return [field, val] as const;
-      }),
+      (Object.entries(LEGACY_KEYS) as [LegacyKey, string][]).map(
+        async ([field, key]) => {
+          const val = await AsyncStorage.getItem(key);
+          return [field, val] as const;
+        }
+      )
     );
 
     const hasAnyLegacy = entries.some(([, val]) => val !== null);
@@ -167,31 +184,52 @@ export const useAppPreferencesStore = create<AppPreferencesState>()(
       setHapticsEnabled: (value) => set({ hapticsEnabled: value }),
       setSoundsEnabled: (value) => set({ soundsEnabled: value }),
       setNotificationsEnabled: (value) => set({ notificationsEnabled: value }),
-      setRestTimerNotificationsEnabled: (value) => set({ restTimerNotificationsEnabled: value }),
-      setFastingGoalNotificationsEnabled: (value) => set({ fastingGoalNotificationsEnabled: value }),
+      setRestTimerNotificationsEnabled: (value) =>
+        set({ restTimerNotificationsEnabled: value }),
+      setFastingGoalNotificationsEnabled: (value) =>
+        set({ fastingGoalNotificationsEnabled: value }),
       setHydrationCardVisible: (value) => set({ hydrationCardVisible: value }),
       setFastingCardVisible: (value) => set({ fastingCardVisible: value }),
       setCycleCardVisible: (value) => set({ cycleCardVisible: value }),
       setAskSparkyVisible: (value) => set({ askSparkyVisible: value }),
-      setMedicationsCardVisible: (value) => set({ medicationsCardVisible: value }),
-      setMedicationRemindersEnabled: (value) => set({ medicationRemindersEnabled: value }),
-      setMedicationReminderRepeats: (value) => set({ medicationReminderRepeats: value }),
-      setMedicationReminderHideNames: (value) => set({ medicationReminderHideNames: value }),
-      setLiquidGlassTabBarEnabled: (value) => set({ liquidGlassTabBarEnabled: value }),
-      setActiveWorkoutMetricColumn: (value) => set({ activeWorkoutMetricColumn: value }),
+      setMedicationsCardVisible: (value) =>
+        set({ medicationsCardVisible: value }),
+      setProgressPhotosCardVisible: (value) =>
+        set({ progressPhotosCardVisible: value }),
+      setMedicationRemindersEnabled: (value) =>
+        set({ medicationRemindersEnabled: value }),
+      setMedicationReminderRepeats: (value) =>
+        set({ medicationReminderRepeats: value }),
+      setMedicationReminderHideNames: (value) =>
+        set({ medicationReminderHideNames: value }),
+      setLiquidGlassTabBarEnabled: (value) =>
+        set({ liquidGlassTabBarEnabled: value }),
+      setActiveWorkoutMetricColumn: (value) =>
+        set({ activeWorkoutMetricColumn: value }),
       setDiarySummaryVisible: (value) => set({ diarySummaryVisible: value }),
       setDiarySummaryExpanded: (value) => set({ diarySummaryExpanded: value }),
       setDefaultRestSec: (value) => set({ defaultRestSec: value }),
-      setRestTimerSoundEnabled: (value) => set({ restTimerSoundEnabled: value }),
-      setWorkoutKeepAwakeEnabled: (value) => set({ workoutKeepAwakeEnabled: value }),
+      setRestTimerSoundEnabled: (value) =>
+        set({ restTimerSoundEnabled: value }),
+      setWorkoutKeepAwakeEnabled: (value) =>
+        set({ workoutKeepAwakeEnabled: value }),
       setLanguagePreference: (value) => set({ languagePreference: value }),
-      setFoodSearchOwnershipFilter: (value) => set({ foodSearchOwnershipFilter: value }),
-      setFoodsLibraryOwnershipFilter: (value) => set({ foodsLibraryOwnershipFilter: value }),
-      setMealsLibraryOwnershipFilter: (value) => set({ mealsLibraryOwnershipFilter: value }),
-      setExercisesLibraryOwnershipFilter: (value) => set({ exercisesLibraryOwnershipFilter: value }),
-      setWorkoutPresetsLibraryOwnershipFilter: (value) => set({ workoutPresetsLibraryOwnershipFilter: value }),
-      setExerciseSearchOwnershipFilter: (value) => set({ exerciseSearchOwnershipFilter: value }),
-      setPresetSearchOwnershipFilter: (value) => set({ presetSearchOwnershipFilter: value }),
+      setHealthTrendLayout: (order, hiddenKeys) =>
+        set({ healthTrendOrder: order, hiddenHealthTrends: hiddenKeys }),
+      setFoodSearchOwnershipFilter: (value) =>
+        set({ foodSearchOwnershipFilter: value }),
+      setFoodsLibraryOwnershipFilter: (value) =>
+        set({ foodsLibraryOwnershipFilter: value }),
+      setMealsLibraryOwnershipFilter: (value) =>
+        set({ mealsLibraryOwnershipFilter: value }),
+      setExercisesLibraryOwnershipFilter: (value) =>
+        set({ exercisesLibraryOwnershipFilter: value }),
+      setWorkoutPresetsLibraryOwnershipFilter: (value) =>
+        set({ workoutPresetsLibraryOwnershipFilter: value }),
+      setExerciseSearchOwnershipFilter: (value) =>
+        set({ exerciseSearchOwnershipFilter: value }),
+      setPresetSearchOwnershipFilter: (value) =>
+        set({ presetSearchOwnershipFilter: value }),
     }),
     {
       name: STORE_KEY,
@@ -208,6 +246,7 @@ export const useAppPreferencesStore = create<AppPreferencesState>()(
         cycleCardVisible: state.cycleCardVisible,
         askSparkyVisible: state.askSparkyVisible,
         medicationsCardVisible: state.medicationsCardVisible,
+        progressPhotosCardVisible: state.progressPhotosCardVisible,
         medicationRemindersEnabled: state.medicationRemindersEnabled,
         medicationReminderRepeats: state.medicationReminderRepeats,
         medicationReminderHideNames: state.medicationReminderHideNames,
@@ -221,11 +260,14 @@ export const useAppPreferencesStore = create<AppPreferencesState>()(
         restTimerSoundEnabled: state.restTimerSoundEnabled,
         workoutKeepAwakeEnabled: state.workoutKeepAwakeEnabled,
         languagePreference: state.languagePreference,
+        healthTrendOrder: state.healthTrendOrder,
+        hiddenHealthTrends: state.hiddenHealthTrends,
         foodSearchOwnershipFilter: state.foodSearchOwnershipFilter,
         foodsLibraryOwnershipFilter: state.foodsLibraryOwnershipFilter,
         mealsLibraryOwnershipFilter: state.mealsLibraryOwnershipFilter,
         exercisesLibraryOwnershipFilter: state.exercisesLibraryOwnershipFilter,
-        workoutPresetsLibraryOwnershipFilter: state.workoutPresetsLibraryOwnershipFilter,
+        workoutPresetsLibraryOwnershipFilter:
+          state.workoutPresetsLibraryOwnershipFilter,
         exerciseSearchOwnershipFilter: state.exerciseSearchOwnershipFilter,
         presetSearchOwnershipFilter: state.presetSearchOwnershipFilter,
       }),
@@ -244,8 +286,8 @@ export const useAppPreferencesStore = create<AppPreferencesState>()(
           ...(persistedState as Partial<AppPreferencesData>),
         } as AppPreferencesState;
       },
-    },
-  ),
+    }
+  )
 );
 
 /**

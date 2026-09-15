@@ -182,9 +182,9 @@ const EnhancedFoodSearch = ({
   >('all');
   const {
     defaultFoodDataProviderId,
+    foodSearchAllProvidersDefault,
     defaultBarcodeProviderId,
     itemDisplayLimit,
-    foodDisplayLimit,
     nutrientDisplayPreferences,
     energyUnit,
     convertEnergy,
@@ -266,13 +266,18 @@ const EnhancedFoodSearch = ({
   } = useRecentAndTopMealsQuery(itemDisplayLimit, showMeals && isSearchEmpty);
   const { mutateAsync: importCsvMutation } = useImportCsvMutation();
   const showLocalDatabaseResults = !isSearchEmpty || localDatabaseOnly;
-  const { data: searchData, isFetching: isFetchingSearch } =
-    useDatabaseFoodSearchQuery(
-      submittedSearchTerm,
-      foodDisplayLimit,
-      mealType,
-      showLocalFoods && showLocalDatabaseResults
-    );
+  const {
+    data: searchData,
+    isFetching: isFetchingSearch,
+    hasNextPage: hasMoreLocalFoods,
+    fetchNextPage: fetchMoreLocalFoods,
+    isFetchingNextPage: isLoadingMoreLocalFoods,
+  } = useDatabaseFoodSearchQuery(
+    submittedSearchTerm,
+    itemDisplayLimit,
+    ownershipFilter,
+    showLocalFoods && showLocalDatabaseResults
+  );
 
   const matchesMacroRole = useCallback(
     (food: Food) => !macroRoleFilter || food.macro_role === macroRoleFilter,
@@ -413,9 +418,10 @@ const EnhancedFoodSearch = ({
   // and filter preserves it, so favorites stay relevance-ordered among
   // themselves too.
   const searchFoodsFavFirst = useMemo(() => {
-    const results: Food[] = (searchData?.searchResults || []).filter(
-      matchesMacroRole
-    );
+    const results: Food[] =
+      searchData?.pages
+        .flatMap((page) => page.foods)
+        .filter(matchesMacroRole) || [];
     const isFavorite = (food: Food) =>
       favoriteKeys.has(landingKey('food', food.id));
     return [
@@ -432,10 +438,8 @@ const EnhancedFoodSearch = ({
     ];
   }, [meals, favoriteKeys]);
 
-  const filteredSearchFoodsFavFirst = useMemo(
-    () => filterItems(searchFoodsFavFirst, ownershipFilter, user?.id),
-    [searchFoodsFavFirst, ownershipFilter, user?.id]
-  );
+  // No client-side ownership filter here: the search request already carries
+  // it. Meals below still need one, since the meal search has no such param.
   const filteredSearchMealsFavFirst = useMemo(
     () => filterItems(searchMealsFavFirst, ownershipFilter, user?.id),
     [searchMealsFavFirst, ownershipFilter, user?.id]
@@ -462,7 +466,8 @@ const EnhancedFoodSearch = ({
         : resolveFoodProviderId(
             manualProviderId,
             defaultFoodDataProviderId,
-            foodProviderOptions
+            foodProviderOptions,
+            foodSearchAllProvidersDefault
           )));
   const selectedProvider = foodDataProviders.find(
     (p) => p.id === selectedFoodDataProvider
@@ -541,7 +546,7 @@ const EnhancedFoodSearch = ({
       !localDatabaseOnly &&
       (ownershipFilter === 'all' || ownershipFilter === 'public'),
     autoScale: autoScaleOpenFoodFactsImports,
-    foodDisplayLimit,
+    itemDisplayLimit,
   });
 
   // Collapse expanded By Source sections when the aggregated query changes.
@@ -694,7 +699,7 @@ const EnhancedFoodSearch = ({
             'usda',
             term,
             id,
-            foodDisplayLimit,
+            itemDisplayLimit,
             undefined,
             page
           )
@@ -737,7 +742,7 @@ const EnhancedFoodSearch = ({
             'yazio',
             term,
             id,
-            foodDisplayLimit,
+            itemDisplayLimit,
             undefined,
             page
           )
@@ -833,7 +838,7 @@ const EnhancedFoodSearch = ({
         };
       },
     }),
-    [queryClient, autoScaleOpenFoodFactsImports, foodDisplayLimit]
+    [queryClient, autoScaleOpenFoodFactsImports, itemDisplayLimit]
   );
 
   useEffect(() => {
@@ -1294,7 +1299,7 @@ const EnhancedFoodSearch = ({
 
   const localPending = isFetchingSearch || isMealLoading;
   const noLocalResults =
-    filteredSearchFoodsFavFirst.length === 0 &&
+    searchFoodsFavFirst.length === 0 &&
     filteredSearchMealsFavFirst.length === 0;
   const showLocalEmpty =
     showLocalFoods &&
@@ -1584,12 +1589,12 @@ const EnhancedFoodSearch = ({
         {showLocalDatabaseResults && (
           <>
             {/* Local foods */}
-            {showLocalFoods && filteredSearchFoodsFavFirst.length > 0 && (
+            {showLocalFoods && searchFoodsFavFirst.length > 0 && (
               <>
                 <SectionHeader>
                   {t('enhancedFoodSearch.yourFoods', 'Your Foods')}
                 </SectionHeader>
-                {filteredSearchFoodsFavFirst.map((food: Food) => (
+                {searchFoodsFavFirst.map((food: Food) => (
                   <FoodResultCard
                     key={food.id}
                     item={food}
@@ -1598,6 +1603,22 @@ const EnhancedFoodSearch = ({
                     onCardClick={() => onFoodSelect(food, 'food')}
                   />
                 ))}
+                {hasMoreLocalFoods && (
+                  <div className="flex justify-center py-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={isLoadingMoreLocalFoods}
+                      onClick={() => void fetchMoreLocalFoods()}
+                    >
+                      {isLoadingMoreLocalFoods ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        t('enhancedFoodSearch.loadMore', 'Load more')
+                      )}
+                    </Button>
+                  </div>
+                )}
               </>
             )}
 

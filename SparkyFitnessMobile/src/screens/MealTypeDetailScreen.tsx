@@ -70,7 +70,7 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({
   // active meal type by id, then fall back to the literal historical name.
   const resolvedType = useMemo(() => {
     if (mealTypeId) {
-      return mealTypes.find(m => m.id === mealTypeId) ?? null;
+      return mealTypes.find((m) => m.id === mealTypeId) ?? null;
     }
     return null;
   }, [mealTypeId, mealTypes]);
@@ -83,7 +83,7 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({
             t,
             resolvedType.name.toLowerCase() === 'snack'
               ? 'snacks'
-              : resolvedType.name.toLowerCase(),
+              : resolvedType.name.toLowerCase()
           )
         : resolvedType.name
       : getHistoricalMealTypeLabel(mealTypeName, t));
@@ -94,9 +94,9 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({
         summary?.foodEntries ?? [],
         mealTypeId,
         mealTypeName,
-        mealTypes,
+        mealTypes
       ),
-    [summary?.foodEntries, mealTypeId, mealTypeName, mealTypes],
+    [summary?.foodEntries, mealTypeId, mealTypeName, mealTypes]
   );
   const nutrition = useMemo(() => calculateMealNutrition(entries), [entries]);
   const isSystemMealType = resolvedType ? resolvedType.user_id === null : false;
@@ -219,7 +219,7 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({
             fat: `${Math.round(plannedMeal.target.fat)}g`,
           })}
         </Text>
-        {plannedMeal.items.map(item => (
+        {plannedMeal.items.map((item) => (
           <View
             key={`${item.type}-${item.id}`}
             className="flex-row justify-between py-1"
@@ -279,7 +279,7 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({
                     {
                       defaultValue: 'Target: {{calories}} kcal',
                       calories: targetCalories,
-                    },
+                    }
                   )}`
                 : formatDateLabel(date, t, dateLocale)
             }
@@ -313,7 +313,7 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({
                 key={entry.id || index}
                 entry={entry}
                 nutrition={calculateEntryNutrition(entry)}
-                onAdjustServing={foodEntry =>
+                onAdjustServing={(foodEntry) =>
                   servingSheetRef.current?.present(foodEntry)
                 }
               />
@@ -353,7 +353,7 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({
                 copySheetRef.current?.present(
                   date,
                   mealTypeId ?? null,
-                  mealTypeName,
+                  mealTypeName
                 ),
               accessibilityLabel: t('mealTypeDetail.accessibility.copyMeal', {
                 defaultValue: 'Copy meal to another day',
@@ -376,7 +376,7 @@ const MealTypeDetailScreen: React.FC<MealTypeDetailScreenProps> = ({
 
       <ServingAdjustSheet
         ref={servingSheetRef}
-        onViewEntry={entry => navigation.navigate('FoodEntryView', { entry })}
+        onViewEntry={(entry) => navigation.navigate('FoodEntryView', { entry })}
       />
       <CopyMealSheet
         ref={copySheetRef}

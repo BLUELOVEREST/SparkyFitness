@@ -29,6 +29,7 @@ import {
 } from './foodIntegrationService.js';
 
 import type { ProviderType } from '../constants/foodProviders.js';
+import type { OpenFoodFactsCredentialScope } from '../integrations/openfoodfacts/openFoodFactsAuth.js';
 
 export {
   VALID_PROVIDER_TYPES,
@@ -43,16 +44,28 @@ export interface ProviderCredentials {
   is_active?: boolean;
 }
 
+interface GrocyProviderResponse {
+  provider_type: string;
+  is_active: boolean;
+  base_url?: string | null;
+  app_key?: string | null;
+}
+
+export interface OpenFoodFactsProviderSelection {
+  id: string;
+  scope: OpenFoodFactsCredentialScope;
+}
+
 // Resolve an OFF providerId for session-cookie auth and base_url resolution.
 // Unlike other providers, OFF does not need credentials to function — a
 // provider row may carry login credentials, a custom base_url, both, or
-// neither (the seeded public default). Returns the provided id (validated
-// for ownership and active status) or the user's first active OFF provider,
-// or null.
+// neither (the seeded public default). Returns the provided id and its
+// credential-cache scope (validated for access and active status) or the
+// user's first active personal OFF provider, or null.
 export async function resolveOpenFoodFactsProviderId(
   credentialUserId: string,
   providerId: string | undefined
-): Promise<string | null> {
+): Promise<OpenFoodFactsProviderSelection | null> {
   if (providerId) {
     try {
       const details =
@@ -65,16 +78,21 @@ export async function resolveOpenFoodFactsProviderId(
         details.is_active &&
         details.provider_type === 'openfoodfacts'
       ) {
-        return providerId;
+        return {
+          id: providerId,
+          scope: details.is_public === true ? 'global' : 'personal',
+        };
       }
     } catch (error) {
       log('debug', 'v2 OFF providerId validation failed:', error);
     }
     return null;
   }
-  return externalProviderService.getActiveOpenFoodFactsProviderId(
-    credentialUserId
-  );
+  const activeProviderId =
+    await externalProviderService.getActiveOpenFoodFactsProviderId(
+      credentialUserId
+    );
+  return activeProviderId ? { id: activeProviderId, scope: 'personal' } : null;
 }
 
 export async function resolveProviderCredentials(
@@ -155,18 +173,15 @@ export async function resolveGrocyProviderCredentials(
       credentialUserId,
       credentialUserId
     );
-  const grocyProvider = providers.find(
-    (provider: {
-      provider_type: string;
-      is_active: boolean;
-      base_url?: string | null;
-      app_key?: string | null;
-    }) =>
-      provider.provider_type === 'grocy' &&
-      provider.is_active &&
-      provider.base_url &&
-      provider.app_key
-  );
+  const grocyProvider = providers.find((provider) => {
+    const candidate = provider as unknown as GrocyProviderResponse;
+    return (
+      candidate.provider_type === 'grocy' &&
+      candidate.is_active &&
+      candidate.base_url &&
+      candidate.app_key
+    );
+  }) as unknown as GrocyProviderResponse | undefined;
 
   if (!grocyProvider) {
     return null;
@@ -332,7 +347,7 @@ export async function searchProviderFoods(
 
   switch (providerType) {
     case 'openfoodfacts': {
-      const offProviderId = await resolveOpenFoodFactsProviderId(
+      const offProvider = await resolveOpenFoodFactsProviderId(
         credentialUserId,
         providerId
       );
@@ -341,9 +356,10 @@ export async function searchProviderFoods(
         page,
         language,
 
-        offProviderId ? credentialUserId : undefined,
-        offProviderId || undefined,
-        pageSize
+        offProvider ? credentialUserId : undefined,
+        offProvider?.id,
+        pageSize,
+        offProvider?.scope ?? 'personal'
       );
       const products = (result.products || []).filter(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

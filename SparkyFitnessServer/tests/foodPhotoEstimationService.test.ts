@@ -4,6 +4,13 @@ import { estimateFoodPhotoNutrition } from '../services/foodPhotoEstimationServi
 
 vi.mock('../models/chatRepository');
 vi.mock('../config/logging', () => ({ log: vi.fn() }));
+// Matching is a separate service with its own tests and its own DB access;
+// this file covers prompt building and provider dispatch.
+vi.mock('../services/foodPhotoMatchService.js', () => ({
+  attachFoodMatches: vi.fn(
+    async (_userId: string, estimate: unknown) => estimate
+  ),
+}));
 
 // Mock the undici Agent so the Ollama path never constructs a real agent.
 // (global.fetch is mocked per-test; the dispatcher option is ignored by it.)
@@ -517,18 +524,39 @@ describe('estimateFoodPhotoNutrition', () => {
   });
 
   describe('domain validation', () => {
-    it('repairs an unexpected provider payload shape once before returning success', async () => {
+    it('derives missing totals rather than failing the whole estimate', async () => {
+      // Models routinely omit `totals`. Rejecting the payload would cost the
+      // user an estimate they already paid an AI call for, so it is summed
+      // from the items instead.
       mockGetVisionSetting.mockResolvedValue(makeSetting());
       mockGetBackendSetting.mockResolvedValue(makeServiceDetail());
       const wrongShape: Record<string, unknown> = { ...sampleEstimate };
       delete wrongShape.totals;
+      const m = mockFetch(googleBody(wrongShape));
+      global.fetch = m as typeof global.fetch;
+      const result = await estimateFoodPhotoNutrition({
+        base64Image: TEST_BASE64,
+        mimeType: TEST_MIME,
+        userId: TEST_USER_ID,
+      });
+      expect(result.success).toBe(true);
+      expect(m).toHaveBeenCalledTimes(1);
+      if (result.success) {
+        expect(result.estimate.totals.calories_kcal).toBeGreaterThan(0);
+      }
+    });
+
+    it('repairs an unexpected provider payload shape once before returning success', async () => {
+      mockGetVisionSetting.mockResolvedValue(makeSetting());
+      mockGetBackendSetting.mockResolvedValue(makeServiceDetail());
       const m = vi
         .fn()
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
           text: async () => '',
-          json: async () => googleBody(wrongShape),
+          json: async () =>
+            googleBody({ meal_summary: 'A plate', items: 'not-an-array' }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -547,6 +575,38 @@ describe('estimateFoodPhotoNutrition', () => {
       if (result.success) {
         expect(result.estimate.totals.calories_kcal).toBe(250);
       }
+    });
+
+    it('returns PARSE_ERROR when the payload cannot be repaired', async () => {
+      mockGetVisionSetting.mockResolvedValue(makeSetting());
+      mockGetBackendSetting.mockResolvedValue(makeServiceDetail());
+      // No items and no totals: there is nothing to sum and nothing to log.
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () =>
+            googleBody({ meal_summary: 'A plate', items: 'not-an-array' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () =>
+            googleBody({
+              meal_summary: 'A plate',
+              items: 'still-not-an-array',
+            }),
+        }) as typeof global.fetch;
+      const result = await estimateFoodPhotoNutrition({
+        base64Image: TEST_BASE64,
+        mimeType: TEST_MIME,
+        userId: TEST_USER_ID,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.code).toBe('PARSE_ERROR');
     });
   });
 });

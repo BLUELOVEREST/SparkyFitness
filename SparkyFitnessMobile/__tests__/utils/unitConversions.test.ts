@@ -15,6 +15,7 @@ import {
   feetInchesToCm,
   kgToStonesLbs,
   stonesLbsToKg,
+  formatWeightDisplay,
 } from '../../src/utils/unitConversions';
 
 describe('unitConversions', () => {
@@ -47,13 +48,19 @@ describe('unitConversions', () => {
   });
 
   describe('round-trip weight conversions', () => {
-    it.each([0, 1, 50, 100, 225, 500])('kg → lbs → kg preserves %d kg', (kg) => {
-      expect(lbsToKg(kgToLbs(kg))).toBeCloseTo(kg, 4);
-    });
+    it.each([0, 1, 50, 100, 225, 500])(
+      'kg → lbs → kg preserves %d kg',
+      (kg) => {
+        expect(lbsToKg(kgToLbs(kg))).toBeCloseTo(kg, 4);
+      }
+    );
 
-    it.each([0, 1, 45, 135, 315, 1000])('lbs → kg → lbs preserves %d lbs', (lbs) => {
-      expect(kgToLbs(lbsToKg(lbs))).toBeCloseTo(lbs, 4);
-    });
+    it.each([0, 1, 45, 135, 315, 1000])(
+      'lbs → kg → lbs preserves %d lbs',
+      (lbs) => {
+        expect(kgToLbs(lbsToKg(lbs))).toBeCloseTo(lbs, 4);
+      }
+    );
   });
 
   describe('weightToKg', () => {
@@ -105,13 +112,19 @@ describe('unitConversions', () => {
   });
 
   describe('round-trip distance conversions', () => {
-    it.each([0, 1, 5, 10, 42.195, 100])('km → miles → km preserves %d km', (km) => {
-      expect(milesToKm(kmToMiles(km))).toBeCloseTo(km, 3);
-    });
+    it.each([0, 1, 5, 10, 42.195, 100])(
+      'km → miles → km preserves %d km',
+      (km) => {
+        expect(milesToKm(kmToMiles(km))).toBeCloseTo(km, 3);
+      }
+    );
 
-    it.each([0, 1, 3.1, 6.2, 13.1, 26.2])('miles → km → miles preserves %d miles', (miles) => {
-      expect(kmToMiles(milesToKm(miles))).toBeCloseTo(miles, 3);
-    });
+    it.each([0, 1, 3.1, 6.2, 13.1, 26.2])(
+      'miles → km → miles preserves %d miles',
+      (miles) => {
+        expect(kmToMiles(milesToKm(miles))).toBeCloseTo(miles, 3);
+      }
+    );
   });
 
   describe('distanceToKm', () => {
@@ -187,9 +200,14 @@ describe('unitConversions', () => {
       expect(lengthFromCm(lengthToCm(cm, 'cm'), 'cm')).toBeCloseTo(cm, 4);
     });
 
-    it.each([0, 1, 30, 70, 90, 120])('inches → cm → inches preserves %d in', (inches) => {
-      expect(lengthFromCm(lengthToCm(inches, 'inches'), 'inches')).toBeCloseTo(inches, 4);
-    });
+    it.each([0, 1, 30, 70, 90, 120])(
+      'inches → cm → inches preserves %d in',
+      (inches) => {
+        expect(
+          lengthFromCm(lengthToCm(inches, 'inches'), 'inches')
+        ).toBeCloseTo(inches, 4);
+      }
+    );
   });
 
   describe('cmToFeetInches', () => {
@@ -199,7 +217,7 @@ describe('unitConversions', () => {
       expect(inches).toBeCloseTo(0, 4);
     });
 
-    it("splits 6'1\" (185.42 cm) into 6/1", () => {
+    it('splits 6\'1" (185.42 cm) into 6/1', () => {
       const { feet, inches } = cmToFeetInches(185.42);
       expect(feet).toBe(6);
       expect(inches).toBeCloseTo(1, 4);
@@ -213,11 +231,11 @@ describe('unitConversions', () => {
   });
 
   describe('feetInchesToCm', () => {
-    it("combines 5'0\" → 152.4 cm", () => {
+    it('combines 5\'0" → 152.4 cm', () => {
       expect(feetInchesToCm(5, 0)).toBeCloseTo(152.4, 4);
     });
 
-    it("combines 6'1\" → 185.42 cm", () => {
+    it('combines 6\'1" → 185.42 cm', () => {
       expect(feetInchesToCm(6, 1)).toBeCloseTo(185.42, 4);
     });
 
@@ -257,6 +275,31 @@ describe('unitConversions', () => {
       const { stones, lbs } = kgToStonesLbs(0);
       expect(stones).toBe(0);
       expect(lbs).toBe(0);
+    });
+  });
+
+  describe('formatWeightDisplay in st_lbs', () => {
+    // The split is exact but the display rounds to one decimal, so a weight
+    // just under a stone boundary rounds its remainder up to 14lb - which is by
+    // definition the next stone, not a pound count that can be shown.
+    it.each([
+      [63.48, '9st 13.9lb'],
+      [63.49, '10st 0lb'],
+      [63.5, '10st 0lb'],
+      [63.51, '10st 0lb'],
+      [6.35, '1st 0lb'],
+      [80, '12st 8.4lb'],
+      [0, '0st 0lb'],
+    ])('formats %d kg as %s', (kg, expected) => {
+      expect(formatWeightDisplay(kg, 'st_lbs')).toBe(expected);
+    });
+
+    it('never renders 14lb across the whole plausible range', () => {
+      for (let tenths = 0; tenths <= 3000; tenths++) {
+        expect(formatWeightDisplay(tenths / 10, 'st_lbs')).not.toMatch(
+          / 14lb$/
+        );
+      }
     });
   });
 

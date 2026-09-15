@@ -277,7 +277,7 @@ const MealCard = ({
                         `MealCard: Add Food button clicked for ${meal.name}.`
                       )
                     }
-                    title="Add a new food item"
+                    title={t('mealCard.addFoodTo', 'Add Food to')}
                   >
                     <Utensils className="w-4 h-4" />
                   </Button>
@@ -348,28 +348,34 @@ const MealCard = ({
               <Button
                 size="default"
                 onClick={() => onCopyClick(meal.type)}
-                title="Copy to another date"
+                title={t('diary.copyAllToDate', 'Copy entire day to date')}
               >
                 <ClipboardCopy className="w-4 h-4" />
               </Button>
               <Button
                 size="default"
                 onClick={() => onCopyFamilyClick(meal.type)}
-                title="Copy with Family"
+                title={t('diary.copyFamilyTitle', 'Copy Food with Family')}
               >
                 <Users className="w-4 h-4" />
               </Button>
               <Button
                 size="default"
                 onClick={handleCopyFromYesterday}
-                title="Copy food entries from yesterday's meal"
+                title={t(
+                  'diary.copyAllFromYesterday',
+                  'Copy all from yesterday'
+                )}
               >
                 <History className="w-4 h-4" />
               </Button>
               <Button
                 size="default"
                 onClick={() => onConvertToMealClick(meal.type)}
-                title="Save as a new Meal"
+                title={t(
+                  'mealCreation.convertToMeal',
+                  'Create Meal from Diary'
+                )}
               >
                 <PlusCircle className="w-4 h-4" />
               </Button>
@@ -912,14 +918,21 @@ const MealCard = ({
         >
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Edit Food Database</DialogTitle>
+              <DialogTitle>
+                {t('mealCard.editFoodDatabase', 'Edit Food Database')}
+              </DialogTitle>
               <DialogDescription>
-                Edit the nutritional information for this food in your database.
+                {t(
+                  'mealCard.editFoodDatabaseDescription',
+                  'Edit the nutritional information for this food in your database.'
+                )}
               </DialogDescription>
             </DialogHeader>
             <p className="text-red-500">
-              Editing food details is temporarily unavailable due to schema
-              changes.
+              {t(
+                'mealCard.editingTemporarilyUnavailable',
+                'Editing food details is temporarily unavailable due to schema changes.'
+              )}
             </p>
           </DialogContent>
         </Dialog>
