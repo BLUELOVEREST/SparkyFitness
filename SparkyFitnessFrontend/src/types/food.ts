@@ -30,6 +30,10 @@ export interface FoodVariant {
   vitamin_c?: number;
   calcium?: number;
   iron?: number;
+  caffeine_mg?: number;
+  water_ml?: number;
+  alcohol_g?: number;
+  abv_percent?: number;
   is_default?: boolean;
   is_locked?: boolean;
   glycemic_index?: GlycemicIndex;
@@ -105,6 +109,19 @@ export interface Food {
   favorited_at?: string;
 }
 
+/**
+ * What a delete should do to everything pointing at the food.
+ *
+ * - `hide` stops it appearing in search and changes nothing else.
+ * - `delete` removes it from the library and from meals/meal plans, keeping
+ *   diary history (entries carry their own snapshot).
+ * - `delete_with_history` also removes the caller's own diary entries.
+ *
+ * Another user's diary is never affected; if anyone else still references the
+ * food the server hides it instead and says so in `status`.
+ */
+export type FoodDeleteMode = 'hide' | 'delete' | 'delete_with_history';
+
 export interface FoodDeletionImpact {
   foodEntries: FoodEntryDeletionImpact[];
   foodEntriesCount: number;
@@ -152,9 +169,6 @@ export interface FoodEntry {
    * which is shown alongside it rather than copied into it.
    */
   notes?: string | null;
-  // Add water_ml to FoodEntry if it's a water entry
-  water_ml?: number;
-
   // Snapshotted nutrient data
   calories?: number;
   protein?: number;
@@ -173,6 +187,12 @@ export interface FoodEntry {
   vitamin_c?: number;
   calcium?: number;
   iron?: number;
+  caffeine_mg?: number;
+  // Log-time snapshot of the variant's water content (ml). Falls back to the
+  // entry's logged volume client-side when unset -- see foodVolumeToMl in
+  // utils/nutritionCalculations.ts.
+  water_ml?: number;
+  alcohol_g?: number;
   glycemic_index?: GlycemicIndex;
   serving_size?: number;
   custom_nutrients?: Record<string, string | number>;

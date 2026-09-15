@@ -214,8 +214,8 @@ export async function getVitalsEntries(
   const client = await getClient(actingUserId);
   try {
     const res = (await client.query(
-      `SELECT * FROM vitals_entries 
-       WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3 
+      `SELECT * FROM vitals_entries
+       WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3
        ORDER BY timestamp ASC`,
       [userId, startDate, endDate]
     )) as { rows: VitalsEntries[] };
@@ -234,7 +234,7 @@ export async function upsertDailyHealthMetrics(
   const client = await getClient(actingUserId);
   try {
     const res = (await client.query(
-      `INSERT INTO daily_health_metrics 
+      `INSERT INTO daily_health_metrics
         (user_id, entry_date, source_provider, device_name, total_steps, step_goal, total_distance_meters,
          floors_ascended, floors_descended, active_calories, bmr_calories, total_calories, total_calories_captured_at, highly_active_seconds,
          active_seconds, sedentary_seconds, moderate_intensity_minutes, vigorous_intensity_minutes, exercise_minutes,
@@ -365,17 +365,166 @@ export async function upsertDailyHealthMetrics(
   }
 }
 
+/**
+ * Retrieves daily wearable health metrics for a date range, carrying forward
+ * the most recent non-null values for episodic metrics (e.g. VO2 max, fitness
+ * age, lactate threshold, hill score, endurance score, race predictions) from
+ * earlier entries with the same user and source provider when dates lack fresh readings.
+ *
+ * @param userId - Target user whose daily health metrics are being requested.
+ * @param actingUserId - Authenticated user making the request (for RLS check).
+ * @param startDate - Range start date string (YYYY-MM-DD).
+ * @param endDate - Range end date string (YYYY-MM-DD).
+ * @returns Array of daily health metric records ordered by entry_date ascending.
+ */
 export async function getDailyHealthMetrics(
   userId: string,
   actingUserId: string,
   startDate: string,
   endDate: string
 ): Promise<DailyHealthMetrics[]> {
-  const client = await getClient(actingUserId);
+  const client = await getClient(userId, actingUserId);
   try {
     const res = (await client.query(
-      `SELECT * FROM daily_health_metrics 
-       WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3 
+      `SELECT
+        dhm.id,
+        dhm.user_id,
+        dhm.entry_date,
+        dhm.source_provider,
+        dhm.device_name,
+        dhm.total_steps,
+        dhm.step_goal,
+        dhm.total_distance_meters,
+        dhm.floors_ascended,
+        dhm.floors_descended,
+        dhm.active_calories,
+        dhm.bmr_calories,
+        dhm.total_calories,
+        dhm.total_calories_captured_at,
+        dhm.highly_active_seconds,
+        dhm.active_seconds,
+        dhm.sedentary_seconds,
+        dhm.moderate_intensity_minutes,
+        dhm.vigorous_intensity_minutes,
+        dhm.exercise_minutes,
+        dhm.stand_hours,
+        dhm.resting_heart_rate,
+        dhm.heart_rate_recovery_1min,
+        COALESCE(
+          dhm.vo2_max,
+          (SELECT vo2_max FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.vo2_max IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS vo2_max,
+        COALESCE(
+          dhm.fitness_age,
+          (SELECT fitness_age FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.fitness_age IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS fitness_age,
+        COALESCE(
+          dhm.lactate_threshold_bpm,
+          (SELECT lactate_threshold_bpm FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.lactate_threshold_bpm IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS lactate_threshold_bpm,
+        COALESCE(
+          dhm.lactate_threshold_speed_mps,
+          (SELECT lactate_threshold_speed_mps FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.lactate_threshold_speed_mps IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS lactate_threshold_speed_mps,
+        COALESCE(
+          dhm.walking_asymmetry_percentage,
+          (SELECT walking_asymmetry_percentage FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.walking_asymmetry_percentage IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS walking_asymmetry_percentage,
+        COALESCE(
+          dhm.hill_score,
+          (SELECT hill_score FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.hill_score IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS hill_score,
+        COALESCE(
+          dhm.race_prediction_5k_seconds,
+          (SELECT race_prediction_5k_seconds FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.race_prediction_5k_seconds IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS race_prediction_5k_seconds,
+        COALESCE(
+          dhm.race_prediction_10k_seconds,
+          (SELECT race_prediction_10k_seconds FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.race_prediction_10k_seconds IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS race_prediction_10k_seconds,
+        COALESCE(
+          dhm.race_prediction_half_marathon_seconds,
+          (SELECT race_prediction_half_marathon_seconds FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.race_prediction_half_marathon_seconds IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS race_prediction_half_marathon_seconds,
+        COALESCE(
+          dhm.race_prediction_marathon_seconds,
+          (SELECT race_prediction_marathon_seconds FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.race_prediction_marathon_seconds IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS race_prediction_marathon_seconds,
+        dhm.recovery_time_hours,
+        dhm.training_readiness_score,
+        COALESCE(
+          dhm.endurance_score,
+          (SELECT endurance_score FROM daily_health_metrics d2
+           WHERE d2.user_id = dhm.user_id
+             AND d2.source_provider = dhm.source_provider
+             AND d2.entry_date < dhm.entry_date
+             AND d2.endurance_score IS NOT NULL
+           ORDER BY d2.entry_date DESC LIMIT 1)
+        ) AS endurance_score,
+        dhm.weekly_training_load,
+        dhm.acute_training_load,
+        dhm.chronic_training_load,
+        dhm.acwr_ratio,
+        dhm.avg_stress_level,
+        dhm.max_stress_level,
+        dhm.body_battery_charged,
+        dhm.body_battery_drained,
+        dhm.body_battery_highest,
+        dhm.body_battery_lowest,
+        dhm.created_at,
+        dhm.updated_at
+       FROM daily_health_metrics dhm
+       WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3
        ORDER BY entry_date ASC`,
       [userId, startDate, endDate]
     )) as { rows: DailyHealthMetrics[] };

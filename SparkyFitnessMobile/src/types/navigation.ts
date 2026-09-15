@@ -37,7 +37,10 @@ export type FoodPickerMode =
   | 'log-entry'
   | 'meal-builder'
   | 'meal-plan'
-  | 'library';
+  | 'library'
+  // #2115: pick a food+variant to link a water container to, without
+  // logging a diary entry. See services/waterContainerLinkSelection.ts.
+  | 'container-link';
 
 export type TabParamList = {
   Dashboard: undefined;
@@ -78,6 +81,9 @@ export type RootStackParamList = {
   MealPlanForm:
     | { template?: MealPlanAppTemplate; initialMeal?: Meal }
     | undefined;
+  // #2115, Phase 12: mobile-only water-container CRUD.
+  WaterContainers: undefined;
+  WaterContainerEdit: { containerId?: number } | undefined;
   ExercisesLibrary: undefined;
   WorkoutPresetsLibrary: undefined;
   Kitchen: undefined;

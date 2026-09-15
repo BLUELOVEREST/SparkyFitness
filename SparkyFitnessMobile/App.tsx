@@ -25,6 +25,8 @@ import {
   serverConfigsQueryKey,
   useSyncHealthData,
   useCycleMode,
+  useServerConnection,
+  useWatchCheckInBridge,
 } from './src/hooks';
 import { useAppStartup } from './src/hooks/useAppStartup';
 import { useAppBootstrap } from './src/hooks/useAppBootstrap';
@@ -43,6 +45,8 @@ import {
   SafeMealsLibrary,
   SafeMealPlans,
   SafeMealPlanForm,
+  SafeWaterContainers,
+  SafeWaterContainerEdit,
   SafeExercisesLibrary,
   SafeWorkoutPresetsLibrary,
   SafeKitchen,
@@ -75,15 +79,20 @@ import {
   SafeWorkoutComplete,
   SafeActivityDetail,
   SafeFastingDetail,
+  SafeSleepDetail,
   SafeLogs,
   SafeSync,
   SafeImportHistory,
   SafeMeasurementsAdd,
+  SafeProgressPhotos,
+  SafeProgressPhotoCompare,
+  SafeProgressPhotoTimelapse,
   SafeChat,
   SafeCalorieSettings,
   SafeMealTypeSettings,
   SafeFoodSettings,
   SafeDashboardSettings,
+  SafeHealthTrendsSettings,
   SafeDiarySettings,
   SafeWorkoutSettings,
   SafeServerSettings,
@@ -147,6 +156,12 @@ const androidModalAnimation =
   Platform.OS === 'android'
     ? ({ animation: 'slide_from_bottom' } as const)
     : {};
+
+function WatchCheckInGate() {
+  const { isConnected: isServerConnected } = useServerConnection();
+  useWatchCheckInBridge(isServerConnected);
+  return null;
+}
 
 function AppContent() {
   const { t } = useTranslation();
@@ -330,6 +345,7 @@ function AppContent() {
         }
       }}
     >
+      <WatchCheckInGate />
       <SafeAreaProvider>
         {/* Inside SafeAreaProvider on purpose: the viewer positions its close
             button against the insets, so mounting it at the app root crashes
@@ -493,6 +509,28 @@ function AppContent() {
                 {
                   headerBackTitle: t('common.back', { defaultValue: 'Back' }),
                 },
+              )}
+            />
+            <Stack.Screen
+              name="WaterContainers"
+              component={SafeWaterContainers}
+              options={createStackScreenOptions(
+                t('waterContainers.title', { defaultValue: 'Water containers' }),
+                {
+                  headerBackTitle: t('navigation.library', {
+                    defaultValue: 'Library',
+                  }),
+                },
+              )}
+            />
+            <Stack.Screen
+              name="WaterContainerEdit"
+              component={SafeWaterContainerEdit}
+              options={createStackScreenOptions(
+                t('waterContainerEdit.editTitle', {
+                  defaultValue: 'Edit container',
+                }),
+                { headerBackTitle: t('common.back', { defaultValue: 'Back' }) },
               )}
             />
             <Stack.Screen
@@ -968,6 +1006,18 @@ function AppContent() {
               )}
             />
             <Stack.Screen
+              name="SleepDetail"
+              component={SafeSleepDetail}
+              options={createStackScreenOptions(
+                t('screens.sleep', { defaultValue: 'Sleep' }),
+                {
+                  headerBackTitle: t('navigation.diary', {
+                    defaultValue: 'Diary',
+                  }),
+                },
+              )}
+            />
+            <Stack.Screen
               name="Sync"
               component={SafeSync}
               options={createStackScreenOptions(
@@ -1000,6 +1050,34 @@ function AppContent() {
                   presentation: 'modal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
                 },
+              )}
+            />
+            <Stack.Screen
+              name="ProgressPhotos"
+              component={SafeProgressPhotos}
+              options={createStackScreenOptions(
+                t('screens.progressPhotos', { defaultValue: 'Progress Photos' }),
+                { headerBackButtonDisplayMode: 'minimal' },
+              )}
+            />
+            <Stack.Screen
+              name="ProgressPhotoCompare"
+              component={SafeProgressPhotoCompare}
+              options={createStackScreenOptions(
+                t('screens.progressPhotoCompare', {
+                  defaultValue: 'Compare Photos',
+                }),
+                { headerBackButtonDisplayMode: 'minimal' },
+              )}
+            />
+            <Stack.Screen
+              name="ProgressPhotoTimelapse"
+              component={SafeProgressPhotoTimelapse}
+              options={createStackScreenOptions(
+                t('screens.progressPhotoTimelapse', {
+                  defaultValue: 'Photo Timelapse',
+                }),
+                { headerBackButtonDisplayMode: 'minimal' },
               )}
             />
             <Stack.Screen
@@ -1050,6 +1128,20 @@ function AppContent() {
                 {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
+                  }),
+                },
+              )}
+            />
+            <Stack.Screen
+              name="HealthTrendsSettings"
+              component={SafeHealthTrendsSettings}
+              options={createStackScreenOptions(
+                t('screens.healthTrendsSettings', {
+                  defaultValue: 'Health Trends',
+                }),
+                {
+                  headerBackTitle: t('screens.dashboardSettings', {
+                    defaultValue: 'Dashboard Settings',
                   }),
                 },
               )}

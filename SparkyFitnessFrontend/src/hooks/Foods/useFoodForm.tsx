@@ -32,7 +32,7 @@ import {
   formVariantToFoodVariant,
   sanitizeGlycemicIndexFrontend,
 } from '@/utils/foodForm';
-import { nutrientFields } from '@/constants/foodForm';
+import { nutrientFields, UNSCALED_NUTRIENT_FIELDS } from '@/constants/foodForm';
 import {
   getConversionFactor,
   shouldOfferAiConversion,
@@ -119,6 +119,7 @@ function scaleVariantNutrition(
   };
 
   nutrientFields.forEach((nutrient) => {
+    if (UNSCALED_NUTRIENT_FIELDS.includes(nutrient)) return;
     const originalValue = Number(variant[nutrient]);
     if (!isNaN(originalValue)) {
       scaledVariant[nutrient] = Number(
@@ -1079,6 +1080,11 @@ export function useCustomFoodForm({
         vitamin_c: scaled.vitamin_c,
         calcium: scaled.calcium,
         iron: scaled.iron,
+        caffeine_mg: scaled.caffeine_mg,
+        water_ml: scaled.water_ml,
+        alcohol_g: scaled.alcohol_g,
+        // Not scaled -- see UNSCALED_NUTRIENT_FIELDS.
+        abv_percent: scaled.abv_percent,
         custom_nutrients: scaled.custom_nutrients
           ? { ...scaled.custom_nutrients }
           : currentVariant.custom_nutrients,
