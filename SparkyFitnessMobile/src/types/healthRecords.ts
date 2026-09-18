@@ -29,12 +29,7 @@ export interface HKSleepRecord {
 
 /** Sleep stage type including 'in_bed' (the output shape stored in stage_events) */
 export type SleepStageType =
-  | 'awake'
-  | 'rem'
-  | 'light'
-  | 'deep'
-  | 'in_bed'
-  | 'unknown';
+  'awake' | 'rem' | 'light' | 'deep' | 'in_bed' | 'unknown';
 
 /**
  * Internal sleep stage classification used only during HealthKit overlap resolution.
@@ -44,13 +39,7 @@ export type SleepStageType =
  * output 'light' stage. See mapHealthKitSleepStage / SLEEP_STAGE_RANK in dataAggregation.ts.
  */
 export type InternalSleepStage =
-  | 'deep'
-  | 'rem'
-  | 'core'
-  | 'awake'
-  | 'asleep_generic'
-  | 'in_bed'
-  | 'unknown';
+  'deep' | 'rem' | 'core' | 'awake' | 'asleep_generic' | 'in_bed' | 'unknown';
 
 /** One raw HealthKit sleep sample collected before overlap resolution (uses epoch ms). */
 export interface SleepRawEvent {

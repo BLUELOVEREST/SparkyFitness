@@ -115,8 +115,7 @@ const navigation = {
 } as any;
 
 type RouteParams =
-  | { selectedExercise?: Exercise; selectionNonce?: number }
-  | undefined;
+  { selectedExercise?: Exercise; selectionNonce?: number } | undefined;
 
 function makeRoute(params?: RouteParams) {
   return { key: 'PresetSearch-key', name: 'PresetSearch' as const, params };

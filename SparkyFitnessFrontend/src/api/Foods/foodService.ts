@@ -162,18 +162,6 @@ export const lookupFoodsByName = async (term: string, limit: number) => {
   return apiCall(`/foods?${params.toString()}`);
 };
 
-export const searchDatabaseFoods = async (
-  term: string,
-  limit: number,
-  _mealType?: string
-) => {
-  if (!term.trim()) {
-    const response = await loadFoods('', 'all', 1, limit, 'name:asc');
-    return { searchResults: response.foods };
-  }
-  return lookupFoodsByName(term, limit);
-};
-
 export const importFoodsFromCsv = async (
   foods: FoodDataForBackend[],
   overwrite = false

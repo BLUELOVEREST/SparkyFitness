@@ -143,8 +143,7 @@ export async function searchBooheeFoods(
   const data =
     payload && typeof payload === 'object'
       ? ((payload as Record<string, unknown>).data as
-          | Record<string, unknown>
-          | undefined)
+          Record<string, unknown> | undefined)
       : undefined;
   return {
     foods,
@@ -167,8 +166,7 @@ export async function getBooheeFoodDetails(
   const data =
     payload && typeof payload === 'object'
       ? ((payload as Record<string, unknown>).data as
-          | Record<string, unknown>
-          | undefined)
+          Record<string, unknown> | undefined)
       : undefined;
   const food = mapBooheeFood(data || {});
   if (!food) {

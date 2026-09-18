@@ -145,8 +145,7 @@ async function processStravaActivities(
       // Strava SummaryActivity often lacks calories, but DetailedActivity (if available) has it.
       // Missing calories preserve existing values; new entries default to 0.
       const detailedActivity = detailedActivities[activity.id] as
-        | StravaActivity
-        | undefined;
+        StravaActivity | undefined;
       const caloriesAuto =
         detailedActivity?.calories ?? activity.calories ?? undefined;
       const entryData = {

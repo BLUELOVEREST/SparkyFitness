@@ -2,21 +2,13 @@ import type {
   TrainingFocusTimeSlot,
   WorkoutPlanFocusSession,
 } from '../types/workoutPlan';
-import {
-  BUILT_IN_TRAINING_FOCUS_OPTIONS,
-  CUSTOM_TRAINING_FOCUS_OPTION,
-  normalizeTrainingFocusValue,
-} from '@workspace/shared';
+import { normalizeTrainingFocusValue } from '@workspace/shared';
 import i18n from '../localization/i18n';
 
 export {
-  BUILT_IN_TRAINING_FOCUS_OPTIONS,
-  CUSTOM_TRAINING_FOCUS_OPTION,
   CUSTOM_TRAINING_FOCUS_VALUE,
   buildTrainingFocusOptions,
   buildTrainingFocusOptionsFromTemplates,
-  isBuiltInTrainingFocus,
-  normalizeTrainingFocusValue,
   resolveTrainingFocusValue,
 } from '@workspace/shared';
 
@@ -40,11 +32,6 @@ export const TRAINING_FOCUS_TIME_SLOTS: {
     value: 'evening',
     label: () => i18n.t('workoutPlan.evening', { defaultValue: 'Evening' }),
   },
-];
-
-export const TRAINING_FOCUS_OPTIONS = [
-  ...BUILT_IN_TRAINING_FOCUS_OPTIONS,
-  CUSTOM_TRAINING_FOCUS_OPTION,
 ];
 
 const DAYS_OF_WEEK = [
@@ -79,16 +66,16 @@ export function getDayName(dayOfWeek: number) {
 }
 
 export function buildDefaultFocusSessions(
-  initialSessions?: WorkoutPlanFocusSession[],
+  initialSessions?: WorkoutPlanFocusSession[]
 ): WorkoutPlanFocusSession[] {
-  return DAYS_OF_WEEK.flatMap(day =>
+  return DAYS_OF_WEEK.flatMap((day) =>
     TRAINING_FOCUS_TIME_SLOTS.map(({ value }) => {
       const existing = initialSessions?.find(
-        session =>
-          Number(session.day_of_week) === day.id && session.time_slot === value,
+        (session) =>
+          Number(session.day_of_week) === day.id && session.time_slot === value
       );
       const trainingFocus = normalizeTrainingFocusValue(
-        existing?.training_focus ?? 'rest',
+        existing?.training_focus ?? 'rest'
       );
       return {
         day_of_week: day.id,
@@ -96,23 +83,23 @@ export function buildDefaultFocusSessions(
         training_focus: trainingFocus,
         is_primary: trainingFocus !== 'rest' && Boolean(existing?.is_primary),
       };
-    }),
+    })
   );
 }
 
 function normalizeDayPrimary(
   sessions: WorkoutPlanFocusSession[],
-  dayOfWeek: number,
+  dayOfWeek: number
 ): WorkoutPlanFocusSession[] {
   const daySessions = sessions.filter(
-    session => session.day_of_week === dayOfWeek,
+    (session) => session.day_of_week === dayOfWeek
   );
   const activeSessions = daySessions.filter(
-    session => session.training_focus !== 'rest',
+    (session) => session.training_focus !== 'rest'
   );
 
   if (activeSessions.length === 1) {
-    return sessions.map(session =>
+    return sessions.map((session) =>
       session.day_of_week === dayOfWeek
         ? {
             ...session,
@@ -120,22 +107,22 @@ function normalizeDayPrimary(
               session.time_slot === activeSessions[0]?.time_slot &&
               session.training_focus !== 'rest',
           }
-        : session,
+        : session
     );
   }
 
   if (activeSessions.length === 0) {
-    return sessions.map(session =>
+    return sessions.map((session) =>
       session.day_of_week === dayOfWeek
         ? { ...session, is_primary: false }
-        : session,
+        : session
     );
   }
 
-  return sessions.map(session =>
+  return sessions.map((session) =>
     session.day_of_week === dayOfWeek && session.training_focus === 'rest'
       ? { ...session, is_primary: false }
-      : session,
+      : session
   );
 }
 
@@ -143,9 +130,9 @@ export function updateTrainingFocusSession(
   sessions: WorkoutPlanFocusSession[],
   dayOfWeek: number,
   timeSlot: TrainingFocusTimeSlot,
-  trainingFocus: string,
+  trainingFocus: string
 ): WorkoutPlanFocusSession[] {
-  const updated = sessions.map(session =>
+  const updated = sessions.map((session) =>
     session.day_of_week === dayOfWeek && session.time_slot === timeSlot
       ? {
           ...session,
@@ -154,7 +141,7 @@ export function updateTrainingFocusSession(
             normalizeTrainingFocusValue(trainingFocus) !== 'rest' &&
             session.is_primary,
         }
-      : session,
+      : session
   );
 
   return normalizeDayPrimary(updated, dayOfWeek);
@@ -163,30 +150,30 @@ export function updateTrainingFocusSession(
 export function setPrimaryTrainingFocusSession(
   sessions: WorkoutPlanFocusSession[],
   dayOfWeek: number,
-  timeSlot: TrainingFocusTimeSlot,
+  timeSlot: TrainingFocusTimeSlot
 ): WorkoutPlanFocusSession[] {
-  return sessions.map(session =>
+  return sessions.map((session) =>
     session.day_of_week === dayOfWeek
       ? {
           ...session,
           is_primary:
             session.time_slot === timeSlot && session.training_focus !== 'rest',
         }
-      : session,
+      : session
   );
 }
 
 export function validateTrainingFocusSessions(
-  sessions: WorkoutPlanFocusSession[],
+  sessions: WorkoutPlanFocusSession[]
 ): { valid: true } | { valid: false; message: string } {
   for (const day of DAYS_OF_WEEK) {
     const daySessions = sessions.filter(
-      session => session.day_of_week === day.id,
+      (session) => session.day_of_week === day.id
     );
     const activeSessions = daySessions.filter(
-      session => session.training_focus !== 'rest',
+      (session) => session.training_focus !== 'rest'
     );
-    const primarySessions = daySessions.filter(session => session.is_primary);
+    const primarySessions = daySessions.filter((session) => session.is_primary);
 
     if (activeSessions.length > 0 && primarySessions.length !== 1) {
       return {

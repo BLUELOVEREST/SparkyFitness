@@ -500,11 +500,7 @@ const FOOT_BASED_TYPES = new Set([37, 56, 57, 79]);
 const PEDAL_BASED_TYPES = new Set([8, 9]);
 
 type SeriesName =
-  | 'HeartRate'
-  | 'Speed'
-  | 'Power'
-  | 'StepsCadence'
-  | 'CyclingPedalingCadence';
+  'HeartRate' | 'Speed' | 'Power' | 'StepsCadence' | 'CyclingPedalingCadence';
 
 const ALL_SERIES: SeriesName[] = [
   'HeartRate',

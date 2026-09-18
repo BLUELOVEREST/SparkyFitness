@@ -12,7 +12,7 @@ export const fetchWorkoutPlanTemplates = (): Promise<WorkoutPlanTemplate[]> =>
   });
 
 export const fetchActiveTrainingFocusPlan = (
-  date: string,
+  date: string
 ): Promise<WorkoutPlanTemplate | null> =>
   apiFetch<WorkoutPlanTemplate | null>({
     endpoint: `/api/workout-plan-templates/active-training-focus/${encodeURIComponent(date)}`,

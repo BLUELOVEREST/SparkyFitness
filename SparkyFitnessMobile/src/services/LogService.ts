@@ -6,10 +6,7 @@ export type LogStatus = 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR';
 
 // Threshold used by both the capture-level and view-filter settings.
 export type LogThreshold =
-  | 'all'
-  | 'no_debug'
-  | 'warnings_errors'
-  | 'errors_only';
+  'all' | 'no_debug' | 'warnings_errors' | 'errors_only';
 
 export interface LogEntry {
   timestamp: string;

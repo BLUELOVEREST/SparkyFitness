@@ -58,8 +58,8 @@ describe('WorkoutPlanTemplateFormScreen', () => {
 
   it('creates a training focus plan with an automatically selected main session', async () => {
     const createTemplate = jest.fn();
-    mockUseCreateWorkoutPlanTemplate.mockImplementation(options => ({
-      createTemplate: async payload => {
+    mockUseCreateWorkoutPlanTemplate.mockImplementation((options) => ({
+      createTemplate: async (payload) => {
         createTemplate(payload);
         const template = { id: 'workout-plan-1', ...payload };
         options?.onSuccess?.(template);
@@ -79,16 +79,16 @@ describe('WorkoutPlanTemplateFormScreen', () => {
       <WorkoutPlanTemplateFormScreen
         navigation={navigation as never}
         route={{ params: { mode: 'create' } } as never}
-      />,
+      />
     );
 
     fireEvent.changeText(
       screen.getByPlaceholderText('Training Focus Plan'),
-      'My Focus Plan',
+      'My Focus Plan'
     );
     fireEvent.changeText(
       screen.getByPlaceholderText('Optional'),
-      'Weekday split',
+      'Weekday split'
     );
     fireEvent.press(screen.getAllByText('Monday')[0]);
     fireEvent.press(screen.getByText('Morning'));
@@ -112,7 +112,7 @@ describe('WorkoutPlanTemplateFormScreen', () => {
             is_primary: true,
           }),
         ]),
-      }),
+      })
     );
     expect(navigation.goBack).toHaveBeenCalled();
   });
@@ -140,7 +140,7 @@ describe('WorkoutPlanTemplateFormScreen', () => {
       <WorkoutPlanTemplateFormScreen
         navigation={{ goBack: jest.fn() } as never}
         route={{ params: { mode: 'create' } } as never}
-      />,
+      />
     );
 
     expect(screen.getByText('新建训练计划')).toBeTruthy();
@@ -176,8 +176,8 @@ describe('WorkoutPlanTemplateFormScreen', () => {
       error: null,
       refetch: jest.fn(),
     } as never);
-    mockUseCreateWorkoutPlanTemplate.mockImplementation(options => ({
-      createTemplate: async payload => {
+    mockUseCreateWorkoutPlanTemplate.mockImplementation((options) => ({
+      createTemplate: async (payload) => {
         createTemplate(payload);
         const template = { id: 'workout-plan-1', ...payload };
         options?.onSuccess?.(template);
@@ -196,13 +196,13 @@ describe('WorkoutPlanTemplateFormScreen', () => {
       <WorkoutPlanTemplateFormScreen
         navigation={{ goBack: jest.fn() } as never}
         route={{ params: { mode: 'create' } } as never}
-      />,
+      />
     );
 
     expect(screen.getByText('Push Day')).toBeTruthy();
     fireEvent.changeText(
       screen.getByPlaceholderText('Training Focus Plan'),
-      'Custom Week',
+      'Custom Week'
     );
     fireEvent.press(screen.getAllByText('Monday')[0]);
     fireEvent.press(screen.getByText('Morning'));
@@ -221,7 +221,7 @@ describe('WorkoutPlanTemplateFormScreen', () => {
             is_primary: true,
           }),
         ]),
-      }),
+      })
     );
   });
 
@@ -232,8 +232,8 @@ describe('WorkoutPlanTemplateFormScreen', () => {
       createTemplateSync: jest.fn(),
       isPending: false,
     });
-    mockUseUpdateWorkoutPlanTemplate.mockImplementation(options => ({
-      updateTemplate: async payload => {
+    mockUseUpdateWorkoutPlanTemplate.mockImplementation((options) => ({
+      updateTemplate: async (payload) => {
         updateTemplate(payload);
         const template = { id: 'workout-plan-1', ...payload };
         options?.onSuccess?.(template);
@@ -272,7 +272,7 @@ describe('WorkoutPlanTemplateFormScreen', () => {
             },
           } as never
         }
-      />,
+      />
     );
 
     expect(screen.getByDisplayValue('Existing Focus')).toBeTruthy();
@@ -294,7 +294,7 @@ describe('WorkoutPlanTemplateFormScreen', () => {
             is_primary: true,
           }),
         ]),
-      }),
+      })
     );
     expect(navigation.goBack).toHaveBeenCalled();
   });

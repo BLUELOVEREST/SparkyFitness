@@ -105,8 +105,7 @@ beforeEach(() => {
 describe('contributeFoodToOpenFoodFacts', () => {
   it('executes the contribution basis GET through the shared permit without waiting', async () => {
     let executeProductRead:
-      | ((operation: () => Promise<Response>) => Promise<Response>)
-      | undefined;
+      ((operation: () => Promise<Response>) => Promise<Response>) | undefined;
     vi.mocked(submitOpenFoodFactsProduct).mockImplementation(
       async (submission) => {
         executeProductRead = submission.executeProductRead;

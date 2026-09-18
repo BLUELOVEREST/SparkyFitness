@@ -90,12 +90,9 @@ function getRecordDate(record: unknown): string | null {
 function extractBodyFatValue(record: unknown): number | null {
   const r = record as Record<string, unknown>;
   const percentage = r.percentage as
-    | Record<string, unknown>
-    | number
-    | undefined;
+    Record<string, unknown> | number | undefined;
   const bodyFatPercentage = r.bodyFatPercentage as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
 
   if (
     typeof percentage === 'object' &&
@@ -133,9 +130,7 @@ function extractBodyFatValue(record: unknown): number | null {
 function extractO2Value(record: unknown): number | null {
   const r = record as Record<string, unknown>;
   const percentage = r.percentage as
-    | Record<string, unknown>
-    | number
-    | undefined;
+    Record<string, unknown> | number | undefined;
 
   if (
     typeof percentage === 'object' &&
@@ -172,9 +167,7 @@ function extractVo2Value(record: unknown): number | null {
 function extractBMRValue(record: unknown): number | null {
   const r = record as Record<string, unknown>;
   const basalMetabolicRate = r.basalMetabolicRate as
-    | Record<string, unknown>
-    | number
-    | undefined;
+    Record<string, unknown> | number | undefined;
 
   if (basalMetabolicRate !== undefined) {
     if (typeof basalMetabolicRate === 'number') {

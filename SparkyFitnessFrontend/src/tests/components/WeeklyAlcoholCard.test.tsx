@@ -15,8 +15,7 @@ jest.mock('react-i18next', () => ({
     t: (key: string, second?: unknown) => {
       if (typeof second === 'string') return second;
       const opts = second as
-        | { defaultValue?: string; count?: number }
-        | undefined;
+        { defaultValue?: string; count?: number } | undefined;
       const template = opts?.defaultValue ?? key;
       return opts?.count !== undefined
         ? template.replace('{{count}}', String(opts.count))

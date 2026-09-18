@@ -149,6 +149,9 @@ describe('workoutPlanTemplateService', () => {
         workoutPlanTemplateRepository.updateWorkoutPlanTemplate
       ).toHaveBeenCalledWith(TEMPLATE_ID, USER_ID, {
         plan_name: 'Updated Name',
+        assignments: undefined,
+        focus_sessions: [],
+        plan_mode: 'detailed',
       });
       expect(result.plan_name).toBe('Updated Name');
     });

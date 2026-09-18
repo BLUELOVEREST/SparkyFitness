@@ -2,38 +2,6 @@ export { queryClient } from './queryClient';
 export {
   serverConnectionQueryKey,
   serverConfigsQueryKey,
-  dailySummaryQueryKey,
-  familyUsersQueryKey,
-  familyDailySummaryQueryKey,
-  measurementsQueryKey,
-  mostRecentMeasurementQueryKey,
-  preferencesQueryKey,
-  waterContainersQueryKey,
-  foodsQueryKey,
-  foodSearchQueryKey,
-  foodsLibraryQueryKey,
-  mealsQueryKey,
-  mealPlanTemplatesQueryKey,
-  mealDetailQueryKey,
-  recentMealsQueryKeyRoot,
-  recentMealsQueryKey,
-  mealSearchQueryKeyRoot,
-  mealSearchQueryKey,
-  externalProvidersQueryKey,
-  externalFoodSearchQueryKey,
-  mealTypesQueryKey,
-  foodVariantsQueryKey,
-  measurementsRangeQueryKey,
-  exerciseHistoryQueryKey,
-  suggestedExercisesQueryKey,
-  exerciseSearchQueryKey,
-  exercisesLibraryQueryKey,
-  externalExerciseSearchQueryKey,
-  workoutPresetsQueryKey,
-  workoutPresetSearchQueryKey,
-  workoutPresetsLibraryQueryKey,
-  activeAiServiceSettingQueryKey,
-  userAiConfigAllowedQueryKey,
   fastingRootQueryKey,
   chatHistoryQueryKey,
   medicationsRootQueryKey,
@@ -46,7 +14,6 @@ export {
   useActiveMealPlanDay,
   useLogActiveMealPlanMeal,
 } from './useActiveMealPlanDay';
-export { useActiveMealPlanWeek } from './useActiveMealPlanWeek';
 export { useFamilyUsers, useFamilyDailySummary } from './useFamilyDiary';
 export { useMeasurements } from './useMeasurements';
 
@@ -74,14 +41,6 @@ export {
   useUpdateMeal,
   useDeleteMeal,
 } from './useMeals';
-export {
-  useMealPlanTemplates,
-  useMostRecentWeight,
-  useCreateMealPlanTemplate,
-  usePreviewCarbCycleWeek,
-  useUpdateMealPlanTemplate,
-  useDeleteMealPlanTemplate,
-} from './useMealPlanTemplates';
 export {
   useMealPlans,
   useCreateMealPlan,
@@ -135,28 +94,8 @@ export type { UserCustomNutrient } from './useCustomNutrients';
 export { useNutrientDisplayPreferences } from './useNutrientDisplayPreferences';
 export { useChatHistory } from './useChatHistory';
 export { useCycleMode } from './useCycleMode';
-export { useCycleLog, useCycleLogsRange } from './useCycleLogs';
-export { useUpsertCycleLog } from './useUpsertCycleLog';
-export { useSymptomEntries, useSymptomMutations } from './useSymptoms';
-export { useCycleHistory } from './useCycleHistory';
-export {
-  useCycleOverview,
-  useCycleInsights,
-  useCycleCorrelations,
-} from './useCycleInsights';
-export { useCycleTests, useCycleTestMutations } from './useCycleTests';
-
 // --- Medications ---
-export {
-  useMedications,
-  useMedicationDetail,
-  useMedicationEntries,
-  useCreateMedication,
-  useUpdateMedication,
-  useDeleteMedication,
-  useCreateMedicationEntry,
-  useDeleteMedicationEntry,
-} from './useMedications';
+export { useMedications } from './useMedications';
 export {
   useSetFoodEntryImages,
   useClearFoodEntryImage,

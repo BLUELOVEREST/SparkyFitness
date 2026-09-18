@@ -216,8 +216,7 @@ describe('useScreenHeader accessibility label (native path)', () => {
     };
     const items = options.unstable_headerRightItems?.() ?? [];
     return items[0] as
-      | { label?: string; accessibilityLabel?: string }
-      | undefined;
+      { label?: string; accessibilityLabel?: string } | undefined;
   }
 
   function nativeLeftItem() {
@@ -228,8 +227,7 @@ describe('useScreenHeader accessibility label (native path)', () => {
     };
     const items = options.unstable_headerLeftItems?.() ?? [];
     return items[0] as
-      | { label?: string; accessibilityLabel?: string }
-      | undefined;
+      { label?: string; accessibilityLabel?: string } | undefined;
   }
 
   it('English busy: native label is Saving… and accessibility mirrors it', async () => {

@@ -64,7 +64,7 @@ export function useCreateWorkoutPlanTemplate(options?: {
   const mutation = useMutation({
     mutationFn: (payload: SaveWorkoutPlanTemplatePayload) =>
       createWorkoutPlanTemplate(payload),
-    onSuccess: template => {
+    onSuccess: (template) => {
       queryClient.invalidateQueries({ queryKey: workoutPlanTemplatesQueryKey });
       queryClient.invalidateQueries({
         queryKey: activeTrainingFocusPlanQueryKey(template.start_date),
@@ -106,7 +106,7 @@ export function useUpdateWorkoutPlanTemplate(options?: {
       }
       return updateWorkoutPlanTemplate({ ...payload, id });
     },
-    onSuccess: template => {
+    onSuccess: (template) => {
       queryClient.invalidateQueries({ queryKey: workoutPlanTemplatesQueryKey });
       queryClient.invalidateQueries({
         queryKey: activeTrainingFocusPlanQueryKey(template.start_date),

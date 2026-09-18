@@ -12,7 +12,11 @@ import {
   activeMealPlanDayQueryKey,
   dailySummaryQueryKey,
 } from '../../src/hooks/queryKeys';
-import { createQueryWrapper, createTestQueryClient, type QueryClient } from './queryTestUtils';
+import {
+  createQueryWrapper,
+  createTestQueryClient,
+  type QueryClient,
+} from './queryTestUtils';
 
 jest.mock('../../src/services/api/mealPlanTemplatesApi', () => ({
   fetchActiveMealPlanDay: jest.fn(),
@@ -26,7 +30,9 @@ jest.mock('react-native-toast-message', () => ({
 const mockFetchActiveMealPlanDay =
   fetchActiveMealPlanDay as jest.MockedFunction<typeof fetchActiveMealPlanDay>;
 const mockLogActiveMealPlanMealToDiary =
-  logActiveMealPlanMealToDiary as jest.MockedFunction<typeof logActiveMealPlanMealToDiary>;
+  logActiveMealPlanMealToDiary as jest.MockedFunction<
+    typeof logActiveMealPlanMealToDiary
+  >;
 
 describe('useActiveMealPlanDay', () => {
   let queryClient: QueryClient;
@@ -49,7 +55,7 @@ describe('useActiveMealPlanDay', () => {
 
     const { result } = renderHook(
       () => useActiveMealPlanDay({ date: '2026-07-15' }),
-      { wrapper: createQueryWrapper(queryClient) },
+      { wrapper: createQueryWrapper(queryClient) }
     );
 
     await waitFor(() => {
@@ -83,7 +89,7 @@ describe('useActiveMealPlanDay', () => {
 
     expect(mockLogActiveMealPlanMealToDiary).toHaveBeenCalledWith(
       '2026-07-15',
-      'meal-type-pre-workout',
+      'meal-type-pre-workout'
     );
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: activeMealPlanDayQueryKey('2026-07-15'),

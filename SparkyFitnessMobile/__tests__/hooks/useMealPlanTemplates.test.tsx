@@ -2,12 +2,14 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { createQueryWrapper, createTestQueryClient } from './queryTestUtils';
 import {
   createMealPlanTemplate,
+  deleteMealPlanTemplate,
   fetchMealPlanTemplates,
 } from '../../src/services/api/mealPlanTemplatesApi';
 import { previewCarbCycleWeek } from '../../src/services/api/goalsApi';
 import { fetchMostRecentMeasurement } from '../../src/services/api/measurementsApi';
 import {
   useCreateMealPlanTemplate,
+  useDeleteMealPlanTemplate,
   useMealPlanTemplates,
   useMostRecentWeight,
   usePreviewCarbCycleWeek,
@@ -15,6 +17,7 @@ import {
 
 jest.mock('../../src/services/api/mealPlanTemplatesApi', () => ({
   createMealPlanTemplate: jest.fn(),
+  deleteMealPlanTemplate: jest.fn(),
   fetchMealPlanTemplates: jest.fn(),
 }));
 
@@ -30,10 +33,15 @@ const mockFetchMealPlanTemplates =
   fetchMealPlanTemplates as jest.MockedFunction<typeof fetchMealPlanTemplates>;
 const mockCreateMealPlanTemplate =
   createMealPlanTemplate as jest.MockedFunction<typeof createMealPlanTemplate>;
-const mockPreviewCarbCycleWeek =
-  previewCarbCycleWeek as jest.MockedFunction<typeof previewCarbCycleWeek>;
+const mockDeleteMealPlanTemplate =
+  deleteMealPlanTemplate as jest.MockedFunction<typeof deleteMealPlanTemplate>;
+const mockPreviewCarbCycleWeek = previewCarbCycleWeek as jest.MockedFunction<
+  typeof previewCarbCycleWeek
+>;
 const mockFetchMostRecentMeasurement =
-  fetchMostRecentMeasurement as jest.MockedFunction<typeof fetchMostRecentMeasurement>;
+  fetchMostRecentMeasurement as jest.MockedFunction<
+    typeof fetchMostRecentMeasurement
+  >;
 
 describe('useMealPlanTemplates', () => {
   beforeEach(() => {
@@ -113,10 +121,37 @@ describe('useMealPlanTemplates', () => {
     });
 
     await act(async () => {
-      await expect(result.current.previewCarbCycle(payload)).resolves.toEqual(preview);
+      await expect(result.current.previewCarbCycle(payload)).resolves.toEqual(
+        preview
+      );
     });
 
     expect(mockPreviewCarbCycleWeek).toHaveBeenCalledWith(payload);
+  });
+
+  it('deletes a meal plan template', async () => {
+    mockDeleteMealPlanTemplate.mockResolvedValueOnce(undefined);
+
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(
+      () =>
+        useDeleteMealPlanTemplate({
+          templateId: 'template-1',
+          currentClientDate: '2026-07-15',
+        }),
+      {
+        wrapper: createQueryWrapper(queryClient),
+      }
+    );
+
+    await act(async () => {
+      await result.current.deleteTemplate();
+    });
+
+    expect(mockDeleteMealPlanTemplate).toHaveBeenCalledWith(
+      'template-1',
+      '2026-07-15'
+    );
   });
 
   it('loads the most recent body weight', async () => {

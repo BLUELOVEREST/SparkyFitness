@@ -43,7 +43,9 @@ const plannedMeal: ActiveMealPlanDayMeal = {
   ],
   logged: false,
 };
-const mockUsePreferences = usePreferences as jest.MockedFunction<typeof usePreferences>;
+const mockUsePreferences = usePreferences as jest.MockedFunction<
+  typeof usePreferences
+>;
 
 describe('FoodSummary planned meals', () => {
   beforeEach(() => {
@@ -63,7 +65,7 @@ describe('FoodSummary planned meals', () => {
         foodEntries={[]}
         plannedMeals={[plannedMeal]}
         onLogPlannedMeal={onLogPlannedMeal}
-      />,
+      />
     );
 
     expect(queryByText('Tap to add food')).toBeNull();
@@ -96,7 +98,7 @@ describe('FoodSummary planned meals', () => {
             fat: 0,
           },
         ]}
-      />,
+      />
     );
 
     expect(getByText('Target: C 60g / P 30g / F 5g')).toBeTruthy();
@@ -111,7 +113,7 @@ describe('FoodSummary planned meals', () => {
         plannedMeals={[{ ...plannedMeal, logged: true }]}
         foodEntries={[]}
         onLogPlannedMeal={onLogPlannedMeal}
-      />,
+      />
     );
 
     fireEvent.press(getByText('Logged from Plan'));
@@ -133,7 +135,7 @@ describe('FoodSummary planned meals', () => {
         plannedMeals={[plannedMeal]}
         foodEntries={[]}
         onLogPlannedMeal={jest.fn()}
-      />,
+      />
     );
 
     expect(getByText('目标: C 60g / P 30g / F 5g')).toBeTruthy();

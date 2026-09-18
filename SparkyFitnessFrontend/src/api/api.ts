@@ -267,7 +267,7 @@ export async function apiCall<T = any>(
 
       // Suppress toast for 404 errors if suppress404Toast is true
       if (options?.suppressErrorToast) {
-        throw new HttpApiError(errorMessage);
+        throw new HttpApiError(errorMessage, response.status);
       }
 
       if (response.status === 404 && options?.suppress404Toast) {

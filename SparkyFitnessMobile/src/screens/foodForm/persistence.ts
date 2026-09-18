@@ -111,9 +111,7 @@ export function confirmDiscardEquivalents(): Promise<boolean> {
 }
 
 export type SyncPastEntriesChoice =
-  | 'none'
-  | 'nutrition'
-  | 'nutrition-and-photos';
+  'none' | 'nutrition' | 'nutrition-and-photos';
 
 /**
  * Asks whether to rewrite past diary entries with the food's new values.

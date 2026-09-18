@@ -13,7 +13,11 @@ import {
   useWorkoutPlanTemplates,
 } from '../../src/hooks/useWorkoutPlanTemplates';
 import { workoutPlanTemplatesQueryKey } from '../../src/hooks/queryKeys';
-import { createQueryWrapper, createTestQueryClient, type QueryClient } from './queryTestUtils';
+import {
+  createQueryWrapper,
+  createTestQueryClient,
+  type QueryClient,
+} from './queryTestUtils';
 
 jest.mock('../../src/services/api/workoutPlanTemplatesApi', () => ({
   createWorkoutPlanTemplate: jest.fn(),
@@ -27,13 +31,21 @@ jest.mock('react-native-toast-message', () => ({
 }));
 
 const mockFetchWorkoutPlanTemplates =
-  fetchWorkoutPlanTemplates as jest.MockedFunction<typeof fetchWorkoutPlanTemplates>;
+  fetchWorkoutPlanTemplates as jest.MockedFunction<
+    typeof fetchWorkoutPlanTemplates
+  >;
 const mockFetchActiveTrainingFocusPlan =
-  fetchActiveTrainingFocusPlan as jest.MockedFunction<typeof fetchActiveTrainingFocusPlan>;
+  fetchActiveTrainingFocusPlan as jest.MockedFunction<
+    typeof fetchActiveTrainingFocusPlan
+  >;
 const mockCreateWorkoutPlanTemplate =
-  createWorkoutPlanTemplate as jest.MockedFunction<typeof createWorkoutPlanTemplate>;
+  createWorkoutPlanTemplate as jest.MockedFunction<
+    typeof createWorkoutPlanTemplate
+  >;
 const mockUpdateWorkoutPlanTemplate =
-  updateWorkoutPlanTemplate as jest.MockedFunction<typeof updateWorkoutPlanTemplate>;
+  updateWorkoutPlanTemplate as jest.MockedFunction<
+    typeof updateWorkoutPlanTemplate
+  >;
 
 const payload = {
   plan_name: 'Training Focus',
@@ -92,7 +104,7 @@ describe('useWorkoutPlanTemplates', () => {
 
     const { result } = renderHook(
       () => useActiveTrainingFocusPlan({ date: '2026-07-13' }),
-      { wrapper: createQueryWrapper(queryClient) },
+      { wrapper: createQueryWrapper(queryClient) }
     );
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -132,7 +144,7 @@ describe('useWorkoutPlanTemplates', () => {
 
     const { result } = renderHook(
       () => useUpdateWorkoutPlanTemplate({ templateId: 'workout-plan-1' }),
-      { wrapper: createQueryWrapper(queryClient) },
+      { wrapper: createQueryWrapper(queryClient) }
     );
 
     await act(async () => {
@@ -159,7 +171,9 @@ describe('useWorkoutPlanTemplates', () => {
       wrapper: createQueryWrapper(queryClient),
     });
 
-    await expect(result.current.createTemplate(payload)).rejects.toThrow('failed');
+    await expect(result.current.createTemplate(payload)).rejects.toThrow(
+      'failed'
+    );
 
     expect(Toast.show).toHaveBeenCalledWith({
       type: 'error',

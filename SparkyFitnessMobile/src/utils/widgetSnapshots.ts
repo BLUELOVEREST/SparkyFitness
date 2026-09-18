@@ -42,7 +42,7 @@ const formatWater = (ml: number): string => {
 };
 
 export function buildHydrationWidgetSnapshot(
-  params: BuildHydrationWidgetSnapshotParams,
+  params: BuildHydrationWidgetSnapshotParams
 ): HydrationWidgetSnapshot {
   const consumedMl = Math.round(clampNonNegative(params.consumedMl));
   const goalMl = Math.round(clampNonNegative(params.goalMl));

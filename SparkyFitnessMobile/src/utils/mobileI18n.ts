@@ -301,11 +301,11 @@ export function createMobileTranslator(language?: string | null) {
   const dictionary = isSimplifiedChinese(language) ? ZH_CN : {};
   return (
     key: MobileTranslationKey,
-    options?: { defaultValue?: string } & Record<string, unknown>,
+    options?: { defaultValue?: string } & Record<string, unknown>
   ) => {
     const template = dictionary[key] ?? EN[key] ?? options?.defaultValue ?? key;
     return template.replace(/{{(\w+)}}/g, (_match, name: string) =>
-      options?.[name] === undefined ? `{{${name}}}` : String(options[name]),
+      options?.[name] === undefined ? `{{${name}}}` : String(options[name])
     );
   };
 }

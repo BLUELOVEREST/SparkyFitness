@@ -194,7 +194,7 @@ const MealPlanTemplatesScreen: React.FC<MealPlanTemplatesScreenProps> = ({
           </Text>
         </View>
       ) : (
-        templates.map(template => (
+        templates.map((template) => (
           <MealPlanTemplateCard
             key={template.id ?? template.plan_name}
             template={template}

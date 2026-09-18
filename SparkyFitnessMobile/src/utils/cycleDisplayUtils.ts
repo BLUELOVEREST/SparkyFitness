@@ -2,12 +2,7 @@ import type { WellnessPalette } from '../components/wellness/theme/wellnessToken
 import type { TFunction } from 'i18next';
 
 export type CyclePhaseKey =
-  | 'menstrual'
-  | 'follicular'
-  | 'fertile'
-  | 'ovulation'
-  | 'luteal'
-  | 'unknown';
+  'menstrual' | 'follicular' | 'fertile' | 'ovulation' | 'luteal' | 'unknown';
 
 /**
  * Single source of truth for user-facing phase display labels across Dashboard & Hub.

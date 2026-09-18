@@ -12,7 +12,9 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 const mockUseWorkoutPlanTemplates =
-  useWorkoutPlanTemplates as jest.MockedFunction<typeof useWorkoutPlanTemplates>;
+  useWorkoutPlanTemplates as jest.MockedFunction<
+    typeof useWorkoutPlanTemplates
+  >;
 
 describe('WorkoutPlanTemplatesScreen', () => {
   beforeEach(() => {
@@ -51,7 +53,7 @@ describe('WorkoutPlanTemplatesScreen', () => {
       <WorkoutPlanTemplatesScreen
         navigation={navigation as never}
         route={{} as never}
-      />,
+      />
     );
 
     expect(screen.getByText('Training Focus')).toBeTruthy();
@@ -60,10 +62,13 @@ describe('WorkoutPlanTemplatesScreen', () => {
 
     fireEvent.press(screen.getByText('Training Focus'));
 
-    expect(navigation.navigate).toHaveBeenCalledWith('WorkoutPlanTemplateForm', {
-      mode: 'edit',
-      template: expect.objectContaining({ id: 'workout-plan-1' }),
-    });
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      'WorkoutPlanTemplateForm',
+      {
+        mode: 'edit',
+        template: expect.objectContaining({ id: 'workout-plan-1' }),
+      }
+    );
   });
 
   it('navigates to create a new workout plan', () => {
@@ -79,13 +84,16 @@ describe('WorkoutPlanTemplatesScreen', () => {
       <WorkoutPlanTemplatesScreen
         navigation={navigation as never}
         route={{} as never}
-      />,
+      />
     );
 
     fireEvent.press(screen.getByText('New'));
 
-    expect(navigation.navigate).toHaveBeenCalledWith('WorkoutPlanTemplateForm', {
-      mode: 'create',
-    });
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      'WorkoutPlanTemplateForm',
+      {
+        mode: 'create',
+      }
+    );
   });
 });

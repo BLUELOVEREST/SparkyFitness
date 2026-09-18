@@ -2,13 +2,11 @@ import type {
   TrainingFocusTimeSlot,
   WorkoutPlanFocusSession,
 } from '@/types/workout';
+
 export {
-  BUILT_IN_TRAINING_FOCUS_OPTIONS,
-  CUSTOM_TRAINING_FOCUS_OPTION,
   CUSTOM_TRAINING_FOCUS_VALUE,
   buildTrainingFocusOptions,
   buildTrainingFocusOptionsFromTemplates,
-  isBuiltInTrainingFocus,
   normalizeTrainingFocusValue,
   resolveTrainingFocusValue,
 } from '@workspace/shared';

@@ -67,8 +67,7 @@ function collectHeaderItems(navigation: {
   setOptions?: unknown;
 }): HeaderItem[] {
   const setOptions = navigation?.setOptions as
-    | { mock?: { calls: unknown[][] } }
-    | undefined;
+    { mock?: { calls: unknown[][] } } | undefined;
   const calls = setOptions?.mock?.calls ?? [];
   const items: HeaderItem[] = [];
   for (const call of calls) {

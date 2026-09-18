@@ -296,8 +296,7 @@ describe('ChatScreen thread', () => {
     await findByTestId('composer-send');
 
     const onError = (global as any).__mockCapturedOnError as
-      | ((e: Error) => void)
-      | undefined;
+      ((e: Error) => void) | undefined;
     expect(onError).toBeDefined();
     act(() => {
       onError?.(new Error('bad config'));

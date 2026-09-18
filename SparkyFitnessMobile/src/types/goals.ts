@@ -34,11 +34,7 @@ export interface DailyGoals {
 
 export type CarbCycleDayType = 'high' | 'medium' | 'low';
 export type CarbCycleTrainingSlot =
-  | 'rest'
-  | 'morning'
-  | 'noon'
-  | 'afternoon'
-  | 'evening';
+  'rest' | 'morning' | 'noon' | 'afternoon' | 'evening';
 
 export type CarbCycleTrainingSlots = [
   CarbCycleTrainingSlot,

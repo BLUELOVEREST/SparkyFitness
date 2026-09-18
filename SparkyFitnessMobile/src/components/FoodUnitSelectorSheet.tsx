@@ -364,9 +364,7 @@ const FoodUnitSelectorSheet: React.FC<FoodUnitSelectorSheetProps> = ({
     const isAiSourced =
       variant.source === 'ai_estimate' && Boolean(variant.food_id);
     const aiConfidence = variant.ai_confidence as
-      | AiConfidence
-      | null
-      | undefined;
+      AiConfidence | null | undefined;
     const aiTone = aiConfidence ? CONFIDENCE_TONES[aiConfidence] : null;
     const aiSparkleColor = aiTone ? aiSparkleColorByTone[aiTone] : textMuted;
     const aiConfidenceLabel = localizeAiConfidenceLevel(t, aiConfidence);

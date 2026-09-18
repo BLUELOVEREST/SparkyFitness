@@ -6,9 +6,10 @@ import { isToolErrorText } from '../tools/errors.js';
 
 // Registry handlers read only rawArgs (no abortSignal/messages/context), so a
 // stub satisfies the execute() signature.
-const EXEC_STUB: ToolExecutionOptions = {
+const EXEC_STUB: ToolExecutionOptions<Record<string, unknown>> = {
   toolCallId: 'mcp',
   messages: [],
+  context: {},
 };
 
 // The slice of an AI-SDK tool() this adapter uses; inputSchema is the bare
@@ -20,7 +21,7 @@ interface RegistryTool {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   execute?: (
     args: unknown,
-    options: ToolExecutionOptions
+    options: ToolExecutionOptions<Record<string, unknown>>
   ) => Promise<any> | any;
 }
 

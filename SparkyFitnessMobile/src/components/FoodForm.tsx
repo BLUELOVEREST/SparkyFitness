@@ -90,9 +90,7 @@ export interface FoodFormProps {
     onUnitSelectionChange?: (
       selection: FoodUnitSelectionResult
     ) =>
-      | Promise<FoodUnitSelectionResult | void>
-      | FoodUnitSelectionResult
-      | void;
+      Promise<FoodUnitSelectionResult | void> | FoodUnitSelectionResult | void;
     /** Food id for the inline AI estimate path. Omit (or pass undefined) for
      *  unsaved foods — the sheet will then skip the persistent variant POST
      *  and emit the AI variant inline as a draft selection so the parent form

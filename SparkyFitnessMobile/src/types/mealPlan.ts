@@ -65,6 +65,9 @@ export interface MealPlanTemplate {
   assignments: MealPlanTemplateAssignment[];
 }
 
-export type SaveMealPlanTemplatePayload = Omit<MealPlanTemplate, 'id' | 'user_id'> & {
+export type SaveMealPlanTemplatePayload = Omit<
+  MealPlanTemplate,
+  'id' | 'user_id'
+> & {
   id?: string;
 };

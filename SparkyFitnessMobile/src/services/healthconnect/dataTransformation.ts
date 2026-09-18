@@ -556,8 +556,7 @@ const extractEnergyKcal = (
   field: string
 ): number | undefined => {
   const energy = rec[field] as
-    | { inKilocalories?: number; inCalories?: number }
-    | undefined;
+    { inKilocalories?: number; inCalories?: number } | undefined;
   const kcal =
     energy?.inKilocalories != null && !isNaN(energy.inKilocalories)
       ? energy.inKilocalories
@@ -609,8 +608,7 @@ const DIRECT_TRANSFORMERS: Record<string, DirectTransformer> = {
 
   HeartRate: (rec, _record, metricConfig, output) => {
     const samples = rec.samples as
-      | { time?: string; beatsPerMinute: number }[]
-      | undefined;
+      { time?: string; beatsPerMinute: number }[] | undefined;
     if (!rec.startTime || !samples) return;
 
     const { unit, type } = metricConfig;
@@ -649,8 +647,7 @@ const DIRECT_TRANSFORMERS: Record<string, DirectTransformer> = {
     const recordDate = toLocalDateString(rec.endTime as string);
 
     const stages = rec.stages as
-      | { startTime: string; endTime: string; stage: number }[]
-      | undefined;
+      { startTime: string; endTime: string; stage: number }[] | undefined;
 
     let deepSeconds = 0;
     let lightSeconds = 0;
@@ -842,8 +839,7 @@ const DIRECT_TRANSFORMERS: Record<string, DirectTransformer> = {
 
   CyclingPedalingCadence: (rec, _record, metricConfig, output) => {
     const samples = rec.samples as
-      | { time?: string; revolutionsPerMinute: number }[]
-      | undefined;
+      { time?: string; revolutionsPerMinute: number }[] | undefined;
     if (!rec.startTime || !samples) return;
 
     const { unit, type } = metricConfig;
@@ -863,8 +859,7 @@ const DIRECT_TRANSFORMERS: Record<string, DirectTransformer> = {
 
   StepsCadence: (rec, _record, metricConfig, output) => {
     const samples = rec.samples as
-      | { time?: string; rate: number }[]
-      | undefined;
+      { time?: string; rate: number }[] | undefined;
     if (!rec.startTime || !samples) return;
 
     const { unit, type } = metricConfig;

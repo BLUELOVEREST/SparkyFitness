@@ -29,7 +29,7 @@ function WorkoutPlanTemplateCard({
 }) {
   const { t } = useTranslation();
   const trainingSessionCount = (template.focus_sessions ?? []).filter(
-    session => session.training_focus !== 'rest',
+    (session) => session.training_focus !== 'rest'
   ).length;
   return (
     <Pressable
@@ -201,7 +201,7 @@ const WorkoutPlanTemplatesScreen: React.FC<WorkoutPlanTemplatesScreenProps> = ({
           </Text>
         </View>
       ) : (
-        templates.map(template => (
+        templates.map((template) => (
           <WorkoutPlanTemplateCard
             key={template.id ?? template.plan_name}
             template={template}

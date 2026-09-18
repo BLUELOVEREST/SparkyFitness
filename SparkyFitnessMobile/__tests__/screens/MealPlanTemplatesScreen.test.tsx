@@ -11,8 +11,9 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
-const mockUseMealPlanTemplates =
-  useMealPlanTemplates as jest.MockedFunction<typeof useMealPlanTemplates>;
+const mockUseMealPlanTemplates = useMealPlanTemplates as jest.MockedFunction<
+  typeof useMealPlanTemplates
+>;
 
 describe('MealPlanTemplatesScreen', () => {
   beforeEach(() => {
@@ -49,7 +50,10 @@ describe('MealPlanTemplatesScreen', () => {
     });
 
     const screen = render(
-      <MealPlanTemplatesScreen navigation={navigation as never} route={{} as never} />,
+      <MealPlanTemplatesScreen
+        navigation={navigation as never}
+        route={{} as never}
+      />
     );
 
     expect(screen.getByText('Weekly Carb Cycle')).toBeTruthy();
@@ -74,7 +78,7 @@ describe('MealPlanTemplatesScreen', () => {
     });
 
     const screen = render(
-      <MealPlanTemplatesScreen navigation={{} as never} route={{} as never} />,
+      <MealPlanTemplatesScreen navigation={{} as never} route={{} as never} />
     );
 
     expect(screen.getByText('No meal plans yet')).toBeTruthy();

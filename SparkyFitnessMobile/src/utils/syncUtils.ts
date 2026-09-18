@@ -1,12 +1,5 @@
 export type SyncDuration =
-  | 'today'
-  | '24h'
-  | '3d'
-  | '7d'
-  | '30d'
-  | '90d'
-  | '180d'
-  | '365d';
+  'today' | '24h' | '3d' | '7d' | '30d' | '90d' | '180d' | '365d';
 
 // SyncInterval represents how often to sync (background sync frequency)
 // Note: '24h' appears in both types - SyncDuration for data range, SyncInterval for frequency

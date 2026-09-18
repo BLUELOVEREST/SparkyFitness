@@ -71,17 +71,22 @@ const carbCycleDay: ActiveMealPlanDay = {
 
 describe('applyCarbCycleTargetsToDailySummary', () => {
   it('keeps the server daily summary unchanged without a carb-cycle day', () => {
-    expect(applyCarbCycleTargetsToDailySummary(baseSummary, null)).toBe(baseSummary);
+    expect(applyCarbCycleTargetsToDailySummary(baseSummary, null)).toBe(
+      baseSummary
+    );
     expect(
       applyCarbCycleTargetsToDailySummary(baseSummary, {
         ...carbCycleDay,
         mode: 'average',
-      }),
+      })
     ).toBe(baseSummary);
   });
 
   it('overrides calorie and macro goals from carb-cycle planned meal targets', () => {
-    const result = applyCarbCycleTargetsToDailySummary(baseSummary, carbCycleDay);
+    const result = applyCarbCycleTargetsToDailySummary(
+      baseSummary,
+      carbCycleDay
+    );
 
     expect(result.calorieGoal).toBe(1000);
     expect(result.calorieBalance.goal).toBe(1000);

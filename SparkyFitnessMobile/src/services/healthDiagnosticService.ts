@@ -168,8 +168,7 @@ const roundExerciseSessionRecord = (
   const energy = rec.energy as Record<string, unknown> | undefined;
   const distance = rec.distance as Record<string, unknown> | undefined;
   const exerciseRoute = rec.exerciseRoute as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
 
   // Calculate duration in minutes from timestamps if available
   let durationMinutes: number | undefined;

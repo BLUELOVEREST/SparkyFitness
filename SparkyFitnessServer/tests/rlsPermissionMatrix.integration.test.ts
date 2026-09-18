@@ -156,12 +156,7 @@ describe.runIf(RUN)('RLS permission matrix', () => {
   // rest are only required to *exist* (no unprotected table).
   // ---------------------------------------------------------------------------
   type Domain =
-    | 'owner'
-    | 'diary'
-    | 'checkin'
-    | 'medication'
-    | 'library'
-    | 'custom';
+    'owner' | 'diary' | 'checkin' | 'medication' | 'library' | 'custom';
 
   const DOMAIN: Record<string, Domain> = {
     // owner-only (no delegation)

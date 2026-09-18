@@ -14,8 +14,7 @@ const mockBottomSheetControls = {
   dismiss: jest.fn(),
   onDismiss: undefined as (() => void) | undefined,
   onAnimate: undefined as
-    | ((fromIndex: number, toIndex: number) => void)
-    | undefined,
+    ((fromIndex: number, toIndex: number) => void) | undefined,
 };
 
 jest.mock('@gorhom/bottom-sheet', () => {

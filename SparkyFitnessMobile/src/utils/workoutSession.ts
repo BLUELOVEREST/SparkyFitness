@@ -532,9 +532,7 @@ export function getExerciseVolumeKg(exercise: {
  */
 export function resolveSnapshotModality(
   snapshot:
-    | { modality?: string | null; category?: string | null }
-    | null
-    | undefined
+    { modality?: string | null; category?: string | null } | null | undefined
 ): ExerciseModality {
   return resolveExerciseModality(
     snapshot?.modality,
@@ -558,9 +556,7 @@ export { isCardioModality };
  */
 export function rendersCardioEffortForm(
   snapshot:
-    | { modality?: string | null; category?: string | null }
-    | null
-    | undefined,
+    { modality?: string | null; category?: string | null } | null | undefined,
   setCount: number
 ): boolean {
   return isCardioModality(resolveSnapshotModality(snapshot)) && setCount <= 1;

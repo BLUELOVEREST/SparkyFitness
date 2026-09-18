@@ -101,9 +101,7 @@ export const buildChartTouchZones = (
 
 const getTouchPoint = (
   event:
-    | NativeSyntheticEvent<NativeTouchEvent>
-    | GestureResponderEvent
-    | undefined
+    NativeSyntheticEvent<NativeTouchEvent> | GestureResponderEvent | undefined
 ): TouchPoint | null => {
   const nativeEvent = event?.nativeEvent;
 

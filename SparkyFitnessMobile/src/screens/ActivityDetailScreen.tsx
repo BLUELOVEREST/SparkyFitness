@@ -54,12 +54,7 @@ import { canEditGroupedWorkout } from '@workspace/shared';
 type Props = RootStackScreenProps<'ActivityDetail'>;
 
 type EditableField =
-  | 'name'
-  | 'duration'
-  | 'calories'
-  | 'distance'
-  | 'avgHeartRate'
-  | 'notes';
+  'name' | 'duration' | 'calories' | 'distance' | 'avgHeartRate' | 'notes';
 
 const ActivityDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { t, i18n: translationI18n } = useTranslation();

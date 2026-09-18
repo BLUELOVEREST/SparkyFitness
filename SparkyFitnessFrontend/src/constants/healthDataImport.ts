@@ -20,12 +20,7 @@ import {
 // from every template.
 
 export type ImportCategory =
-  | 'measurements'
-  | 'sleep'
-  | 'vitals'
-  | 'activity'
-  | 'hydration'
-  | 'mood';
+  'measurements' | 'sleep' | 'vitals' | 'activity' | 'hydration' | 'mood';
 
 export interface HealthImportTypeGuide {
   title: string;

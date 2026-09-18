@@ -79,7 +79,10 @@ describe('mealPlanTemplatesApi', () => {
       macro_targets: {},
       assignments: [],
     };
-    (apiFetch as jest.Mock).mockResolvedValueOnce({ id: 'template-1', ...payload });
+    (apiFetch as jest.Mock).mockResolvedValueOnce({
+      id: 'template-1',
+      ...payload,
+    });
 
     await expect(createMealPlanTemplate(payload)).resolves.toEqual({
       id: 'template-1',
@@ -124,10 +127,13 @@ describe('mealPlanTemplatesApi', () => {
   it('deletes a meal plan template', async () => {
     (apiFetch as jest.Mock).mockResolvedValueOnce(undefined);
 
-    await expect(deleteMealPlanTemplate('template-1', '2026-07-16')).resolves.toBeUndefined();
+    await expect(
+      deleteMealPlanTemplate('template-1', '2026-07-16')
+    ).resolves.toBeUndefined();
 
     expect(apiFetch).toHaveBeenCalledWith({
-      endpoint: '/api/meal-plan-templates/template-1?currentClientDate=2026-07-16',
+      endpoint:
+        '/api/meal-plan-templates/template-1?currentClientDate=2026-07-16',
       serviceName: 'Meal Plan Templates API',
       operation: 'delete meal plan template',
       method: 'DELETE',

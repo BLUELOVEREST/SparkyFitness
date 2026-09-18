@@ -64,7 +64,9 @@ describe('workoutPlanTemplatesApi', () => {
     };
     (apiFetch as jest.Mock).mockResolvedValueOnce(template);
 
-    await expect(fetchActiveTrainingFocusPlan('2026-07-13')).resolves.toEqual(template);
+    await expect(fetchActiveTrainingFocusPlan('2026-07-13')).resolves.toEqual(
+      template
+    );
 
     expect(apiFetch).toHaveBeenCalledWith({
       endpoint: '/api/workout-plan-templates/active-training-focus/2026-07-13',

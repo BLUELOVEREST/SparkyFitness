@@ -1,10 +1,6 @@
 export type CarbCycleDayType = 'low' | 'medium' | 'high';
 export type CarbCycleTrainingSlot =
-  | 'rest'
-  | 'morning'
-  | 'noon'
-  | 'afternoon'
-  | 'evening';
+  'rest' | 'morning' | 'noon' | 'afternoon' | 'evening';
 
 export type CarbCycleSlotKey = Exclude<CarbCycleTrainingSlot, 'rest'>;
 

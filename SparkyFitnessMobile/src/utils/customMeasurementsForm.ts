@@ -57,8 +57,7 @@ export type CustomOp =
   | { kind: 'delete'; entryId: string; categoryId: string; rowKey: string };
 
 export type BuildCustomOpsResult =
-  | { ok: true; operations: CustomOp[] }
-  | { ok: false };
+  { ok: true; operations: CustomOp[] } | { ok: false };
 
 export type CustomCategoryMeta = Pick<
   CustomCategory,

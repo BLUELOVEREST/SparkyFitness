@@ -121,7 +121,7 @@ describe('buildKitchenWeeklyIngredientSummary', () => {
           date: '2026-07-17',
           meals: [],
         },
-      ]),
+      ])
     ).toEqual([
       {
         key: '鸡蛋|g',

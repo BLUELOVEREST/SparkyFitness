@@ -35,7 +35,7 @@ interface FoodSummaryProps {
   onPressMealType?: (
     mealTypeId: string | null,
     mealTypeName: string,
-    entries: FoodEntry[],
+    entries: FoodEntry[]
   ) => void;
 }
 
@@ -49,7 +49,7 @@ interface MealSectionProps {
   onPressMealType?: (
     mealTypeId: string | null,
     mealTypeName: string,
-    entries: FoodEntry[],
+    entries: FoodEntry[]
   ) => void;
   targetLabel?: string;
 }
@@ -182,7 +182,7 @@ const normalizeMealName = (value?: string | null) =>
 
 const matchesPlannedMeal = (
   entry: FoodEntry,
-  plannedMeal: ActiveMealPlanDayMeal,
+  plannedMeal: ActiveMealPlanDayMeal
 ) => {
   if (
     entry.meal_type_id &&
@@ -194,7 +194,7 @@ const matchesPlannedMeal = (
 
   const entryMealType = normalizeMealName(entry.meal_type);
   return [plannedMeal.mealType, plannedMeal.key, plannedMeal.label].some(
-    value => normalizeMealName(value) === entryMealType,
+    (value) => normalizeMealName(value) === entryMealType
   );
 };
 
@@ -255,7 +255,7 @@ const PlannedMealCard: React.FC<{
           fat: formatMacroTarget(meal.target.fat),
         })}
       </Text>
-      {meal.items.map(item => (
+      {meal.items.map((item) => (
         <View
           key={`${item.type}-${item.id}`}
           className="flex-row justify-between py-1"
@@ -292,7 +292,7 @@ const FoodSummary: React.FC<FoodSummaryProps> = ({
   const { preferences } = usePreferences();
   const t = createMobileTranslator(preferences?.language);
   const plannedMealsWithItems =
-    plannedMeals?.filter(meal => meal.items.length > 0) ?? [];
+    plannedMeals?.filter((meal) => meal.items.length > 0) ?? [];
 
   if (foodEntries.length === 0 && plannedMealsWithItems.length === 0) {
     return (
@@ -307,34 +307,34 @@ const FoodSummary: React.FC<FoodSummaryProps> = ({
 
   const groups = groupFoodEntriesByMealType(foodEntries, mealTypes);
   const plannedLoggedMealSections = plannedMealsWithItems
-    .map(meal => ({
+    .map((meal) => ({
       meal,
-      entries: foodEntries.filter(entry => matchesPlannedMeal(entry, meal)),
+      entries: foodEntries.filter((entry) => matchesPlannedMeal(entry, meal)),
     }))
-    .filter(section => section.entries.length > 0);
+    .filter((section) => section.entries.length > 0);
   const plannedLoggedMealKeys = new Set(
-    plannedLoggedMealSections.map(section => section.meal.key),
+    plannedLoggedMealSections.map((section) => section.meal.key)
   );
   const plannedMealCards = plannedMealsWithItems.filter(
-    meal => !plannedLoggedMealKeys.has(meal.key),
+    (meal) => !plannedLoggedMealKeys.has(meal.key)
   );
   const plannedLoggedEntryIds = new Set(
-    plannedLoggedMealSections.flatMap(section =>
-      section.entries.map(entry => entry.id),
-    ),
+    plannedLoggedMealSections.flatMap((section) =>
+      section.entries.map((entry) => entry.id)
+    )
   );
   const filteredGroups = groups
-    .map(group => ({
+    .map((group) => ({
       ...group,
       entries: group.entries.filter(
-        entry => !plannedLoggedEntryIds.has(entry.id),
+        (entry) => !plannedLoggedEntryIds.has(entry.id)
       ),
     }))
-    .filter(group => group.entries.length > 0);
+    .filter((group) => group.entries.length > 0);
   const plannedLoggedGroups = plannedLoggedMealSections.map(
     ({ meal, entries }) => {
       const matchingType = meal.mealTypeId
-        ? mealTypes.find(mealType => mealType.id === meal.mealTypeId)
+        ? mealTypes.find((mealType) => mealType.id === meal.mealTypeId)
         : null;
       const group: MealGroup = {
         mealTypeId: meal.mealTypeId ?? null,
@@ -344,7 +344,7 @@ const FoodSummary: React.FC<FoodSummaryProps> = ({
         isSystem: matchingType?.user_id === null,
       };
       return { meal, group };
-    },
+    }
   );
 
   if (
@@ -364,7 +364,7 @@ const FoodSummary: React.FC<FoodSummaryProps> = ({
 
   return (
     <View className="gap-2 mb-2">
-      {plannedMealCards.map(meal => (
+      {plannedMealCards.map((meal) => (
         <PlannedMealCard
           key={meal.key}
           meal={meal}
@@ -393,7 +393,7 @@ const FoodSummary: React.FC<FoodSummaryProps> = ({
           targetLabel={t('foodSummary.target', { defaultValue: 'Target' })}
         />
       ))}
-      {filteredGroups.map(group => (
+      {filteredGroups.map((group) => (
         <MealSection
           key={
             group.mealTypeId

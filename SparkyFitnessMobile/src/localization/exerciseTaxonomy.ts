@@ -1,11 +1,7 @@
 import type { TFunction } from 'i18next';
 
 export type ExerciseTaxonomyKind =
-  | 'category'
-  | 'modality'
-  | 'level'
-  | 'force'
-  | 'mechanic';
+  'category' | 'modality' | 'level' | 'force' | 'mechanic';
 
 export function localizeExerciseTaxonomyValue(
   t: TFunction,

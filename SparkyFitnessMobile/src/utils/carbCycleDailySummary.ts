@@ -5,7 +5,7 @@ const round = (value: number) => Math.round(value);
 
 export function applyCarbCycleTargetsToDailySummary(
   summary: DailySummary,
-  activeMealPlanDay?: ActiveMealPlanDay | null,
+  activeMealPlanDay?: ActiveMealPlanDay | null
 ): DailySummary {
   if (
     activeMealPlanDay?.mode !== 'carbCycle' ||
@@ -21,14 +21,15 @@ export function applyCarbCycleTargetsToDailySummary(
       protein: acc.protein + meal.target.protein,
       fat: acc.fat + meal.target.fat,
     }),
-    { calories: 0, carbs: 0, protein: 0, fat: 0 },
+    { calories: 0, carbs: 0, protein: 0, fat: 0 }
   );
 
   const calorieGoal = target.calories;
   const remaining = calorieGoal - summary.calorieBalance.eaten;
-  const progress = calorieGoal > 0
-    ? Math.max(0, round((summary.calorieBalance.eaten / calorieGoal) * 100))
-    : 0;
+  const progress =
+    calorieGoal > 0
+      ? Math.max(0, round((summary.calorieBalance.eaten / calorieGoal) * 100))
+      : 0;
 
   return {
     ...summary,

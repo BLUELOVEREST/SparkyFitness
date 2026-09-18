@@ -12,7 +12,7 @@ describe('trainingFocusPlan utils', () => {
     const sessions = buildDefaultFocusSessions();
 
     expect(sessions).toHaveLength(28);
-    expect(sessions.filter(session => session.day_of_week === 1)).toEqual([
+    expect(sessions.filter((session) => session.day_of_week === 1)).toEqual([
       {
         day_of_week: 1,
         time_slot: 'morning',
@@ -45,27 +45,28 @@ describe('trainingFocusPlan utils', () => {
       buildDefaultFocusSessions(),
       1,
       'morning',
-      'back',
+      'back'
     );
 
     expect(
       sessions.find(
-        session => session.day_of_week === 1 && session.time_slot === 'morning',
-      )?.is_primary,
+        (session) =>
+          session.day_of_week === 1 && session.time_slot === 'morning'
+      )?.is_primary
     ).toBe(true);
   });
 
   it('requires a main session when a day has multiple training sessions', () => {
     const sessions = buildDefaultFocusSessions()
-      .map(session =>
+      .map((session) =>
         session.day_of_week === 1 && session.time_slot === 'morning'
           ? { ...session, training_focus: 'back' }
-          : session,
+          : session
       )
-      .map(session =>
+      .map((session) =>
         session.day_of_week === 1 && session.time_slot === 'noon'
           ? { ...session, training_focus: 'legs' }
-          : session,
+          : session
       );
 
     expect(validateTrainingFocusSessions(sessions)).toEqual({
@@ -80,18 +81,18 @@ describe('trainingFocusPlan utils', () => {
         buildDefaultFocusSessions(),
         1,
         'morning',
-        'back',
+        'back'
       ),
       1,
       'noon',
-      'legs',
+      'legs'
     );
     const updated = setPrimaryTrainingFocusSession(sessions, 1, 'noon');
 
     expect(
       updated.filter(
-        session => session.day_of_week === 1 && session.is_primary,
-      ),
+        (session) => session.day_of_week === 1 && session.is_primary
+      )
     ).toEqual([
       {
         day_of_week: 1,
@@ -112,7 +113,7 @@ describe('trainingFocusPlan utils', () => {
       { training_focus: 'rest' },
     ]);
 
-    expect(options.map(option => option.value)).toEqual([
+    expect(options.map((option) => option.value)).toEqual([
       'rest',
       'chest',
       'back',

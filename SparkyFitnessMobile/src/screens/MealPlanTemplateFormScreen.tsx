@@ -68,7 +68,7 @@ function dayOfWeek(date: string): number {
 function getCurrentMonday(): string {
   const now = new Date();
   const utc = new Date(
-    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()),
+    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
   );
   const day = utc.getUTCDay();
   const diff = day === 0 ? -6 : 1 - day;
@@ -90,12 +90,12 @@ function normalizeMacroTargets(template: MealPlanTemplate) {
     Object.entries(template.macro_targets ?? {}).map(([day, targets]) => [
       Number(day),
       targets,
-    ]),
+    ])
   ) as NonNullable<MealPlanTemplate['macro_targets']>;
 }
 
 function buildPreviewFromTemplate(
-  template: MealPlanTemplate,
+  template: MealPlanTemplate
 ): CarbCycleWeekResult | null {
   const macroTargets = normalizeMacroTargets(template);
   const days = Object.entries(macroTargets)
@@ -111,7 +111,7 @@ function buildPreviewFromTemplate(
           protein: acc.protein + meal.protein,
           fat: acc.fat + meal.fat,
         }),
-        { calories: 0, carbs: 0, protein: 0, fat: 0 },
+        { calories: 0, carbs: 0, protein: 0, fat: 0 }
       );
       return {
         date,
@@ -131,7 +131,7 @@ function buildPreviewFromTemplate(
       protein: acc.protein + day.protein,
       fat: acc.fat + day.fat,
     }),
-    { calories: 0, carbs: 0, protein: 0, fat: 0 },
+    { calories: 0, carbs: 0, protein: 0, fat: 0 }
   );
 
   return { weekStartDate: template.start_date, weekTotals, days };
@@ -160,7 +160,7 @@ function formatAmount(amount: number, unit: string) {
 
 function formatMacroLine(
   prefix: string,
-  values: { carbs: number; protein: number; fat: number },
+  values: { carbs: number; protein: number; fat: number }
 ) {
   const format = (value: number) =>
     formatLocalizedNumber(value, {
@@ -168,7 +168,7 @@ function formatMacroLine(
       maximumFractionDigits: 1,
     });
   return `${prefix} C ${format(values.carbs)}g · P ${format(
-    values.protein,
+    values.protein
   )}g · F ${format(values.fat)}g`;
 }
 
@@ -178,12 +178,12 @@ function formatSessionCount(count: number) {
 
 function formatTrainingDayLine(
   dayLabel: string,
-  sessions: WorkoutPlanFocusSession[],
+  sessions: WorkoutPlanFocusSession[]
 ) {
   const activeSessions = sessions.filter(
-    session => session.training_focus !== 'rest',
+    (session) => session.training_focus !== 'rest'
   );
-  const primary = activeSessions.find(session => session.is_primary);
+  const primary = activeSessions.find((session) => session.is_primary);
   return `${dayLabel} · ${formatSessionCount(activeSessions.length)} · Main: ${
     primary?.time_slot ?? '—'
   }`;
@@ -191,7 +191,7 @@ function formatTrainingDayLine(
 
 function assignmentToSelectionKey(
   assignment: MealPlanTemplateAssignment,
-  templateStartDate: string,
+  templateStartDate: string
 ) {
   const role = assignment.macro_role;
   if (!role) return null;
@@ -200,7 +200,7 @@ function assignmentToSelectionKey(
   return selectionKey(
     addDays(templateStartDate, dayOffset),
     assignment.meal_type ?? '',
-    role,
+    role
   );
 }
 
@@ -219,19 +219,19 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
   const isEditMode = route.params.mode === 'edit';
   const initialPreview = useMemo(
     () => (template ? buildPreviewFromTemplate(template) : null),
-    [template],
+    [template]
   );
   const initialSelectedAssignments = useMemo(() => {
     if (!template) return {};
     return Object.fromEntries(
-      template.assignments.flatMap(assignment => {
+      template.assignments.flatMap((assignment) => {
         const key = assignmentToSelectionKey(assignment, template.start_date);
         return key ? [[key, assignment]] : [];
-      }),
+      })
     ) as Record<string, MealPlanTemplateAssignment>;
   }, [template]);
   const [startDate, setStartDate] = useState(
-    template?.start_date ?? getCurrentMonday,
+    template?.start_date ?? getCurrentMonday
   );
   const [endDate, setEndDate] = useState(template?.end_date ?? '');
   const [planName, setPlanName] = useState(template?.plan_name ?? '');
@@ -240,11 +240,11 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
   const [proteinPerKg, setProteinPerKg] = useState('1.5');
   const [fatPerKg, setFatPerKg] = useState('0.8');
   const [preview, setPreview] = useState<CarbCycleWeekResult | null>(
-    initialPreview,
+    initialPreview
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedFoods, setSelectedFoods] = useState<Record<string, FoodItem>>(
-    {},
+    {}
   );
   const [selectedAssignments, setSelectedAssignments] = useState<
     Record<string, MealPlanTemplateAssignment>
@@ -258,7 +258,7 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
   const { preferences } = usePreferences();
   const t = useMemo(
     () => createMobileTranslator(preferences?.language),
-    [preferences?.language],
+    [preferences?.language]
   );
   const { weightKg, isLoading: isWeightLoading } = useMostRecentWeight();
   const { previewCarbCycle, isPending: isPreviewPending } =
@@ -290,7 +290,7 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
   const filteredFoods = useMemo(() => {
     if (!activeSelection) return [];
     return foods.filter(
-      food => inferFoodMacroRole(food) === activeSelection.role,
+      (food) => inferFoodMacroRole(food) === activeSelection.role
     );
   }, [activeSelection, foods]);
 
@@ -323,7 +323,7 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
                 protein: food.default_variant.protein,
                 fat: food.default_variant.fat,
               },
-            ]),
+            ])
           ) as Parameters<typeof recommendCarbCycleMealAmounts>[0]['foods'],
         });
         for (const role of MACRO_ROLES) {
@@ -420,9 +420,9 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
       end_date: normalizedEndDate,
       is_active: template?.is_active ?? true,
       macro_targets: buildMacroTargets(preview),
-      assignments: preview.days.flatMap(day =>
-        day.meals.flatMap(meal =>
-          MACRO_ROLES.flatMap(role => {
+      assignments: preview.days.flatMap((day) =>
+        day.meals.flatMap((meal) =>
+          MACRO_ROLES.flatMap((role) => {
             const key = selectionKey(day.date, meal.slotKey, role);
             const food = selectedFoods[key];
             if (!food) {
@@ -455,8 +455,8 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
                 macro_role: role,
               },
             ];
-          }),
-        ),
+          })
+        )
       ),
     };
     if (isEditMode) {
@@ -472,13 +472,13 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
     const key = selectionKey(
       activeSelection.dayDate,
       activeSelection.slotKey,
-      activeSelection.role,
+      activeSelection.role
     );
-    setSelectedFoods(current => ({
+    setSelectedFoods((current) => ({
       ...current,
       [key]: food,
     }));
-    setSelectedAssignments(current => {
+    setSelectedAssignments((current) => {
       const next = { ...current };
       delete next[key];
       return next;
@@ -488,12 +488,12 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
   };
 
   const clearSelectedFood = (key: string) => {
-    setSelectedFoods(current => {
+    setSelectedFoods((current) => {
       const next = { ...current };
       delete next[key];
       return next;
     });
-    setSelectedAssignments(current => {
+    setSelectedAssignments((current) => {
       const next = { ...current };
       delete next[key];
       return next;
@@ -670,10 +670,10 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
               <Text className="text-sm font-semibold text-text-primary">
                 {activeTrainingFocusPlan.plan_name}
               </Text>
-              {TRAINING_WEEK_DAYS.map(day => {
+              {TRAINING_WEEK_DAYS.map((day) => {
                 const sessions = (
                   activeTrainingFocusPlan.focus_sessions ?? []
-                ).filter(session => session.day_of_week === day.id);
+                ).filter((session) => session.day_of_week === day.id);
                 return (
                   <Text
                     key={day.id}
@@ -739,12 +739,12 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
           <Text className="text-sm font-semibold text-text-primary mb-3">
             {t('mealPlan.foodSelection', { defaultValue: 'Food Selection' })}
           </Text>
-          {preview.days.map(day => (
+          {preview.days.map((day) => (
             <View key={day.date} className="mb-4">
               <Text className="text-sm font-semibold text-text-primary">
                 {day.date} · {day.dayType.toUpperCase()}
               </Text>
-              {day.meals.map(meal => (
+              {day.meals.map((meal) => (
                 <View
                   key={mealKey(day.date, meal.slotKey)}
                   className="mt-3 rounded-xl border border-border-subtle p-3"
@@ -759,7 +759,7 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
                         carbs: meal.carbs,
                         protein: meal.protein,
                         fat: meal.fat,
-                      },
+                      }
                     )}
                   </Text>
                   <Text className="text-xs text-text-secondary mt-1">
@@ -769,10 +769,10 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
                         carbs: 0,
                         protein: 0,
                         fat: 0,
-                      },
+                      }
                     )}
                   </Text>
-                  {MACRO_ROLES.map(role => {
+                  {MACRO_ROLES.map((role) => {
                     const key = selectionKey(day.date, meal.slotKey, role);
                     const selected = selectedFoods[key];
                     const selectedAssignment = selectedAssignments[key];
@@ -782,14 +782,14 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
                     const selectionLabel = selected
                       ? `${selected.name} · ${formatAmount(
                           amount,
-                          selected.default_variant.serving_unit,
+                          selected.default_variant.serving_unit
                         )}`
                       : selectedAssignment?.food_name
-                      ? `${selectedAssignment.food_name} · ${formatAmount(
-                          selectedAssignment.quantity ?? 0,
-                          selectedAssignment.unit ?? '',
-                        )}`
-                      : 'None selected';
+                        ? `${selectedAssignment.food_name} · ${formatAmount(
+                            selectedAssignment.quantity ?? 0,
+                            selectedAssignment.unit ?? ''
+                          )}`
+                        : 'None selected';
                     return (
                       <View
                         key={role}
@@ -806,7 +806,7 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
                               {
                                 minimumFractionDigits: 1,
                                 maximumFractionDigits: 1,
-                              },
+                              }
                             )}
                             g
                           </Text>
@@ -910,7 +910,7 @@ const MealPlanTemplateFormScreen: React.FC<MealPlanTemplateFormScreenProps> = ({
               })}
             </Text>
           ) : null}
-          {filteredFoods.map(food => (
+          {filteredFoods.map((food) => (
             <Pressable
               key={food.id}
               className="border-b border-border-subtle py-3"

@@ -17,7 +17,7 @@ export const fetchDailyGoals = async (date: string): Promise<DailyGoals> => {
 };
 
 export const previewCarbCycleWeek = async (
-  input: CarbCycleInput,
+  input: CarbCycleInput
 ): Promise<CarbCycleWeekResult> =>
   apiFetch<CarbCycleWeekResult>({
     endpoint: '/api/weekly-goal-plans/carb-cycle/preview',

@@ -54,7 +54,7 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
   const { preferences } = usePreferences();
   const t = useMemo(
     () => createMobileTranslator(preferences?.language),
-    [preferences?.language],
+    [preferences?.language]
   );
   const { activeMealPlanDay, isLoading, isError, refetch } =
     useActiveMealPlanDay({
@@ -62,7 +62,7 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
     });
 
   const weekDays = useMemo(() => getWeekDays(selectedDate), [selectedDate]);
-  const weekDates = useMemo(() => weekDays.map(day => day.date), [weekDays]);
+  const weekDates = useMemo(() => weekDays.map((day) => day.date), [weekDays]);
   const {
     activeMealPlanDays: activeMealPlanWeekDays,
     isLoading: isWeekLoading,
@@ -74,9 +74,9 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
   const meals = useMemo(
     () =>
       activeMealPlanDay?.mode === 'carbCycle'
-        ? activeMealPlanDay.meals.filter(meal => meal.items.length > 0)
+        ? activeMealPlanDay.meals.filter((meal) => meal.items.length > 0)
         : [],
-    [activeMealPlanDay],
+    [activeMealPlanDay]
   );
 
   const totals = useMemo(
@@ -88,17 +88,17 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
           protein: sum.protein + meal.target.protein,
           fat: sum.fat + meal.target.fat,
         }),
-        { calories: 0, carbs: 0, protein: 0, fat: 0 },
+        { calories: 0, carbs: 0, protein: 0, fat: 0 }
       ),
-    [meals],
+    [meals]
   );
   const ingredientSummary = useMemo(
     () => buildKitchenIngredientSummary(meals),
-    [meals],
+    [meals]
   );
   const weeklyIngredientSummary = useMemo(
     () => buildKitchenWeeklyIngredientSummary(activeMealPlanWeekDays),
-    [activeMealPlanWeekDays],
+    [activeMealPlanWeekDays]
   );
 
   if (isLoading) {
@@ -138,8 +138,8 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
       <DateNavigator
         title={t('kitchen.title', { defaultValue: 'Kitchen' })}
         selectedDate={selectedDate}
-        onPreviousDay={() => setSelectedDate(date => addDays(date, -1))}
-        onNextDay={() => setSelectedDate(date => addDays(date, 1))}
+        onPreviousDay={() => setSelectedDate((date) => addDays(date, -1))}
+        onNextDay={() => setSelectedDate((date) => addDays(date, 1))}
         onToday={() => setSelectedDate(getTodayDate())}
         onDatePress={() => setSelectedDate(getTodayDate())}
         showDateAlways
@@ -150,7 +150,7 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerClassName="gap-2"
         >
-          {weekDays.map(day => {
+          {weekDays.map((day) => {
             const isSelected = day.date === selectedDate;
             const isToday = day.date === todayDate;
             return (
@@ -183,8 +183,8 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
                     isSelected
                       ? 'text-white'
                       : isToday
-                      ? 'text-accent-primary'
-                      : 'text-text-primary'
+                        ? 'text-accent-primary'
+                        : 'text-text-primary'
                   }`}
                 >
                   {day.dayOfMonth}
@@ -247,7 +247,7 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
                       defaultValue: 'Total amount needed for the selected day.',
                     })}
                   </Text>
-                  {ingredientSummary.map(item => (
+                  {ingredientSummary.map((item) => (
                     <View
                       key={item.key}
                       className="flex-row items-start justify-between mt-2"
@@ -286,7 +286,7 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
                   defaultValue: 'Total amount needed for the current week.',
                 })}
               </Text>
-              {weeklyIngredientSummary.map(item => (
+              {weeklyIngredientSummary.map((item) => (
                 <View
                   key={item.key}
                   className="flex-row items-start justify-between mt-2"
@@ -308,7 +308,7 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
           ) : null}
           {meals.length > 0 ? (
             <>
-              {meals.map(meal => (
+              {meals.map((meal) => (
                 <View
                   key={meal.key}
                   className="bg-surface rounded-xl p-4 shadow-sm"
@@ -330,7 +330,7 @@ const KitchenScreen: React.FC<KitchenScreenProps> = () => {
                       fat: formatMacro(meal.target.fat),
                     })}
                   </Text>
-                  {meal.items.map(item => (
+                  {meal.items.map((item) => (
                     <View
                       key={`${item.type}-${item.id}`}
                       className="flex-row justify-between mt-2"

@@ -511,8 +511,7 @@ const DIRECT_TRANSFORMERS: Record<string, DirectTransformer> = {
     if (!startDate) return;
 
     const objects = rec.objects as
-      | { quantityType?: string; quantity?: number; unit?: string }[]
-      | undefined;
+      { quantityType?: string; quantity?: number; unit?: string }[] | undefined;
     if (!Array.isArray(objects) || objects.length === 0) return;
 
     // Send only the instant (timestamp) plus tz metadata, never a pre-bucketed day
@@ -589,9 +588,7 @@ const DIRECT_TRANSFORMERS: Record<string, DirectTransformer> = {
     // Handle duration which might be an object { unit: 's', quantity: 123 }
     let durationInSeconds = 0;
     const duration = rec.duration as
-      | { unit?: string; quantity?: number }
-      | number
-      | undefined;
+      { unit?: string; quantity?: number } | number | undefined;
     if (
       duration &&
       typeof duration === 'object' &&

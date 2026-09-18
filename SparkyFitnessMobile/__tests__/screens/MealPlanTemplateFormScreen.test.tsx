@@ -34,19 +34,31 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
-const mockUseMostRecentWeight =
-  useMostRecentWeight as jest.MockedFunction<typeof useMostRecentWeight>;
+const mockUseMostRecentWeight = useMostRecentWeight as jest.MockedFunction<
+  typeof useMostRecentWeight
+>;
 const mockUsePreviewCarbCycleWeek =
-  usePreviewCarbCycleWeek as jest.MockedFunction<typeof usePreviewCarbCycleWeek>;
+  usePreviewCarbCycleWeek as jest.MockedFunction<
+    typeof usePreviewCarbCycleWeek
+  >;
 const mockUseCreateMealPlanTemplate =
-  useCreateMealPlanTemplate as jest.MockedFunction<typeof useCreateMealPlanTemplate>;
+  useCreateMealPlanTemplate as jest.MockedFunction<
+    typeof useCreateMealPlanTemplate
+  >;
 const mockUseUpdateMealPlanTemplate =
-  useUpdateMealPlanTemplate as jest.MockedFunction<typeof useUpdateMealPlanTemplate>;
-const mockUseFoodsLibrary =
-  useFoodsLibrary as jest.MockedFunction<typeof useFoodsLibrary>;
+  useUpdateMealPlanTemplate as jest.MockedFunction<
+    typeof useUpdateMealPlanTemplate
+  >;
+const mockUseFoodsLibrary = useFoodsLibrary as jest.MockedFunction<
+  typeof useFoodsLibrary
+>;
 const mockUseActiveTrainingFocusPlan =
-  useActiveTrainingFocusPlan as jest.MockedFunction<typeof useActiveTrainingFocusPlan>;
-const mockUsePreferences = usePreferences as jest.MockedFunction<typeof usePreferences>;
+  useActiveTrainingFocusPlan as jest.MockedFunction<
+    typeof useActiveTrainingFocusPlan
+  >;
+const mockUsePreferences = usePreferences as jest.MockedFunction<
+  typeof usePreferences
+>;
 
 describe('MealPlanTemplateFormScreen', () => {
   beforeEach(() => {
@@ -184,10 +196,13 @@ describe('MealPlanTemplateFormScreen', () => {
       <MealPlanTemplateFormScreen
         navigation={navigation as never}
         route={{ params: { mode: 'create' } } as never}
-      />,
+      />
     );
 
-    fireEvent.changeText(screen.getByPlaceholderText('YYYY-MM-DD'), '2026-07-13');
+    fireEvent.changeText(
+      screen.getByPlaceholderText('YYYY-MM-DD'),
+      '2026-07-13'
+    );
     fireEvent.press(screen.getByText('Generate Carb Cycle Targets'));
 
     await waitFor(() => expect(screen.getByText('1000 kcal')).toBeTruthy());
@@ -236,7 +251,7 @@ describe('MealPlanTemplateFormScreen', () => {
             },
           ],
         },
-      }),
+      })
     );
     expect(navigation.goBack).toHaveBeenCalled();
   });
@@ -323,7 +338,7 @@ describe('MealPlanTemplateFormScreen', () => {
       <MealPlanTemplateFormScreen
         navigation={navigation as never}
         route={{ params: { mode: 'edit', template } } as never}
-      />,
+      />
     );
 
     expect(screen.getByText('Existing Carb Cycle')).toBeTruthy();
@@ -338,7 +353,7 @@ describe('MealPlanTemplateFormScreen', () => {
         id: 'template-1',
         plan_name: 'Existing Carb Cycle',
         assignments: [],
-      }),
+      })
     );
     expect(navigation.goBack).toHaveBeenCalled();
   });
@@ -413,11 +428,17 @@ describe('MealPlanTemplateFormScreen', () => {
       <MealPlanTemplateFormScreen
         navigation={navigation as never}
         route={{ params: { mode: 'edit', template } } as never}
-      />,
+      />
     );
 
-    fireEvent.changeText(screen.getByDisplayValue('Existing Carb Cycle'), 'Cutting Week');
-    fireEvent.changeText(screen.getByDisplayValue('Existing plan'), 'Week 29 plan');
+    fireEvent.changeText(
+      screen.getByDisplayValue('Existing Carb Cycle'),
+      'Cutting Week'
+    );
+    fireEvent.changeText(
+      screen.getByDisplayValue('Existing plan'),
+      'Week 29 plan'
+    );
     fireEvent.changeText(screen.getByDisplayValue('2026-07-13'), '2026-07-20');
     fireEvent.changeText(screen.getByDisplayValue('2026-07-19'), '2026-07-26');
     fireEvent.press(screen.getByText('Save Meal Plan'));
@@ -430,7 +451,7 @@ describe('MealPlanTemplateFormScreen', () => {
         description: 'Week 29 plan',
         start_date: '2026-07-20',
         end_date: '2026-07-26',
-      }),
+      })
     );
   });
 
@@ -542,7 +563,7 @@ describe('MealPlanTemplateFormScreen', () => {
       <MealPlanTemplateFormScreen
         navigation={navigation as never}
         route={{ params: { mode: 'edit', template } } as never}
-      />,
+      />
     );
 
     expect(screen.getByText('Rice · 150g')).toBeTruthy();
@@ -571,7 +592,7 @@ describe('MealPlanTemplateFormScreen', () => {
           ],
         },
         assignments: [],
-      }),
+      })
     );
   });
 
@@ -648,7 +669,7 @@ describe('MealPlanTemplateFormScreen', () => {
       <MealPlanTemplateFormScreen
         navigation={{ goBack: jest.fn() } as never}
         route={{ params: { mode: 'create' } } as never}
-      />,
+      />
     );
 
     fireEvent.press(screen.getByText('Generate Carb Cycle Targets'));
@@ -751,7 +772,7 @@ describe('MealPlanTemplateFormScreen', () => {
       <MealPlanTemplateFormScreen
         navigation={{ goBack: jest.fn() } as never}
         route={{ params: { mode: 'create' } } as never}
-      />,
+      />
     );
 
     fireEvent.press(screen.getByText('Generate Carb Cycle Targets'));

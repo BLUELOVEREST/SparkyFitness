@@ -51,7 +51,7 @@ export function useLogActiveMealPlanMeal() {
         }),
       });
     },
-    onError: error => {
+    onError: (error) => {
       const message =
         error instanceof Error
           ? error.message

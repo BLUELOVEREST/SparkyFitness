@@ -33,12 +33,7 @@ type DailyNutritionDetailsScreenProps =
   RootStackScreenProps<'DailyNutritionDetails'>;
 
 type GlycemicIndexValue =
-  | 'None'
-  | 'Very Low'
-  | 'Low'
-  | 'Medium'
-  | 'High'
-  | 'Very High';
+  'None' | 'Very Low' | 'Low' | 'Medium' | 'High' | 'Very High';
 
 /**
  * The API/database constrains glycemic_index to a controlled classification enum.
@@ -206,8 +201,7 @@ const DailyNutritionDetailsScreen: React.FC<
           calculateNutrientTotal(summary.foodEntries, key as keyof FoodEntry) +
             (isFixedNutrient(key) ? supplements[key] : 0);
         const goal = summary.goals[key as keyof typeof summary.goals] as
-          | number
-          | undefined;
+          number | undefined;
 
         standardItems.push({
           key,

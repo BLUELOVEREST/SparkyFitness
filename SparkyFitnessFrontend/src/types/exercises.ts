@@ -80,11 +80,7 @@ export interface ExerciseDeletionImpact {
 }
 
 export type ExerciseOwnershipFilter =
-  | 'all'
-  | 'own'
-  | 'family'
-  | 'public'
-  | 'needs-review';
+  'all' | 'own' | 'family' | 'public' | 'needs-review';
 
 export interface LapDTO {
   lapIndex?: number;

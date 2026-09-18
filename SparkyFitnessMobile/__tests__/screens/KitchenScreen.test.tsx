@@ -33,11 +33,15 @@ jest.mock('../../src/utils/dateUtils', () => {
   };
 });
 
-const mockUseActiveMealPlanDay =
-  useActiveMealPlanDay as jest.MockedFunction<typeof useActiveMealPlanDay>;
-const mockUseActiveMealPlanWeek =
-  useActiveMealPlanWeek as jest.MockedFunction<typeof useActiveMealPlanWeek>;
-const mockUsePreferences = usePreferences as jest.MockedFunction<typeof usePreferences>;
+const mockUseActiveMealPlanDay = useActiveMealPlanDay as jest.MockedFunction<
+  typeof useActiveMealPlanDay
+>;
+const mockUseActiveMealPlanWeek = useActiveMealPlanWeek as jest.MockedFunction<
+  typeof useActiveMealPlanWeek
+>;
+const mockUsePreferences = usePreferences as jest.MockedFunction<
+  typeof usePreferences
+>;
 
 describe('KitchenScreen', () => {
   beforeEach(() => {
@@ -75,7 +79,14 @@ describe('KitchenScreen', () => {
             logged: false,
             target: { calories: 300, carbs: 30, protein: 25, fat: 8 },
             items: [
-              { id: 'egg', type: 'food', name: '鸡蛋', quantity: 100, unit: 'g', amountLabel: '100 g' },
+              {
+                id: 'egg',
+                type: 'food',
+                name: '鸡蛋',
+                quantity: 100,
+                unit: 'g',
+                amountLabel: '100 g',
+              },
             ],
           },
           {
@@ -86,7 +97,14 @@ describe('KitchenScreen', () => {
             logged: false,
             target: { calories: 400, carbs: 50, protein: 30, fat: 10 },
             items: [
-              { id: 'egg', type: 'food', name: '鸡蛋', quantity: 50, unit: 'g', amountLabel: '50 g' },
+              {
+                id: 'egg',
+                type: 'food',
+                name: '鸡蛋',
+                quantity: 50,
+                unit: 'g',
+                amountLabel: '50 g',
+              },
             ],
           },
         ],
@@ -94,7 +112,7 @@ describe('KitchenScreen', () => {
     });
 
     const screen = render(
-      <KitchenScreen navigation={{} as never} route={{} as never} />,
+      <KitchenScreen navigation={{} as never} route={{} as never} />
     );
 
     expect(screen.getByText('Weekly Carb Cycle')).toBeTruthy();
@@ -136,7 +154,14 @@ describe('KitchenScreen', () => {
               logged: false,
               target: { calories: 300, carbs: 30, protein: 25, fat: 8 },
               items: [
-                { id: 'rice', type: 'food', name: '米饭', quantity: 150, unit: 'g', amountLabel: '150 g' },
+                {
+                  id: 'rice',
+                  type: 'food',
+                  name: '米饭',
+                  quantity: 150,
+                  unit: 'g',
+                  amountLabel: '150 g',
+                },
               ],
             },
           ],
@@ -154,7 +179,14 @@ describe('KitchenScreen', () => {
               logged: false,
               target: { calories: 400, carbs: 50, protein: 30, fat: 10 },
               items: [
-                { id: 'rice', type: 'food', name: '米饭', quantity: 200, unit: 'g', amountLabel: '200 g' },
+                {
+                  id: 'rice',
+                  type: 'food',
+                  name: '米饭',
+                  quantity: 200,
+                  unit: 'g',
+                  amountLabel: '200 g',
+                },
               ],
             },
           ],
@@ -163,7 +195,7 @@ describe('KitchenScreen', () => {
     });
 
     const screen = render(
-      <KitchenScreen navigation={{} as never} route={{} as never} />,
+      <KitchenScreen navigation={{} as never} route={{} as never} />
     );
 
     expect(screen.getByText('Weekly Prep')).toBeTruthy();
@@ -186,14 +218,14 @@ describe('KitchenScreen', () => {
     });
 
     const screen = render(
-      <KitchenScreen navigation={{} as never} route={{} as never} />,
+      <KitchenScreen navigation={{} as never} route={{} as never} />
     );
 
     fireEvent.press(screen.getByTestId('kitchen-week-day-2026-07-16'));
 
-    expect(screen.getByTestId('kitchen-week-day-2026-07-15').props.className).not.toContain(
-      'border-accent-primary',
-    );
+    expect(
+      screen.getByTestId('kitchen-week-day-2026-07-15').props.className
+    ).not.toContain('border-accent-primary');
   });
 
   it('lets the user switch to another day in the current week', () => {
@@ -211,7 +243,7 @@ describe('KitchenScreen', () => {
     });
 
     const screen = render(
-      <KitchenScreen navigation={{} as never} route={{} as never} />,
+      <KitchenScreen navigation={{} as never} route={{} as never} />
     );
 
     expect(mockUseActiveMealPlanDay).toHaveBeenLastCalledWith({
@@ -247,7 +279,7 @@ describe('KitchenScreen', () => {
     });
 
     const screen = render(
-      <KitchenScreen navigation={{} as never} route={{} as never} />,
+      <KitchenScreen navigation={{} as never} route={{} as never} />
     );
 
     expect(screen.getByText('厨房')).toBeTruthy();

@@ -3,6 +3,7 @@ import '@testing-library/jest-dom';
 import type { ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/DataTable';
 import { renderWithClient } from '@/tests/test-utils';
+import type { DataTableFeatures } from '@/components/ui/dataTableFeatures';
 
 jest.mock('@/components/ui/DataTablePagination', () => ({
   DataTablePagination: () => <div data-testid="pagination" />,
@@ -13,7 +14,7 @@ interface TestRow {
   name: string;
 }
 
-const columns: ColumnDef<TestRow>[] = [
+const columns: ColumnDef<DataTableFeatures, TestRow>[] = [
   {
     accessorKey: 'name',
     header: 'Name',

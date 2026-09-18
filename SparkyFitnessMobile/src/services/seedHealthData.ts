@@ -18,12 +18,7 @@ interface SeedResult {
 }
 
 type IntervalValueType =
-  | 'count'
-  | 'floors'
-  | 'energy'
-  | 'distance'
-  | 'elevation'
-  | 'volume';
+  'count' | 'floors' | 'energy' | 'distance' | 'elevation' | 'volume';
 type InstantValueType =
   | 'mass'
   | 'length'
@@ -71,10 +66,7 @@ type CustomSeedConfig = {
 };
 
 type SeedConfig =
-  | IntervalSeedConfig
-  | InstantSeedConfig
-  | SamplesSeedConfig
-  | CustomSeedConfig;
+  IntervalSeedConfig | InstantSeedConfig | SamplesSeedConfig | CustomSeedConfig;
 
 // ============================================================================
 // Utility Functions

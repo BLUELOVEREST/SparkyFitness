@@ -228,8 +228,8 @@ function AppContent() {
   const cycleSheetLabel = cycleDiscreet
     ? t('addSheet.wellness', { defaultValue: 'Wellness' })
     : cycleMode === 'pregnant' || cycleMode === 'postpartum'
-    ? t('addSheet.logPregnancyEntry', { defaultValue: 'Log Pregnancy Entry' })
-    : t('addSheet.logCycle', { defaultValue: 'Log Cycle' });
+      ? t('addSheet.logPregnancyEntry', { defaultValue: 'Log Pregnancy Entry' })
+      : t('addSheet.logCycle', { defaultValue: 'Log Cycle' });
 
   const [primary, chromeBorder, bgPrimary, textPrimary] = useCSSVariable([
     '--color-accent-primary',
@@ -240,12 +240,12 @@ function AppContent() {
   const { defaultColor: headerActionColor } = useHeaderActionColors();
   const iosSmallHeaderOptions = useMemo(
     () => createIOSSmallNativeHeaderOptions(headerActionColor, textPrimary),
-    [headerActionColor, textPrimary],
+    [headerActionColor, textPrimary]
   );
   const createStackScreenOptions = useCallback(
     (
       title: string,
-      options: NativeStackNavigationOptions = {},
+      options: NativeStackNavigationOptions = {}
     ): NativeStackNavigationOptions =>
       usesNativeIOSHeaders
         ? {
@@ -259,7 +259,7 @@ function AppContent() {
             gestureEnabled: true,
             ...options,
           },
-    [iosSmallHeaderOptions, usesNativeIOSHeaders],
+    [iosSmallHeaderOptions, usesNativeIOSHeaders]
   );
 
   // Determine if we're in dark mode based on current theme
@@ -274,7 +274,7 @@ function AppContent() {
       const message = error instanceof Error ? error.message : String(error);
       addLog(
         `[App] Failed to update Android navigation bar style: ${message}`,
-        'WARNING',
+        'WARNING'
       );
     }
   }, [isDarkMode]);
@@ -324,7 +324,7 @@ function AppContent() {
         },
       },
     }),
-    [],
+    []
   );
 
   if (!initialRoute) return null;
@@ -334,7 +334,7 @@ function AppContent() {
       ref={rootNavigationRef}
       theme={navigationTheme}
       linking={linkingEnabled ? linking : undefined}
-      onStateChange={state => {
+      onStateChange={(state) => {
         // Enable deep-link handling once the user has left Onboarding.
         // Without this, widget URLs are ignored for the rest of the session
         // after first-run setup completes.
@@ -373,28 +373,28 @@ function AppContent() {
             screenListeners={
               usesLiquidGlassNavigation
                 ? {
-                    transitionStart: event => {
+                    transitionStart: (event) => {
                       notifyActiveWorkoutBarStackTransition(
                         'start',
                         Boolean(event.data?.closing),
-                        event.target,
+                        event.target
                       );
                     },
-                    transitionEnd: event => {
+                    transitionEnd: (event) => {
                       const closing = Boolean(event.data?.closing);
                       if (!closing) notifyActiveWorkoutBarSwipeProgress(0);
                       notifyActiveWorkoutBarStackTransition(
                         'end',
                         closing,
-                        event.target,
+                        event.target
                       );
                     },
-                    gestureCancel: event => {
+                    gestureCancel: (event) => {
                       notifyActiveWorkoutBarSwipeProgress(0);
                       notifyActiveWorkoutBarStackTransition(
                         'end',
                         false,
-                        event.target,
+                        event.target
                       );
                     },
                   }
@@ -430,7 +430,7 @@ function AppContent() {
                 t('familyDiary.title', { defaultValue: 'Family Diaries' }),
                 {
                   headerBackButtonDisplayMode: 'minimal',
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -442,7 +442,7 @@ function AppContent() {
                     t('familyDiary.unnamedMember', {
                       defaultValue: 'Family member',
                     }),
-                  { headerBackButtonDisplayMode: 'minimal' },
+                  { headerBackButtonDisplayMode: 'minimal' }
                 )
               }
             />
@@ -462,7 +462,7 @@ function AppContent() {
                 t('familyDiary.copyReview', { defaultValue: 'Review copy' }),
                 {
                   headerBackButtonDisplayMode: 'minimal',
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -474,7 +474,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -486,7 +486,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -498,7 +498,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -508,19 +508,21 @@ function AppContent() {
                 t('mealPlans.title', { defaultValue: 'Meal plans' }),
                 {
                   headerBackTitle: t('common.back', { defaultValue: 'Back' }),
-                },
+                }
               )}
             />
             <Stack.Screen
               name="WaterContainers"
               component={SafeWaterContainers}
               options={createStackScreenOptions(
-                t('waterContainers.title', { defaultValue: 'Water containers' }),
+                t('waterContainers.title', {
+                  defaultValue: 'Water containers',
+                }),
                 {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -530,7 +532,7 @@ function AppContent() {
                 t('waterContainerEdit.editTitle', {
                   defaultValue: 'Edit container',
                 }),
-                { headerBackTitle: t('common.back', { defaultValue: 'Back' }) },
+                { headerBackTitle: t('common.back', { defaultValue: 'Back' }) }
               )}
             />
             <Stack.Screen
@@ -542,7 +544,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -556,7 +558,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -568,7 +570,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -580,7 +582,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -592,7 +594,7 @@ function AppContent() {
                   headerBackTitle: t('libraryPlans.mealPlans', {
                     defaultValue: 'Meal Plans',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -606,7 +608,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.library', {
                     defaultValue: 'Library',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -620,7 +622,7 @@ function AppContent() {
                   headerBackTitle: t('libraryPlans.workoutPlans', {
                     defaultValue: 'Workout Plans',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -633,7 +635,7 @@ function AppContent() {
                     headerBackTitle: t('navigation.presets', {
                       defaultValue: 'Presets',
                     }),
-                  },
+                  }
                 )
               }
             />
@@ -647,7 +649,7 @@ function AppContent() {
                     headerBackTitle: t('screens.foods', {
                       defaultValue: 'Foods',
                     }),
-                  },
+                  }
                 )
               }
             />
@@ -660,7 +662,7 @@ function AppContent() {
                   headerBackTitle: t('screens.meals', {
                     defaultValue: 'Meals',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -677,7 +679,7 @@ function AppContent() {
                     // edge-only here so interior right-swipes switch tabs instead of
                     // navigating back.
                     fullScreenGestureEnabled: false,
-                  },
+                  }
                 )
               }
             />
@@ -693,7 +695,7 @@ function AppContent() {
                   // interactive dismissal.
                   presentation: 'modal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -714,14 +716,14 @@ function AppContent() {
                   route.params.mode === 'create-food'
                     ? t('screens.newFood', { defaultValue: 'New Food' })
                     : route.params.mode === 'edit-food'
-                    ? t('screens.editFood', { defaultValue: 'Edit Food' })
-                    : t('screens.adjustNutrition', {
-                        defaultValue: 'Adjust Nutrition',
-                      }),
+                      ? t('screens.editFood', { defaultValue: 'Edit Food' })
+                      : t('screens.adjustNutrition', {
+                          defaultValue: 'Adjust Nutrition',
+                        }),
                   {
                     presentation: 'modal',
                     ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                  },
+                  }
                 )
               }
             />
@@ -734,7 +736,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -752,7 +754,7 @@ function AppContent() {
                   {
                     presentation: 'modal',
                     ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                  },
+                  }
                 )
               }
             />
@@ -767,7 +769,7 @@ function AppContent() {
                   {
                     presentation: 'modal',
                     ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                  },
+                  }
                 )
               }
             />
@@ -779,7 +781,7 @@ function AppContent() {
                 {
                   presentation: 'modal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -790,7 +792,7 @@ function AppContent() {
                 {
                   presentation: 'modal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -808,7 +810,7 @@ function AppContent() {
               component={SafeChat}
               options={createStackScreenOptions(
                 t('screens.sparky', { defaultValue: 'Sparky' }),
-                { headerBackButtonDisplayMode: 'minimal' },
+                { headerBackButtonDisplayMode: 'minimal' }
               )}
             />
             <Stack.Screen
@@ -822,7 +824,7 @@ function AppContent() {
                   {
                     presentation: 'modal',
                     ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                  },
+                  }
                 )
               }
             />
@@ -837,7 +839,7 @@ function AppContent() {
                     headerBackTitle: t('navigation.diary', {
                       defaultValue: 'Diary',
                     }),
-                  },
+                  }
                 )
               }
             />
@@ -850,7 +852,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.diary', {
                     defaultValue: 'Diary',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -864,7 +866,7 @@ function AppContent() {
                     headerBackTitle: t('navigation.diary', {
                       defaultValue: 'Diary',
                     }),
-                  },
+                  }
                 )
               }
             />
@@ -879,7 +881,7 @@ function AppContent() {
                   presentation: 'modal',
                   headerBackButtonDisplayMode: 'minimal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -891,7 +893,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.details', {
                     defaultValue: 'Details',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -903,14 +905,14 @@ function AppContent() {
                 }),
                 {
                   presentation: 'modal',
-                },
+                }
               )}
             />
             <Stack.Screen
               name="PresetSearch"
               component={SafePresetSearch}
               options={createStackScreenOptions(
-                t('screens.startWorkout', { defaultValue: 'Start Workout' }),
+                t('screens.startWorkout', { defaultValue: 'Start Workout' })
               )}
             />
             <Stack.Screen
@@ -920,7 +922,7 @@ function AppContent() {
                 createStackScreenOptions(
                   route.params?.session
                     ? t('screens.editWorkout', { defaultValue: 'Edit Workout' })
-                    : t('screens.newWorkout', { defaultValue: 'New Workout' }),
+                    : t('screens.newWorkout', { defaultValue: 'New Workout' })
                 )
               }
             />
@@ -935,7 +937,7 @@ function AppContent() {
                       })
                     : t('screens.newActivity', {
                         defaultValue: 'New Activity',
-                      }),
+                      })
                 )
               }
             />
@@ -950,7 +952,7 @@ function AppContent() {
                     headerBackTitle: t('navigation.diary', {
                       defaultValue: 'Diary',
                     }),
-                  },
+                  }
                 )
               }
             />
@@ -981,7 +983,7 @@ function AppContent() {
                     headerBackTitle: t('navigation.diary', {
                       defaultValue: 'Diary',
                     }),
-                  },
+                  }
                 )
               }
             />
@@ -1002,7 +1004,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1014,7 +1016,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.diary', {
                     defaultValue: 'Diary',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1026,7 +1028,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1038,7 +1040,7 @@ function AppContent() {
                   headerBackTitle: t('screens.healthSync', {
                     defaultValue: 'Health Sync',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1049,15 +1051,17 @@ function AppContent() {
                 {
                   presentation: 'modal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                },
+                }
               )}
             />
             <Stack.Screen
               name="ProgressPhotos"
               component={SafeProgressPhotos}
               options={createStackScreenOptions(
-                t('screens.progressPhotos', { defaultValue: 'Progress Photos' }),
-                { headerBackButtonDisplayMode: 'minimal' },
+                t('screens.progressPhotos', {
+                  defaultValue: 'Progress Photos',
+                }),
+                { headerBackButtonDisplayMode: 'minimal' }
               )}
             />
             <Stack.Screen
@@ -1065,9 +1069,9 @@ function AppContent() {
               component={SafeProgressPhotoCompare}
               options={createStackScreenOptions(
                 t('screens.progressPhotoCompare', {
-                  defaultValue: 'Compare Photos',
+                  defaultValue: 'Compare',
                 }),
-                { headerBackButtonDisplayMode: 'minimal' },
+                { headerBackButtonDisplayMode: 'minimal' }
               )}
             />
             <Stack.Screen
@@ -1075,9 +1079,9 @@ function AppContent() {
               component={SafeProgressPhotoTimelapse}
               options={createStackScreenOptions(
                 t('screens.progressPhotoTimelapse', {
-                  defaultValue: 'Photo Timelapse',
+                  defaultValue: 'Time-lapse',
                 }),
-                { headerBackButtonDisplayMode: 'minimal' },
+                { headerBackButtonDisplayMode: 'minimal' }
               )}
             />
             <Stack.Screen
@@ -1091,7 +1095,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1103,7 +1107,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1115,7 +1119,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1129,7 +1133,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1143,7 +1147,7 @@ function AppContent() {
                   headerBackTitle: t('screens.dashboardSettings', {
                     defaultValue: 'Dashboard Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1155,7 +1159,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1169,7 +1173,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1183,7 +1187,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1195,7 +1199,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1207,7 +1211,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1219,7 +1223,7 @@ function AppContent() {
                   headerBackTitle: t('settings.app', {
                     defaultValue: 'App Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1231,7 +1235,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1243,7 +1247,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1257,7 +1261,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1269,7 +1273,7 @@ function AppContent() {
                   presentation: 'modal',
                   headerBackButtonDisplayMode: 'minimal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1281,7 +1285,7 @@ function AppContent() {
                   headerBackTitle: t('navigation.dashboard', {
                     defaultValue: 'Dashboard',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1293,7 +1297,7 @@ function AppContent() {
                   presentation: 'modal',
                   headerBackButtonDisplayMode: 'minimal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1307,7 +1311,7 @@ function AppContent() {
                   presentation: 'modal',
                   headerBackButtonDisplayMode: 'minimal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1315,7 +1319,7 @@ function AppContent() {
               component={SafeMedicationsList}
               options={createStackScreenOptions(
                 t('screens.medications', { defaultValue: 'Medications' }),
-                { headerBackButtonDisplayMode: 'minimal' },
+                { headerBackButtonDisplayMode: 'minimal' }
               )}
             />
             <Stack.Screen
@@ -1327,7 +1331,7 @@ function AppContent() {
                   headerBackTitle: t('screens.medications', {
                     defaultValue: 'Medications',
                   }),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1339,7 +1343,7 @@ function AppContent() {
                   presentation: 'modal',
                   headerBackButtonDisplayMode: 'minimal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                },
+                }
               )}
             />
             <Stack.Screen
@@ -1351,7 +1355,7 @@ function AppContent() {
                   presentation: 'modal',
                   headerBackButtonDisplayMode: 'minimal',
                   ...(Platform.OS === 'android' ? androidModalAnimation : {}),
-                },
+                }
               )}
             />
           </Stack.Navigator>

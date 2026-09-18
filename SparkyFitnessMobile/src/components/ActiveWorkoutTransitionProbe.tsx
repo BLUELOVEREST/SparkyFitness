@@ -25,9 +25,7 @@ function ActiveWorkoutTransitionProgressProbe({
 }) {
   const usesNativeTabs = useNativeIOSTabsActive();
   const transition = useTransitionProgress() as
-    | ReturnType<typeof useTransitionProgress>
-    | null
-    | undefined;
+    ReturnType<typeof useTransitionProgress> | null | undefined;
   const closing = transition?.closing;
   const progress = transition?.progress;
   const closingValueRef = useRef(0);

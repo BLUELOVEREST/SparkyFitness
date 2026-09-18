@@ -81,7 +81,9 @@ export function recommendCarbCycleMealAmounts({
     if (macroPerServing <= 0) continue;
 
     const remaining = Math.max(0, target[macroKey] - actual[macroKey]);
-    const amount = roundAmount((remaining / macroPerServing) * food.servingSize);
+    const amount = roundAmount(
+      (remaining / macroPerServing) * food.servingSize
+    );
     amounts[role] = amount;
 
     const scale = amount / food.servingSize;

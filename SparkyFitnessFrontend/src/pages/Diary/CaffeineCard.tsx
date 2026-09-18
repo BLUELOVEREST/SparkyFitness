@@ -357,10 +357,7 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
                 labelFormatter={(value) => clockLabel(Number(value))}
                 formatter={(
                   value:
-                    | string
-                    | number
-                    | ReadonlyArray<string | number>
-                    | undefined
+                    string | number | ReadonlyArray<string | number> | undefined
                 ) => [
                   `${Math.round(Number(value))} mg`,
                   t('diary.caffeine.activeCaffeine', 'Active Caffeine'),

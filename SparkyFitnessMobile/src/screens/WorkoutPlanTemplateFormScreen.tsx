@@ -54,11 +54,11 @@ function defaultEndDate(startDate: string) {
 function getSession(
   sessions: WorkoutPlanFocusSession[],
   dayOfWeek: number,
-  timeSlot: TrainingFocusTimeSlot,
+  timeSlot: TrainingFocusTimeSlot
 ) {
   return sessions.find(
-    session =>
-      session.day_of_week === dayOfWeek && session.time_slot === timeSlot,
+    (session) =>
+      session.day_of_week === dayOfWeek && session.time_slot === timeSlot
   );
 }
 
@@ -74,16 +74,16 @@ const WorkoutPlanTemplateFormScreen: React.FC<
   const { preferences } = usePreferences();
   const t = useMemo(
     () => createMobileTranslator(preferences?.language),
-    [preferences?.language],
+    [preferences?.language]
   );
   const formatSummaryLine = (
     dayLabel: string,
-    sessions: WorkoutPlanFocusSession[],
+    sessions: WorkoutPlanFocusSession[]
   ) => {
     const activeSessions = sessions.filter(
-      session => session.training_focus !== 'rest',
+      (session) => session.training_focus !== 'rest'
     );
-    const primary = activeSessions.find(session => session.is_primary);
+    const primary = activeSessions.find((session) => session.is_primary);
     return t('workoutPlan.summaryLine', {
       defaultValue: '{{day}} · {{sessions}} · Main: {{slot}}',
       day: dayLabel,
@@ -101,14 +101,14 @@ const WorkoutPlanTemplateFormScreen: React.FC<
   const [description, setDescription] = useState(template?.description ?? '');
   const [startDate, setStartDate] = useState(template?.start_date ?? today);
   const [endDate, setEndDate] = useState(
-    template?.end_date ?? defaultEndDate(template?.start_date ?? today),
+    template?.end_date ?? defaultEndDate(template?.start_date ?? today)
   );
   const [isActive, setIsActive] = useState(template?.is_active ?? true);
   const [selectedDay, setSelectedDay] = useState(1);
   const [selectedSlot, setSelectedSlot] =
     useState<TrainingFocusTimeSlot>('morning');
   const [focusSessions, setFocusSessions] = useState<WorkoutPlanFocusSession[]>(
-    () => buildDefaultFocusSessions(template?.focus_sessions),
+    () => buildDefaultFocusSessions(template?.focus_sessions)
   );
   const [customFocusDrafts, setCustomFocusDrafts] = useState<
     Record<string, string>
@@ -132,22 +132,22 @@ const WorkoutPlanTemplateFormScreen: React.FC<
     () =>
       buildTrainingFocusOptionsFromTemplates(
         workoutPlanTemplates,
-        focusSessions,
+        focusSessions
       ),
-    [workoutPlanTemplates, focusSessions],
+    [workoutPlanTemplates, focusSessions]
   );
 
   const updateSelectedFocus = (trainingFocus: string) => {
-    setFocusSessions(current =>
+    setFocusSessions((current) =>
       updateTrainingFocusSession(
         current,
         selectedDay,
         selectedSlot,
-        trainingFocus,
-      ),
+        trainingFocus
+      )
     );
     if (trainingFocus !== CUSTOM_TRAINING_FOCUS_VALUE) {
-      setCustomFocusDrafts(current => {
+      setCustomFocusDrafts((current) => {
         const nextDrafts = { ...current };
         delete nextDrafts[selectedSessionKey];
         return nextDrafts;
@@ -157,8 +157,8 @@ const WorkoutPlanTemplateFormScreen: React.FC<
 
   const setSelectedPrimary = () => {
     if (selectedSession?.training_focus === 'rest') return;
-    setFocusSessions(current =>
-      setPrimaryTrainingFocusSession(current, selectedDay, selectedSlot),
+    setFocusSessions((current) =>
+      setPrimaryTrainingFocusSession(current, selectedDay, selectedSlot)
     );
   };
 
@@ -174,12 +174,12 @@ const WorkoutPlanTemplateFormScreen: React.FC<
       return;
     }
 
-    const resolvedFocusSessions = focusSessions.map(session => {
+    const resolvedFocusSessions = focusSessions.map((session) => {
       const trainingFocus = resolveTrainingFocusValue(
         session.training_focus,
         customFocusDrafts[
           focusSessionKey(session.day_of_week, session.time_slot)
-        ] ?? '',
+        ] ?? ''
       );
       return {
         ...session,
@@ -220,7 +220,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<
   };
 
   const activeSessionCount = focusSessions.filter(
-    session => session.training_focus !== 'rest',
+    (session) => session.training_focus !== 'rest'
   ).length;
 
   return (
@@ -291,7 +291,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<
         </View>
         <Pressable
           className="flex-row items-center mt-4"
-          onPress={() => setIsActive(current => !current)}
+          onPress={() => setIsActive((current) => !current)}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: isActive }}
         >
@@ -312,9 +312,9 @@ const WorkoutPlanTemplateFormScreen: React.FC<
         <Text className="text-lg font-semibold text-text-primary mb-3">
           {t('workoutPlan.weeklySummary', { defaultValue: 'Weekly Summary' })}
         </Text>
-        {DAYS.map(day => {
+        {DAYS.map((day) => {
           const sessions = focusSessions.filter(
-            session => session.day_of_week === day.id,
+            (session) => session.day_of_week === day.id
           );
           return (
             <Text key={day.id} className="text-sm text-text-secondary mt-1">
@@ -343,7 +343,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<
           className="mb-4"
         >
           <View className="flex-row gap-2">
-            {DAYS.map(day => (
+            {DAYS.map((day) => (
               <Pressable
                 key={day.id}
                 className={`px-4 py-2 rounded-full ${
@@ -397,8 +397,8 @@ const WorkoutPlanTemplateFormScreen: React.FC<
                         defaultValue: 'Main · {{focus}}',
                         focus: session.training_focus,
                       })
-                    : session?.training_focus ??
-                      t('workoutPlan.rest', { defaultValue: 'rest' })}
+                    : (session?.training_focus ??
+                      t('workoutPlan.rest', { defaultValue: 'rest' }))}
                 </Text>
               </Pressable>
             );
@@ -409,7 +409,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<
           {t('workoutPlan.focus', { defaultValue: 'Training Focus' })}
         </Text>
         <View className="flex-row flex-wrap gap-2 mb-4">
-          {trainingFocusOptions.map(option => {
+          {trainingFocusOptions.map((option) => {
             const isSelected = selectedSession?.training_focus === option.value;
             return (
               <Pressable
@@ -435,8 +435,8 @@ const WorkoutPlanTemplateFormScreen: React.FC<
           <TextInput
             className="bg-background border border-border-subtle rounded-xl px-4 py-3 text-text-primary mb-4"
             value={customFocusDrafts[selectedSessionKey] ?? ''}
-            onChangeText={text =>
-              setCustomFocusDrafts(current => ({
+            onChangeText={(text) =>
+              setCustomFocusDrafts((current) => ({
                 ...current,
                 [selectedSessionKey]: text,
               }))

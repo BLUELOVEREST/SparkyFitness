@@ -17,7 +17,10 @@ import type { Exercise } from './exercise';
 import type { FamilyDiaryUser } from './familyDiary';
 import type { FoodEntry } from './foodEntries';
 import type { FoodEntryMeal } from './foodEntryMeals';
-import type { ActiveMealPlanDayMeal } from './mealPlan';
+import type {
+  ActiveMealPlanDayMeal,
+  MealPlanTemplate as MealPlanTemplateFormData,
+} from './mealPlan';
 import type { FoodInfoItem } from './foodInfo';
 import type {
   EquivalentUnit,
@@ -29,7 +32,6 @@ import type {
   MealPlanPickerTarget,
   MealPlanTemplate as MealPlanAppTemplate,
 } from './mealPlans';
-import type { MealPlanTemplate as MealPlanTemplateFormData } from './mealPlan';
 import type { WorkoutPreset } from './workoutPresets';
 import type { WorkoutPlanTemplate } from './workoutPlan';
 
@@ -79,8 +81,7 @@ export type RootStackParamList = {
   MealsLibrary: undefined;
   MealPlans: undefined;
   MealPlanForm:
-    | { template?: MealPlanAppTemplate; initialMeal?: Meal }
-    | undefined;
+    { template?: MealPlanAppTemplate; initialMeal?: Meal } | undefined;
   // #2115, Phase 12: mobile-only water-container CRUD.
   WaterContainers: undefined;
   WaterContainerEdit: { containerId?: number } | undefined;
@@ -89,12 +90,10 @@ export type RootStackParamList = {
   Kitchen: undefined;
   MealPlanTemplates: undefined;
   MealPlanTemplateForm:
-    | { mode: 'create' }
-    | { mode: 'edit'; template: MealPlanTemplateFormData };
+    { mode: 'create' } | { mode: 'edit'; template: MealPlanTemplateFormData };
   WorkoutPlanTemplates: undefined;
   WorkoutPlanTemplateForm:
-    | { mode: 'create' }
-    | { mode: 'edit'; template: WorkoutPlanTemplate };
+    { mode: 'create' } | { mode: 'edit'; template: WorkoutPlanTemplate };
   WorkoutPresetDetail: { preset: WorkoutPreset; updatedPreset?: WorkoutPreset };
   WorkoutPresetForm:
     | {
@@ -255,8 +254,7 @@ export type RootStackParamList = {
     | undefined;
   ExerciseSearch: { returnKey: string };
   PresetSearch:
-    | { selectedExercise?: Exercise; selectionNonce?: number }
-    | undefined;
+    { selectedExercise?: Exercise; selectionNonce?: number } | undefined;
   WorkoutAdd:
     | {
         session?: PresetSessionResponse;
@@ -284,8 +282,7 @@ export type RootStackParamList = {
     selectionNonce?: number;
   };
   ActiveWorkout:
-    | { selectedExercise?: Exercise; selectionNonce?: number }
-    | undefined;
+    { selectedExercise?: Exercise; selectionNonce?: number } | undefined;
   // Post-save celebration for a finished live workout. Renders entirely from
   // the store snapshot captured before `clearWorkout()`; only calories arrive
   // via a post-save session refetch.

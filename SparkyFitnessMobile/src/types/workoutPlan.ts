@@ -1,6 +1,7 @@
 export type WorkoutPlanMode = 'detailed' | 'training_focus';
 
-export type TrainingFocusTimeSlot = 'morning' | 'noon' | 'afternoon' | 'evening';
+export type TrainingFocusTimeSlot =
+  'morning' | 'noon' | 'afternoon' | 'evening';
 
 export type TrainingFocusValue =
   | 'rest'

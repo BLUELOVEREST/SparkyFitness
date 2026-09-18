@@ -161,8 +161,7 @@ type NetworkingModule = {
 };
 
 const networkingModule = NativeModules.Networking as
-  | NetworkingModule
-  | undefined;
+  NetworkingModule | undefined;
 
 const normalizeOrigin = (origin?: string | null): string | undefined => {
   if (!origin) {

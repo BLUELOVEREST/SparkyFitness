@@ -72,7 +72,7 @@ export function useCreateMealPlanTemplate(options?: {
   const mutation = useMutation({
     mutationFn: (payload: SaveMealPlanTemplatePayload) =>
       createMealPlanTemplate(payload),
-    onSuccess: template => {
+    onSuccess: (template) => {
       invalidateMealPlanTemplateCaches(queryClient);
       options?.onSuccess?.(template);
     },
@@ -101,7 +101,7 @@ export function usePreviewCarbCycleWeek(options?: {
 }) {
   const mutation = useMutation({
     mutationFn: (input: CarbCycleInput) => previewCarbCycleWeek(input),
-    onSuccess: preview => {
+    onSuccess: (preview) => {
       options?.onSuccess?.(preview);
     },
     onError: () => {
@@ -140,7 +140,7 @@ export function useUpdateMealPlanTemplate(options?: {
       }
       return updateMealPlanTemplate({ ...payload, id });
     },
-    onSuccess: template => {
+    onSuccess: (template) => {
       invalidateMealPlanTemplateCaches(queryClient);
       onSuccess?.(template);
     },
