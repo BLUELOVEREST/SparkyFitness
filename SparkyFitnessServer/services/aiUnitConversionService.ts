@@ -9,7 +9,7 @@ import {
   type ProviderConfig,
 } from '../ai/providerDispatch.js';
 import { resolveAiProfileSettings } from '../ai/profileSettings.js';
-import { deriveAiNetworkPolicy } from '../utils/outboundUrlPolicy.js';
+import { resolveAiNetworkPolicy } from '../utils/outboundUrlPolicy.js';
 import {
   aiProviderRawResponseSchema,
   isAiConvertibleUnit,
@@ -191,7 +191,7 @@ export async function estimateUnitConversion(
   // per-provider structured-output strategy, and JSON parsing.
   const result = await dispatchAiRequest({
     provider,
-    networkPolicy: deriveAiNetworkPolicy(aiService, actorIsAdmin),
+    networkPolicy: await resolveAiNetworkPolicy(aiService, actorIsAdmin),
     prompt: buildPrompt({
       foodName: params.foodName,
       brand: params.brand,

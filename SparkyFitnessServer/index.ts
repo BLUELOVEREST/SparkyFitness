@@ -3,12 +3,14 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { loadSecrets } from './utils/secretLoader.js';
 import { runPreflightChecks } from './utils/preflightChecks.js';
+import { configureOutboundHttp } from './utils/outboundHttp.js';
 import { configureOutboundProxy } from './utils/outboundProxy.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 loadSecrets();
+configureOutboundHttp();
 configureOutboundProxy();
 
 try {
@@ -37,10 +39,8 @@ try {
 // the dotenv/loadSecrets calls above and freeze the pools with empty config.
 // This is the same reason the server module below is imported dynamically.
 try {
-  const { applyMigrations } = await import('./utils/dbMigrations.js');
-  const { applyRlsPolicies } = await import('./utils/applyRlsPolicies.js');
-  await applyMigrations();
-  await applyRlsPolicies();
+  const { initializeDatabase } = await import('./utils/initializeDatabase.js');
+  await initializeDatabase();
 } catch (error) {
   console.error('Failed to apply database migrations:', error);
   // eslint-disable-next-line n/no-process-exit

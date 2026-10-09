@@ -6,7 +6,7 @@ import {
   type ProviderConfig,
 } from '../ai/providerDispatch.js';
 import { resolveAiProfileSettings } from '../ai/profileSettings.js';
-import { deriveAiNetworkPolicy } from '../utils/outboundUrlPolicy.js';
+import { resolveAiNetworkPolicy } from '../utils/outboundUrlPolicy.js';
 
 const LABEL_SCAN_PROMPT =
   'Extract the nutrition facts from this food label image. ' +
@@ -78,7 +78,7 @@ async function extractNutritionFromLabel(
 
   const result = await dispatchAiRequest({
     provider,
-    networkPolicy: deriveAiNetworkPolicy(aiService, actorIsAdmin),
+    networkPolicy: await resolveAiNetworkPolicy(aiService, actorIsAdmin),
     prompt: LABEL_SCAN_PROMPT,
     images: [{ base64: base64Image, mimeType }],
     parseJson: true,

@@ -1,4 +1,5 @@
 import path from 'path';
+import { emailLoginGuard } from './middleware/emailLoginGuard.js';
 
 import fs from 'fs';
 import type { ServerResponse } from 'http';
@@ -71,6 +72,7 @@ import googleHealthRoutes from './routes/googleHealthRoutes.js';
 import polarRoutes from './routes/polarRoutes.js';
 import stravaRoutes from './routes/stravaRoutes.js';
 import hevyRoutes from './routes/hevyRoutes.js';
+import liftosaurRoutes from './routes/liftosaurRoutes.js';
 import moodRoutes from './routes/moodRoutes.js';
 import fastingRoutes from './routes/fastingRoutes.js';
 import adaptiveTdeeRoutes from './routes/adaptiveTdeeRoutes.js';
@@ -105,6 +107,7 @@ import googleHealthService from './services/googleHealthService.js';
 import polarService from './services/polarService.js';
 import stravaService from './services/stravaService.js';
 import hevyService from './integrations/hevy/hevyService.js';
+import liftosaurService from './integrations/liftosaur/liftosaurService.js';
 // @ts-expect-error TS1192
 import dailySummaryRoutes from './routes/dailySummaryRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
@@ -233,15 +236,15 @@ app.use((req, res, next) => {
 });
 // External MCP endpoint — a self-contained chain mounted top-level (not /api)
 // to skip the /api/auth interceptor and cache-control middleware. It sits
-// before the global 50mb parser so its route-local 1mb parser wins (the global
+// before the global parser so its route-local parser wins (the global
 // parser would set req._body first and no-op the local one). cookieParser is
-// local because the global one also runs after the 50mb parser, and
+// local because the global one also runs after the global parser, and
 // authenticate reads req.cookies. requestLogger is local because the global
 // one also runs after this mount, so /mcp requests would never reach it.
 app.use(
   '/mcp',
   requestLogger({ logCompletion: true }),
-  express.json({ limit: '1mb' }),
+  express.json({ limit: isDemoMode() ? '1mb' : '50mb' }),
   cookieParser(),
   authenticate,
   // /mcp mounts ahead of the global route table, so it needs the demo guard
@@ -254,7 +257,7 @@ app.use(
 // takes a much lower cap: the routes that need the headroom (image analysis,
 // uploads, FIT import) are blocked for the demo account anyway, and a 50mb
 // parse per request is a cheap way for an anonymous visitor to burn memory.
-app.use(express.json({ limit: isDemoMode() ? '2mb' : '50mb' }));
+app.use(express.json({ limit: isDemoMode() ? '1mb' : '50mb' }));
 app.use(cookieParser());
 // --- Better Auth Mounting Logic (Moved to after migrations) ---
 let syncTrustedProviders: typeof authModule.syncTrustedProviders | undefined;
@@ -271,6 +274,7 @@ const mountBetterAuth = () => {
     throw error; // Propagate to block startup if auth fails
   }
 };
+app.use(emailLoginGuard);
 // Catch ALL requests starting with /api/auth early.
 app.use(async (req, res, next) => {
   if (req.originalUrl.startsWith('/api/auth') && betterAuthHandlerInstance) {
@@ -282,22 +286,6 @@ app.use(async (req, res, next) => {
       req.path.startsWith('/api/auth/web-login');
     if (isDiscovery) {
       return next();
-    }
-
-    // In demo mode the credential backend stays loaded so the one-click demo
-    // login (an in-process auth.api.signInEmail call) keeps working, so the
-    // public password routes have to be closed here instead. The body matches
-    // Better Auth's own EMAIL_PASSWORD_DISABLED response byte for byte, so a
-    // client cannot tell which layer refused it.
-    if (
-      process.env.SPARKY_FITNESS_DISABLE_EMAIL_LOGIN === 'true' &&
-      (req.path.startsWith('/api/auth/sign-in/email') ||
-        req.path.startsWith('/api/auth/sign-up/email'))
-    ) {
-      return res.status(400).json({
-        message: 'Email and password is not enabled',
-        code: 'EMAIL_PASSWORD_DISABLED',
-      });
     }
 
     if (isDemoMode()) {
@@ -635,9 +623,8 @@ app.get(
     }
   }
 );
-// Computed once at startup — these are static for the lifetime of the process
-const isPublicApiDocsEnabled =
-  process.env.SPARKY_FITNESS_PUBLIC_API_DOCS === 'true';
+import { isPublicApiDocsAllowed } from './models/globalSettingsRepository.js';
+
 const publicRoutes = [
   '/api/auth/settings',
   '/api/auth/mfa-factors',
@@ -650,12 +637,17 @@ const publicRoutes = [
   '/uploads',
   '/api/ping',
 ];
-if (isPublicApiDocsEnabled) {
-  publicRoutes.push('/api/api-docs');
-}
 
 // Apply authentication middleware to all protected routes
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
+  if (req.path === '/api/api-docs' || req.path.startsWith('/api/api-docs/')) {
+    const isPublicDocs =
+      (await isPublicApiDocsAllowed()) ||
+      process.env.SPARKY_FITNESS_PUBLIC_API_DOCS === 'true';
+    if (isPublicDocs) {
+      return next();
+    }
+  }
   const isPublic = publicRoutes.some((route) => {
     // Exact match or subpath match with trailing slash to prevent partial matches
     // e.g. "/api/health" matches "/api/health" and "/api/health/" but NOT "/api/health-data"
@@ -734,6 +726,7 @@ app.use('/api/integrations/googlehealth', googleHealthRoutes);
 app.use('/api/integrations/polar', polarRoutes);
 app.use('/api/integrations/strava', stravaRoutes);
 app.use('/api/integrations/hevy', hevyRoutes);
+app.use('/api/integrations/liftosaur', liftosaurRoutes);
 app.use('/api/mood', moodRoutes);
 app.use('/api/fasting', fastingRoutes);
 app.use('/api/admin', adminRoutes);
@@ -1024,6 +1017,33 @@ const scheduleHevySyncs = async () => {
     }
   });
 };
+const scheduleLiftosaurSyncs = async () => {
+  cron.schedule('0 * * * *', async () => {
+    try {
+      const liftosaurProviders =
+        await externalProviderRepository.getProvidersByType('liftosaur');
+      for (const provider of liftosaurProviders) {
+        if (provider.is_active && provider.sync_frequency !== 'manual') {
+          try {
+            await liftosaurService.syncLiftosaurData(
+              provider.user_id,
+              provider.user_id,
+              false,
+              provider.id
+            );
+          } catch (error) {
+            console.error(
+              `[CRON] Liftosaur sync failed for user ${provider.user_id}:`,
+              error
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[CRON] scheduleLiftosaurSyncs task failed:', error);
+    }
+  });
+};
 // Migrations and RLS policies are applied by index.ts before this module is
 // imported, so that Better Auth's eager schema validation (run at auth.ts
 // module scope) sees the migrated schema. Do not move them back in here.
@@ -1052,6 +1072,7 @@ const scheduleHevySyncs = async () => {
   scheduleStravaSyncs();
   scheduleGoogleHealthSyncs();
   scheduleHevySyncs();
+  scheduleLiftosaurSyncs();
   if (process.env.SPARKY_FITNESS_ADMIN_EMAIL) {
     // A demo account promoted to admin would hand every anonymous visitor the
     // admin panel. Refuse the promotion rather than start up compromised.

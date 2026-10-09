@@ -9,3 +9,5 @@ package-lock.json
 
 # Bundled China Food Composition data is imported source material.
 integrations/chinafood/data/
+# Local provider fixtures are ignored at the repo root, which Prettier does not read here.
+mock_data/

@@ -13,10 +13,17 @@ import { buildChatbotTools } from '../ai/tools/index.js';
 import { buildDevTools } from '../ai/tools/devTools.js';
 import goalService from '../services/goalService.js';
 import userRepository from '../models/userRepository.js';
+import foodEntryService from '../services/foodEntryService.js';
+import foodEntryMealRepository from '../models/foodEntryMealRepository.js';
 
 // buildChatbotTools loads every domain builder; real foodEntryService trips on
 // a deep '@workspace/shared' subpath import at load and isn't exercised here.
-vi.mock('../services/foodEntryService', () => ({ default: {} }));
+vi.mock('../services/foodEntryService', () => ({
+  default: { getFoodEntriesByDateRange: vi.fn() },
+}));
+vi.mock('../models/foodEntryMealRepository', () => ({
+  default: { getFoodEntryMealsByDateRange: vi.fn() },
+}));
 vi.mock('../config/logging', () => ({ log: vi.fn() }));
 // Pin the user's timezone so day-defaults are deterministic and no DB is hit.
 vi.mock('../utils/timezoneLoader', () => ({
@@ -123,7 +130,7 @@ const app = express();
 app.use(
   '/mcp',
   requestLogger({ logCompletion: true }),
-  express.json({ limit: '1mb' }),
+  express.json({ limit: '50mb' }),
   cookieParser(),
   fakeAuthenticate,
   mcpRoutes
@@ -150,7 +157,7 @@ describe('POST /mcp', () => {
 
     expect(res.status).toBe(200);
     const tools = res.body.result.tools;
-    expect(tools).toHaveLength(50);
+    expect(tools).toHaveLength(51);
     expect(tools.map((t: { name: string }) => t.name).sort()).toEqual(
       EXPECTED_TOOL_NAMES
     );
@@ -159,6 +166,97 @@ describe('POST /mcp', () => {
       // tool() identity passthrough → bare zod-4 object → JSON-Schema object.
       expect(t.inputSchema.type, `${t.name} inputSchema`).toBe('object');
     }
+  });
+
+  it('publishes diary pagination and advances after a truncated mixed page', async () => {
+    const listed = await request(app)
+      .post('/mcp')
+      .set(MCP_HEADERS)
+      .set('Authorization', 'Bearer valid')
+      .send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    const diaryTool = listed.body.result.tools.find(
+      (tool: { name: string }) => tool.name === 'sparky_get_food_diary'
+    );
+    expect(diaryTool.inputSchema.properties).toHaveProperty('limit');
+    expect(diaryTool.inputSchema.properties).toHaveProperty('offset');
+    const nutritionSummaryTool = listed.body.result.tools.find(
+      (tool: { name: string }) => tool.name === 'sparky_get_nutrition_summary'
+    );
+    expect(nutritionSummaryTool.inputSchema.properties).not.toHaveProperty(
+      'limit'
+    );
+    expect(nutritionSummaryTool.inputSchema.properties).not.toHaveProperty(
+      'offset'
+    );
+
+    const foodEntries = Array.from({ length: 25 }, (_, index) => ({
+      id: `food-${String(index).padStart(2, '0')}`,
+      entry_date: '2026-09-15',
+      entry_time:
+        index === 0 ? '12:00' : `14:${String(index).padStart(2, '0')}`,
+      food_name: `Food ${index} ${'x'.repeat(500)}`,
+    }));
+    const mealEntries = Array.from({ length: 2 }, (_, index) => ({
+      id: `meal-${index}`,
+      entry_date: '2026-09-15',
+      entry_time: index === 0 ? '12:30' : '13:30',
+      name: `Meal ${index}`,
+    }));
+    vi.mocked(foodEntryService.getFoodEntriesByDateRange).mockResolvedValue(
+      foodEntries
+    );
+    vi.mocked(
+      foodEntryMealRepository.getFoodEntryMealsByDateRange
+    ).mockResolvedValue(mealEntries);
+
+    const first = await request(app)
+      .post('/mcp')
+      .set(MCP_HEADERS)
+      .set('Authorization', 'Bearer valid')
+      .send({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'sparky_get_food_diary',
+          arguments: { date: '2026-09-15', limit: 25, offset: 0 },
+        },
+      });
+    expect(first.status).toBe(200);
+    const firstText = first.body.result.content[0].text as string;
+    const firstPage = JSON.parse(firstText.split('\n\n---')[0] ?? '');
+    expect(firstPage.next_offset).toBeGreaterThan(0);
+    expect(firstPage.next_offset).toBeLessThan(25);
+
+    const second = await request(app)
+      .post('/mcp')
+      .set(MCP_HEADERS)
+      .set('Authorization', 'Bearer valid')
+      .send({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: {
+          name: 'sparky_get_food_diary',
+          arguments: {
+            date: '2026-09-15',
+            limit: 25,
+            offset: firstPage.next_offset,
+          },
+        },
+      });
+    const secondPage = JSON.parse(
+      (second.body.result.content[0].text as string).split('\n\n---')[0] ?? ''
+    );
+    const ids = [
+      ...firstPage.food_entries,
+      ...firstPage.meal_entries,
+      ...secondPage.food_entries,
+      ...secondPage.meal_entries,
+    ].map((entry: { id: string }) => entry.id);
+    expect(new Set(ids)).toHaveLength(ids.length);
+    expect(ids).toContain('meal-0');
+    expect(ids).toContain('meal-1');
   });
 
   it('tools/call dispatches to the registry handler and returns its text', async () => {
@@ -347,7 +445,7 @@ describe('POST /mcp', () => {
     abortApp.use(
       '/mcp',
       requestLogger({ logCompletion: true }),
-      express.json({ limit: '1mb' }),
+      express.json({ limit: '50mb' }),
       (req: Request) => {
         req.socket.destroy();
       }
@@ -374,8 +472,23 @@ describe('POST /mcp', () => {
     });
   });
 
-  it('rejects bodies over the route-local 1mb limit with 413', async () => {
-    const padding = 'x'.repeat(1024 * 1024 + 100);
+  it('accepts bodies over 1mb (for photo/image tools) and rejects bodies over 50mb with 413', async () => {
+    // 1.5MB body should succeed (not 413)
+    const validLargePadding = 'x'.repeat(1.5 * 1024 * 1024);
+    const validRes = await request(app)
+      .post('/mcp')
+      .set(MCP_HEADERS)
+      .set('Authorization', 'Bearer valid')
+      .send({
+        jsonrpc: '2.0',
+        id: 4,
+        method: 'tools/list',
+        params: { padding: validLargePadding },
+      });
+    expect(validRes.status).toBe(200);
+
+    // Over 50MB body should be rejected with 413
+    const overLimitPadding = 'x'.repeat(50 * 1024 * 1024 + 1024);
     const res = await request(app)
       .post('/mcp')
       .set(MCP_HEADERS)
@@ -384,7 +497,7 @@ describe('POST /mcp', () => {
         jsonrpc: '2.0',
         id: 4,
         method: 'tools/list',
-        params: { padding },
+        params: { padding: overLimitPadding },
       });
 
     expect(res.status).toBe(413);
@@ -399,7 +512,7 @@ describe('POST /mcp', () => {
 
     expect(res.status).toBe(200);
     const names = res.body.result.tools.map((t: { name: string }) => t.name);
-    expect(res.body.result.tools).toHaveLength(50);
+    expect(res.body.result.tools).toHaveLength(51);
     for (const devTool of DEV_TOOL_NAMES) {
       expect(names).not.toContain(devTool);
     }
@@ -417,7 +530,7 @@ describe('POST /mcp', () => {
 
     expect(res.status).toBe(200);
     const names = res.body.result.tools.map((t: { name: string }) => t.name);
-    expect(res.body.result.tools).toHaveLength(55);
+    expect(res.body.result.tools).toHaveLength(56);
     for (const devTool of DEV_TOOL_NAMES) {
       expect(names).toContain(devTool);
     }
@@ -435,7 +548,7 @@ describe('POST /mcp', () => {
 
     expect(res.status).toBe(200);
     const names = res.body.result.tools.map((t: { name: string }) => t.name);
-    expect(res.body.result.tools).toHaveLength(50);
+    expect(res.body.result.tools).toHaveLength(51);
     for (const devTool of DEV_TOOL_NAMES) {
       expect(names).not.toContain(devTool);
     }

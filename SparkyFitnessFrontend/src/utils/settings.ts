@@ -17,6 +17,7 @@ export const providerRequirements: Record<string, string[]> = {
   usda: ['app_key'],
   boohee: ['app_key'],
   hevy: ['app_key'],
+  liftosaur: ['app_key'],
   yazio: ['app_id', 'app_key', 'yazio_client_id', 'yazio_client_secret'],
 };
 
@@ -26,6 +27,9 @@ const providerFieldLabels: Record<string, Record<string, string>> = {
     app_key: 'YAZIO password',
     yazio_client_id: 'YAZIO Client ID',
     yazio_client_secret: 'YAZIO Client Secret',
+  },
+  liftosaur: {
+    app_key: 'Liftosaur API Key',
   },
 };
 
@@ -47,6 +51,7 @@ const PROVIDERS_WITHOUT_APP_ID = [
   'boohee',
   'free-exercise-db',
   'wger',
+  'liftosaur',
 ];
 const OAUTH_TOKEN_PROVIDERS = [
   'googlehealth',

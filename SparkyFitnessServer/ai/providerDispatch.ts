@@ -76,7 +76,7 @@ export interface DispatchRequest {
   parseJson?: boolean;
   /** Forwarded to every provider family; omitted from the request body when unset. */
   temperature?: number;
-  /** Default 90_000; Ollama default 300_000. */
+  /** Default 90_000; 300_000 for custom-URL services (ollama, openai_compatible, custom). */
   timeoutMs?: number;
 }
 
@@ -103,12 +103,12 @@ export type DispatchResult =
     };
 
 const DEFAULT_TIMEOUT_MS = 90_000;
-// Ollama is nearly always a local server, where the first request after an idle
-// period pays a cold start: loading a multi-billion-parameter model into VRAM
+// Ollama and models using a custom URL are nearly always local, where the first
+// request often triggers a cold start: loading a multi-billion-parameter model
 // can take minutes on modest hardware, before inference begins. 120s was short
 // enough to fail that load outright. Matches CHAT_REQUEST_TIMEOUT_MS in
 // chatService.ts, so the dispatch path is no longer the stricter of the two.
-const OLLAMA_DEFAULT_TIMEOUT_MS = 5 * 60_000;
+const LOCAL_MODEL_TIMEOUT_MS = 5 * 60_000;
 // Ask Ollama to hold the model in memory well past its 5-minute default, so
 // only the first request in a session pays the cold start rather than every
 // request that follows a short pause.
@@ -154,11 +154,13 @@ type ProviderFamily = 'google' | 'openai' | 'anthropic' | 'ollama';
 // normalizeImagesForDispatch); the primary HEIC decision is made from the bytes.
 const HEIC_MIME_TYPES = new Set(['image/heic', 'image/heif']);
 
-// OpenAI-family providers that reliably support strict `response_format.json_schema`.
-// Others (openai_compatible/custom) fall back to `json_object` with the schema
-// embedded in the prompt, since arbitrary compatible servers may not support it.
+// OpenAI-family providers that support strict `response_format.json_schema`.
+// Modern compatible servers (LM Studio, vLLM, Ollama via /v1, OpenAI, Mistral, Groq, etc.)
+// require or prefer json_schema for structured outputs.
 const STRICT_SCHEMA_PROVIDERS = new Set([
   'openai',
+  'openai_compatible',
+  'custom',
   'mistral',
   'groq',
   'openrouter',
@@ -369,10 +371,22 @@ function truncateBody(body: string): string {
 }
 
 function stripCodeFences(content: string): string {
-  return content
-    .replace(/^```(?:json)?\n?/, '')
-    .replace(/\n?```$/, '')
-    .trim();
+  let text = content.trim();
+  // Strip reasoning blocks from models with internal thoughts (<think>...</think>, <thought>...</thought>)
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  text = text.replace(/<thought>[\s\S]*?<\/thought>/gi, '').trim();
+
+  // If the content is wrapped in markdown code fences, extract the inner block
+  const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch) {
+    text = fencedMatch[1].trim();
+  } else {
+    text = text
+      .replace(/^```(?:json)?\n?/, '')
+      .replace(/\n?```$/, '')
+      .trim();
+  }
+  return text;
 }
 
 /**
@@ -1008,10 +1022,81 @@ async function performOllama(
 
 function resolveTimeout(req: DispatchRequest, family: ProviderFamily): number {
   if (typeof req.timeoutMs === 'number') return req.timeoutMs;
-  if (family === 'ollama') {
-    return OLLAMA_DEFAULT_TIMEOUT_MS;
+  if (family === 'ollama' || requiresCustomUrl(req.provider.service_type)) {
+    return LOCAL_MODEL_TIMEOUT_MS;
   }
   return DEFAULT_TIMEOUT_MS;
+}
+
+export function extractJsonCandidate(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Continue to balanced extraction
+  }
+
+  const candidates: unknown[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '{' || char === '[') {
+      const openChar = char;
+      const closeChar = char === '{' ? '}' : ']';
+      let depth = 0;
+      let inString = false;
+      let escape = false;
+
+      for (let j = i; j < text.length; j++) {
+        const c = text[j];
+        if (escape) {
+          escape = false;
+          continue;
+        }
+        if (c === '\\') {
+          escape = true;
+          continue;
+        }
+        if (c === '"') {
+          inString = !inString;
+          continue;
+        }
+        if (!inString) {
+          if (c === openChar) {
+            depth++;
+          } else if (c === closeChar) {
+            depth--;
+            if (depth === 0) {
+              const snippet = text.slice(i, j + 1);
+              try {
+                const parsed = JSON.parse(snippet);
+                candidates.push(parsed);
+                i = j;
+              } catch {
+                // Ignore invalid candidate
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (candidates.length > 0) {
+    return candidates[candidates.length - 1];
+  }
+
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    return JSON.parse(text.slice(firstBrace, lastBrace + 1));
+  }
+  const firstBracket = text.indexOf('[');
+  const lastBracket = text.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    return JSON.parse(text.slice(firstBracket, lastBracket + 1));
+  }
+
+  throw new Error('No JSON structure found');
 }
 
 /**
@@ -1191,7 +1276,8 @@ export async function dispatchAiRequest(
   }
 
   try {
-    const json = JSON.parse(stripCodeFences(extracted.text));
+    const cleaned = stripCodeFences(extracted.text);
+    const json = extractJsonCandidate(cleaned);
     return { ok: true, text: extracted.text, json };
   } catch {
     return {
@@ -1205,4 +1291,5 @@ export async function dispatchAiRequest(
 export default {
   dispatchAiRequest,
   toStrictJsonSchema,
+  extractJsonCandidate,
 };

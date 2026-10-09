@@ -17,6 +17,7 @@ export const activeMealPlanDayQueryKey = (date: string) =>
   ['activeMealPlanDay', date] as const;
 
 export const mealPlanTemplatesQueryKey = ['mealPlanTemplates'] as const;
+export const caffeineActiveRootQueryKey = ['caffeineActive'] as const;
 export const caffeineActiveQueryKey = (date: string) =>
   ['caffeineActive', date] as const;
 

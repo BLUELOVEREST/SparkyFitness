@@ -23,7 +23,8 @@ import { TtlCache } from '../utils/ttlCache.js';
 import {
   assertOutboundUrlShapeAndLiteralAllowed,
   createGuardedFetch,
-  deriveAiNetworkPolicy,
+  resolveAiNetworkPolicy,
+  type AiNetworkPolicy,
   OutboundUrlBlockedError,
   requiresUserSuppliedAiUrl,
 } from '../utils/outboundUrlPolicy.js';
@@ -56,9 +57,10 @@ interface ChatMessagePart {
 }
 
 interface ProcessedMessagePart {
-  type: 'text' | 'image';
+  type: 'text' | 'file';
   text?: string;
-  image?: string;
+  data?: string | Uint8Array | URL;
+  mediaType?: string;
 }
 
 interface ChatMessage {
@@ -881,7 +883,7 @@ function stripHistoricalImages(messages: LlmMessage[]): LlmMessage[] {
     if (index === lastUserIndex || !Array.isArray(msg.content)) {
       return msg;
     }
-    const withoutImages = msg.content.filter((part) => part.type !== 'image');
+    const withoutImages = msg.content.filter((part) => part.type !== 'file');
     if (withoutImages.length === msg.content.length) {
       return msg;
     }
@@ -924,7 +926,7 @@ function estimateMessageTokens(
   let total = PER_MESSAGE_OVERHEAD;
   for (const part of content) {
     total +=
-      part.type === 'image'
+      part.type === 'file'
         ? IMAGE_TOKEN_ESTIMATE
         : Math.ceil((part.text?.length ?? 0) / CHARS_PER_TOKEN);
   }
@@ -973,7 +975,7 @@ interface ChatAiServiceConfig {
 function createChatModelInstance(
   aiService: ChatAiServiceConfig,
   modelName: string,
-  networkPolicy: ReturnType<typeof deriveAiNetworkPolicy>
+  networkPolicy: AiNetworkPolicy
 ): Parameters<typeof generateText>[0]['model'] {
   const apiKey = aiService.api_key ?? undefined;
 
@@ -1188,9 +1190,33 @@ function mapMessagePart(part: ChatMessagePart): ProcessedMessagePart {
         part.mediaType?.startsWith('image/') ||
         part.url?.startsWith('data:image/')))
   ) {
-    // Handle both base64 data URLs and remote URLs
     const url = part.image_url?.url || part.image || part.url || '';
-    return { type: 'image' as const, image: url };
+    if (!url) {
+      return { type: 'text' as const, text: '' };
+    }
+    let mediaType =
+      part.mediaType ||
+      part.mimeType ||
+      (url.startsWith('data:')
+        ? url.split(';')[0].replace('data:', '')
+        : undefined);
+
+    if (!mediaType && typeof url === 'string') {
+      const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
+      if (cleanUrl.endsWith('.png')) mediaType = 'image/png';
+      else if (cleanUrl.endsWith('.webp')) mediaType = 'image/webp';
+      else if (cleanUrl.endsWith('.gif')) mediaType = 'image/gif';
+      else if (cleanUrl.endsWith('.jpg') || cleanUrl.endsWith('.jpeg'))
+        mediaType = 'image/jpeg';
+      else if (cleanUrl.endsWith('.avif')) mediaType = 'image/avif';
+      else if (cleanUrl.endsWith('.svg')) mediaType = 'image/svg+xml';
+      else mediaType = 'image/jpeg';
+    }
+    return {
+      type: 'file' as const,
+      data: url,
+      mediaType: mediaType || 'image/jpeg',
+    };
   }
   // Fallback: treat unknown parts as text
   return { type: 'text' as const, text: String(part.text || '') };
@@ -1211,7 +1237,7 @@ function toCoreMessages(messages: ChatMessage[]): LlmMessage[] {
         .map(mapMessagePart)
         .filter(
           (p) =>
-            p.type === 'image' ||
+            p.type === 'file' ||
             (p.type === 'text' && p.text && p.text.trim() !== '')
         );
       if (parts.length > 0) {
@@ -1420,7 +1446,7 @@ async function classifyUserIntent(
   messages: ChatMessage[],
   aiService: ChatAiServiceConfig,
   modelName: string,
-  networkPolicy: ReturnType<typeof deriveAiNetworkPolicy>
+  networkPolicy: AiNetworkPolicy
 ): Promise<ChatToolCategorySlug[]> {
   const lastUserMessage = [...messages]
     .reverse()
@@ -1582,7 +1608,7 @@ async function processChatMessage(
 
     const modelName =
       aiService.model_name || getDefaultModel(aiService.service_type);
-    const networkPolicy = deriveAiNetworkPolicy(aiService, actorIsAdmin);
+    const networkPolicy = await resolveAiNetworkPolicy(aiService, actorIsAdmin);
 
     const modelInstance = createChatModelInstance(
       aiService,
@@ -1900,7 +1926,7 @@ async function processFoodOptionsRequest(
 
   const result = await dispatchAiRequest({
     provider,
-    networkPolicy: deriveAiNetworkPolicy(aiService, actorIsAdmin),
+    networkPolicy: await resolveAiNetworkPolicy(aiService, actorIsAdmin),
     prompt,
     parseJson: true,
     temperature: profile.temperature,
@@ -1996,10 +2022,14 @@ async function testAiServiceConnection(
   // Gate #4 (SSRF): a test fires an outbound POST to the effective custom URL, so
   // a non-admin must not aim it at a private/internal address (localhost, RFC1918,
   // link-local, cloud metadata). The URL is validated post-fallback so a stored
-  // value is checked too. Admins (trusted operator) and the ALLOW_PRIVATE_NETWORK_AI
-  // opt-in bypass this, keeping self-hosted setups like local Ollama working.
+  // value is checked too. Admins (trusted operator) and the private-network opt-in
+  // (admin toggle or ALLOW_PRIVATE_NETWORK_AI) bypass this, keeping self-hosted
+  // setups like local Ollama working.
   if (customUrl) {
-    const networkPolicy = deriveAiNetworkPolicy({ source: 'user' }, isAdmin);
+    const networkPolicy = await resolveAiNetworkPolicy(
+      { source: 'user' },
+      isAdmin
+    );
     try {
       assertOutboundUrlShapeAndLiteralAllowed(customUrl, networkPolicy);
     } catch (error) {
@@ -2030,7 +2060,7 @@ async function testAiServiceConnection(
 
   const result = await dispatchAiRequest({
     provider,
-    networkPolicy: deriveAiNetworkPolicy(
+    networkPolicy: await resolveAiNetworkPolicy(
       { is_public: false, source: 'user' },
       isAdmin
     ),
@@ -2133,7 +2163,7 @@ async function processChatMessageStream(
 
     const modelName =
       aiService.model_name || getDefaultModel(aiService.service_type);
-    const networkPolicy = deriveAiNetworkPolicy(aiService, actorIsAdmin);
+    const networkPolicy = await resolveAiNetworkPolicy(aiService, actorIsAdmin);
 
     log(
       'info',

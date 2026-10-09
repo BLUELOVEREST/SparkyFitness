@@ -33,6 +33,7 @@ import DateNavigator from '../components/DateNavigator';
 import ExerciseProgressCard from '../components/ExerciseProgressCard';
 import FastingCard from '../components/FastingCard';
 import FastingGoalReconciler from '../components/FastingGoalReconciler';
+import HydrationReminderReconciler from '../components/HydrationReminderReconciler';
 import HealthTrendsPager from '../components/HealthTrendsPager';
 import HydrationGauge from '../components/HydrationGauge';
 import CaffeineCard from '../components/CaffeineCard';
@@ -44,6 +45,7 @@ import SegmentedControl, { type Segment } from '../components/SegmentedControl';
 import StatusView from '../components/StatusView';
 import { NUTRIENT_META, getNutrientLabel } from '../constants/nutrients';
 import {
+  caffeineActiveRootQueryKey,
   fastingRootQueryKey,
   medicationsRootQueryKey,
   useCustomNutrients,
@@ -337,6 +339,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
     kinetics: caffeineKinetics,
     nowMs: caffeineNowMs,
     isLoading: isCaffeineLoading,
+    refetch: refetchCaffeine,
   } = useCaffeineKinetics(selectedDate, caffeineCardVisible);
   const askSparkyVisible = useAppPreferencesStore((s) => s.askSparkyVisible);
   const medicationsCardVisible = useAppPreferencesStore(
@@ -366,7 +369,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
       refetchCustomNutrients(),
       refetchNutrientPrefs(),
       refetchActiveMealPlanDay(),
-      // FastingCard owns its own queries; nudge them on pull-to-refresh.
+      refetchCaffeine(),
+      // CaffeineCard and FastingCard own their own queries; nudge them on pull-to-refresh.
+      queryClient.invalidateQueries({ queryKey: caffeineActiveRootQueryKey }),
       queryClient.invalidateQueries({ queryKey: fastingRootQueryKey }),
       // MedicationsCard owns its own queries.
       queryClient.invalidateQueries({ queryKey: medicationsRootQueryKey }),
@@ -379,6 +384,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
     refetchTrends,
     refetchCustomNutrients,
     refetchNutrientPrefs,
+    refetchCaffeine,
     queryClient,
     refetchActiveMealPlanDay,
   ]);
@@ -774,6 +780,11 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
   if (usesNativeTabs) {
     return (
       <>
+        {/* Outside `renderContent` on purpose: the no-server, loading, and
+            error branches return early, and a reconciler that is not mounted
+            cannot cancel a chain when reminders are switched off. It owns its
+            own queries, so it needs nothing from the rendered state. */}
+        <HydrationReminderReconciler />
         {renderedContent}
         <CalendarSheet
           ref={calendarRef}
@@ -787,6 +798,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
 
   return (
     <View className="flex-1 bg-background">
+      <HydrationReminderReconciler />
       {!isConnectionLoading && isConnected ? (
         <DateNavigator
           title={t('navigation.dashboard', { defaultValue: 'Dashboard' })}
