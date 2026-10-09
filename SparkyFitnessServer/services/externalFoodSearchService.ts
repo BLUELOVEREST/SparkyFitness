@@ -27,6 +27,10 @@ import {
   searchTandoorFoods,
   searchNorishFoods,
 } from './foodIntegrationService.js';
+import {
+  rankProviderMatches,
+  type ProviderFoodItem,
+} from '../utils/foodRanking.js';
 
 import type { ProviderType } from '../constants/foodProviders.js';
 import type { OpenFoodFactsCredentialScope } from '../integrations/openfoodfacts/openFoodFactsAuth.js';
@@ -406,8 +410,10 @@ export async function searchProviderFoods(
         .filter(
           (x): x is NonNullable<typeof x> => x !== null && x !== undefined
         );
+      // Only the first few results get a detail call, so they must be the
+      // ones that will rank first.
       foods = await enrichFatSecretResults(
-        mapped,
+        rankProviderMatches(mapped as ProviderFoodItem[], query),
         credentials.app_id,
         credentials.app_key
       );
@@ -533,5 +539,8 @@ export async function searchProviderFoods(
     }
   }
 
-  return { foods, pagination };
+  // All VALID_PROVIDER_TYPES are food providers, so this covers every case above.
+  const ranked = rankProviderMatches(foods as ProviderFoodItem[], query);
+
+  return { foods: ranked, pagination };
 }

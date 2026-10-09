@@ -22,3 +22,9 @@ Standalone tools built by the community that work alongside SparkyFitness. They 
 Run it on a schedule alongside SparkyFitness if you want your Cronometer history available outside the Cronometer app. It uses your ordinary cronometer.com login rather than an API key, because Cronometer publishes no public API — so it depends on an unofficial path that Cronometer may change or block at any time. It is deliberately kept as an independent script rather than a built-in provider ([#2159](https://github.com/CodeWithCJ/SparkyFitness/issues/2159)).
 
 One limitation worth knowing before you try it, observed on a free-tier account: the `servings` export lists per-food rows (`Day,Time,Group,Food Name,Amount,Category`) with no nutrient columns, while only the `dailySummary` export carries the numbers, one row per day. On that path it is a daily-totals source, not a food-diary import. Paid tiers were not tested.
+
+### Samsung Health import
+
+You can import sleep and weight data from Samsung Health using the command line and the scripts from [this repository](https://codeberg.org/giggio/sparky_fitness_convert).
+
+First export the data from the Samsung Health app (Settings > Download personal data) then use the 2 files referenced in the repository to import.

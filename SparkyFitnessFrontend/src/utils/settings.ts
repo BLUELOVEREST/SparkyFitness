@@ -19,6 +19,7 @@ export const providerRequirements: Record<string, string[]> = {
   hevy: ['app_key'],
   liftosaur: ['app_key'],
   yazio: ['app_id', 'app_key', 'yazio_client_id', 'yazio_client_secret'],
+  coros_mcp: [],
 };
 
 const providerFieldLabels: Record<string, Record<string, string>> = {
@@ -59,6 +60,7 @@ const OAUTH_TOKEN_PROVIDERS = [
   'withings',
   'strava',
   'polar',
+  'coros_mcp',
 ];
 
 const PROVIDERS_WITH_BASE_URL = [
@@ -68,6 +70,7 @@ const PROVIDERS_WITH_BASE_URL = [
   'grocy',
   'free-exercise-db',
   'openfoodfacts',
+  'coros_mcp',
 ];
 
 export const providerUsesBaseUrl = (providerType?: string | null) =>

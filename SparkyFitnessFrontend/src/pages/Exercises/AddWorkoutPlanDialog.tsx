@@ -14,7 +14,15 @@ import type {
 } from '@/types/workout';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-import { Plus, Clipboard } from 'lucide-react';
+import {
+  Plus,
+  Clipboard,
+  CalendarDays,
+  Repeat,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -113,11 +121,23 @@ const AddWorkoutPlanDialog = ({
 }: AddWorkoutPlanDialogProps) => {
   const {
     assignments,
-    workoutPresets,
+    sessionList,
+    sessionNames,
+    setSessionName,
+    addSession,
+    removeSession,
+    moveSession,
+    scheduleType,
+    setScheduleType,
+    entryMode,
+    setEntryMode,
     copiedAssignment,
+    workoutPresets,
     isAddExerciseDialogOpen,
     setIsAddExerciseDialogOpen,
     setSelectedDayForAssignment,
+    selectedSessionForAssignment,
+    setSelectedSessionForAssignment,
     handleRemoveAssignment,
     handleSetChangeInPlan,
     handleAddSetInPlan,
@@ -242,6 +262,11 @@ const AddWorkoutPlanDialog = ({
       start_date: startDate,
       end_date: endDate || null,
       is_active: isActive,
+      schedule_type: planMode === 'training_focus' ? 'weekly' : scheduleType,
+      entry_mode:
+        planMode === 'training_focus' || scheduleType === 'sequential'
+          ? 'prompt'
+          : entryMode,
       assignments: planMode === 'detailed' ? buildAssignmentsForSave() : [],
       focus_sessions: resolvedFocusSessions,
     };
@@ -303,6 +328,10 @@ const AddWorkoutPlanDialog = ({
                 id="planName"
                 value={planName}
                 onChange={(e) => setPlanName(e.target.value)}
+                placeholder={t(
+                  'addWorkoutPlanDialog.planNamePlaceholder',
+                  'e.g., Summer Shred'
+                )}
               />
             </div>
             <div className="space-y-2">
@@ -313,9 +342,148 @@ const AddWorkoutPlanDialog = ({
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                placeholder={t(
+                  'addWorkoutPlanDialog.descriptionPlaceholder',
+                  'Optional plan description...'
+                )}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+
+            {planMode === 'detailed' && (
+              <>
+                <div className="space-y-2">
+                  <Label>
+                    {t(
+                      'addWorkoutPlanDialog.scheduleTypeLabel',
+                      'Schedule Mode'
+                    )}
+                  </Label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      className={`w-full flex flex-col h-auto py-2.5 px-3.5 text-left rounded-lg border transition-all ${
+                        scheduleType === 'sequential'
+                          ? 'border-primary bg-primary/10 ring-1 ring-primary shadow-xs'
+                          : 'border-border/70 bg-card hover:bg-accent/40 text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => setScheduleType('sequential')}
+                    >
+                      <div className="flex items-center gap-1.5 font-semibold text-sm text-foreground">
+                        <Repeat
+                          className={`h-4 w-4 ${
+                            scheduleType === 'sequential'
+                              ? 'text-primary'
+                              : 'text-muted-foreground'
+                          }`}
+                        />
+                        <span>
+                          {t(
+                            'addWorkoutPlanDialog.sequentialModeTitle',
+                            'Sequential (Cycle)'
+                          )}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground mt-0.5">
+                        {t(
+                          'addWorkoutPlanDialog.sequentialModeSubtitle',
+                          'Continuous sequence; pauses on missed days'
+                        )}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`w-full flex flex-col h-auto py-2.5 px-3.5 text-left rounded-lg border transition-all ${
+                        scheduleType === 'weekly'
+                          ? 'border-primary bg-primary/10 ring-1 ring-primary shadow-xs'
+                          : 'border-border/70 bg-card hover:bg-accent/40 text-muted-foreground hover:text-foreground'
+                      }`}
+                      onClick={() => setScheduleType('weekly')}
+                    >
+                      <div className="flex items-center gap-1.5 font-semibold text-sm text-foreground">
+                        <CalendarDays
+                          className={`h-4 w-4 ${
+                            scheduleType === 'weekly'
+                              ? 'text-primary'
+                              : 'text-muted-foreground'
+                          }`}
+                        />
+                        <span>
+                          {t(
+                            'addWorkoutPlanDialog.weeklyModeTitle',
+                            'Weekly (Fixed Days)'
+                          )}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground mt-0.5">
+                        {t(
+                          'addWorkoutPlanDialog.weeklyModeSubtitle',
+                          'Workouts assigned to specific weekdays (Mon-Sun)'
+                        )}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {scheduleType === 'weekly' && (
+                  <div className="space-y-2">
+                    <Label>
+                      {t(
+                        'addWorkoutPlanDialog.entryModeLabel',
+                        'Diary Behavior'
+                      )}
+                    </Label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        className={`w-full flex flex-col h-auto py-2.5 px-3.5 text-left rounded-lg border transition-all ${
+                          entryMode === 'prompt'
+                            ? 'border-primary bg-primary/10 ring-1 ring-primary shadow-xs'
+                            : 'border-border/70 bg-card hover:bg-accent/40 text-muted-foreground hover:text-foreground'
+                        }`}
+                        onClick={() => setEntryMode('prompt')}
+                      >
+                        <span className="font-semibold text-sm text-foreground">
+                          {t(
+                            'addWorkoutPlanDialog.promptModeTitle',
+                            'Prompt on Day (Recommended)'
+                          )}
+                        </span>
+                        <span className="text-xs text-muted-foreground mt-0.5">
+                          {t(
+                            'addWorkoutPlanDialog.promptModeSubtitle',
+                            'Clean diary; shows workout prompt on scheduled weekdays'
+                          )}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`w-full flex flex-col h-auto py-2.5 px-3.5 text-left rounded-lg border transition-all ${
+                          entryMode === 'prefill'
+                            ? 'border-primary bg-primary/10 ring-1 ring-primary shadow-xs'
+                            : 'border-border/70 bg-card hover:bg-accent/40 text-muted-foreground hover:text-foreground'
+                        }`}
+                        onClick={() => setEntryMode('prefill')}
+                      >
+                        <span className="font-semibold text-sm text-foreground">
+                          {t(
+                            'addWorkoutPlanDialog.prefillModeTitle',
+                            'Pre-fill Calendar'
+                          )}
+                        </span>
+                        <span className="text-xs text-muted-foreground mt-0.5">
+                          {t(
+                            'addWorkoutPlanDialog.prefillModeSubtitle',
+                            'Pre-fills pending workout entries across all upcoming weekdays'
+                          )}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="startDate">
                   {t('addWorkoutPlanDialog.startDateLabel', 'Start Date')}
@@ -385,16 +553,21 @@ const AddWorkoutPlanDialog = ({
               </p>
             </div>
             <p
-              className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mt-2"
+              className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mt-2 text-sm"
               role="alert"
             >
               <span className="font-bold">
                 {t('addWorkoutPlanDialog.noteTitle', 'Note:')}
               </span>{' '}
-              {t(
-                'addWorkoutPlanDialog.noteDescription',
-                'Updating an active plan adjusts upcoming exercise entries. Deleting a plan clears future ones, while previous entries stay in your log.'
-              )}
+              {scheduleType === 'sequential'
+                ? t(
+                    'addWorkoutPlanDialog.sequentialNoteDescription',
+                    'Sequential plans do not pre-fill calendar days. The sequence automatically advances to the next session whenever you complete a workout.'
+                  )
+                : t(
+                    'addWorkoutPlanDialog.noteDescription',
+                    'Updating an active plan adjusts upcoming exercise entries. Deleting a plan clears future ones, while previous entries stay in your log.'
+                  )}
             </p>
 
             {planMode === 'training_focus' ? (
@@ -508,81 +681,241 @@ const AddWorkoutPlanDialog = ({
                   collisionDetection={closestCenter}
                   onDragEnd={handleDragEnd}
                 >
-                  {displayDays.map((day) => {
-                    const dayAssignments = assignments.filter(
-                      (assignment) => assignment.day_of_week === day.id
-                    );
-                    return (
-                      <Card key={day.name} className="p-4 bg-muted/30">
-                        <SortableContext
-                          items={dayAssignments.map((a) => a.id as string)}
-                        >
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                              <h3 className="font-semibold text-primary">
-                                {day.name}
-                              </h3>
-                              <div className="flex items-center space-x-2">
-                                {copiedAssignment && (
+                  {scheduleType === 'weekly' ? (
+                    displayDays.map((day) => {
+                      const dayAssignments = assignments.filter(
+                        (assignment) => assignment.day_of_week === day.id
+                      );
+                      return (
+                        <Card key={day.name} className="p-4 bg-muted/30">
+                          <SortableContext
+                            items={dayAssignments.map((a) => a.id as string)}
+                          >
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <h3 className="font-semibold text-primary">
+                                  {day.name}
+                                </h3>
+                                <div className="flex items-center space-x-2">
+                                  {copiedAssignment && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        handlePasteAssignment(day.id)
+                                      }
+                                    >
+                                      <Clipboard className="h-4 w-4 mr-2" />{' '}
+                                      {t(
+                                        'addWorkoutPlanDialog.pasteButton',
+                                        'Paste'
+                                      )}
+                                    </Button>
+                                  )}
                                   <Button
-                                    variant="ghost"
+                                    variant="outline"
                                     size="sm"
-                                    onClick={() =>
-                                      handlePasteAssignment(day.id)
-                                    }
+                                    onClick={() => {
+                                      setSelectedDayForAssignment(day.id);
+                                      setIsAddExerciseDialogOpen(true);
+                                    }}
                                   >
-                                    <Clipboard className="h-4 w-4 mr-2" />{' '}
+                                    <Plus className="h-4 w-4 mr-2" />{' '}
                                     {t(
-                                      'addWorkoutPlanDialog.pasteButton',
-                                      'Paste'
+                                      'addWorkoutPlanDialog.addExerciseButtonInDay',
+                                      'Add Exercise'
                                     )}
                                   </Button>
-                                )}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedDayForAssignment(day.id);
-                                    setIsAddExerciseDialogOpen(true);
-                                  }}
-                                >
-                                  <Plus className="h-4 w-4 mr-2" />{' '}
-                                  {t(
-                                    'addWorkoutPlanDialog.addExerciseButtonInDay',
-                                    'Add Exercise'
-                                  )}
-                                </Button>
+                                </div>
                               </div>
+                              {dayAssignments.map((assignment) => {
+                                const originalIndex = assignments.findIndex(
+                                  (a) => a.id === assignment.id
+                                );
+                                return (
+                                  <SortableExerciseItem
+                                    key={assignment.id}
+                                    ex={assignment}
+                                    exerciseIndex={originalIndex}
+                                    weightUnit={weightUnit}
+                                    workoutPresets={workoutPresets}
+                                    onRemoveExercise={handleRemoveAssignment}
+                                    onSetChange={handleSetChangeInPlan}
+                                    onDuplicateSet={handleDuplicateSetInPlan}
+                                    onRemoveSet={handleRemoveSetInPlan}
+                                    onAddSet={handleAddSetInPlan}
+                                    onCopyExercise={
+                                      handleCopyAssignment as (
+                                        ex: SortableExerciseItemData
+                                      ) => void
+                                    }
+                                  />
+                                );
+                              })}
                             </div>
-                            {dayAssignments.map((assignment) => {
-                              const originalIndex = assignments.findIndex(
-                                (a) => a.id === assignment.id
-                              );
-                              return (
-                                <SortableExerciseItem
-                                  key={assignment.id}
-                                  ex={assignment}
-                                  exerciseIndex={originalIndex}
-                                  weightUnit={weightUnit}
-                                  workoutPresets={workoutPresets}
-                                  onRemoveExercise={handleRemoveAssignment}
-                                  onSetChange={handleSetChangeInPlan}
-                                  onDuplicateSet={handleDuplicateSetInPlan}
-                                  onRemoveSet={handleRemoveSetInPlan}
-                                  onAddSet={handleAddSetInPlan}
-                                  onCopyExercise={
-                                    handleCopyAssignment as (
-                                      ex: SortableExerciseItemData
-                                    ) => void
-                                  }
-                                />
-                              );
-                            })}
-                          </div>
-                        </SortableContext>
-                      </Card>
-                    );
-                  })}
+                          </SortableContext>
+                        </Card>
+                      );
+                    })
+                  ) : (
+                    <div className="space-y-4">
+                      {sessionList.map((sessionNum, sessionIdx) => {
+                        const sessionAssignments = assignments.filter(
+                          (assignment) =>
+                            (assignment.session_index ?? 1) === sessionNum
+                        );
+                        return (
+                          <Card
+                            key={`session-${sessionNum}`}
+                            className="p-4 bg-muted/30"
+                          >
+                            <SortableContext
+                              items={sessionAssignments.map(
+                                (assignment) => assignment.id as string
+                              )}
+                            >
+                              <div className="space-y-4">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    disabled={sessionIdx === 0}
+                                    onClick={() =>
+                                      moveSession(sessionNum, 'up')
+                                    }
+                                    title={t(
+                                      'addWorkoutPlanDialog.moveSessionUp',
+                                      'Move session up'
+                                    )}
+                                  >
+                                    <ChevronUp className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    disabled={
+                                      sessionIdx === sessionList.length - 1
+                                    }
+                                    onClick={() =>
+                                      moveSession(sessionNum, 'down')
+                                    }
+                                    title={t(
+                                      'addWorkoutPlanDialog.moveSessionDown',
+                                      'Move session down'
+                                    )}
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                  <span className="font-semibold text-primary">
+                                    {t(
+                                      'addWorkoutPlanDialog.sessionNumber',
+                                      'Session {{number}}',
+                                      {
+                                        number: sessionNum,
+                                      }
+                                    )}
+                                  </span>
+                                  <Input
+                                    value={sessionNames[sessionNum] ?? ''}
+                                    onChange={(event) =>
+                                      setSessionName(
+                                        sessionNum,
+                                        event.target.value
+                                      )
+                                    }
+                                    placeholder={t(
+                                      'addWorkoutPlanDialog.sessionNamePlaceholder',
+                                      'Custom name (e.g., Push Day, Legs)'
+                                    )}
+                                    className="h-8 w-44 sm:w-60"
+                                  />
+                                  {copiedAssignment && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        handlePasteAssignment(sessionNum)
+                                      }
+                                    >
+                                      <Clipboard className="mr-2 h-4 w-4" />
+                                      {t(
+                                        'addWorkoutPlanDialog.pasteButton',
+                                        'Paste'
+                                      )}
+                                    </Button>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedSessionForAssignment(
+                                        sessionNum
+                                      );
+                                      setSelectedDayForAssignment(null);
+                                      setIsAddExerciseDialogOpen(true);
+                                    }}
+                                  >
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    {t(
+                                      'addWorkoutPlanDialog.addExerciseButtonInDay',
+                                      'Add Exercise'
+                                    )}
+                                  </Button>
+                                  {sessionList.length > 1 && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => removeSession(sessionNum)}
+                                      title={t(
+                                        'addWorkoutPlanDialog.removeSession',
+                                        'Remove session'
+                                      )}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                                {sessionAssignments.map((assignment) => (
+                                  <SortableExerciseItem
+                                    key={assignment.id}
+                                    ex={assignment}
+                                    exerciseIndex={assignments.findIndex(
+                                      (item) => item.id === assignment.id
+                                    )}
+                                    weightUnit={weightUnit}
+                                    workoutPresets={workoutPresets}
+                                    onRemoveExercise={handleRemoveAssignment}
+                                    onSetChange={handleSetChangeInPlan}
+                                    onDuplicateSet={handleDuplicateSetInPlan}
+                                    onRemoveSet={handleRemoveSetInPlan}
+                                    onAddSet={handleAddSetInPlan}
+                                    onCopyExercise={
+                                      handleCopyAssignment as (
+                                        ex: SortableExerciseItemData
+                                      ) => void
+                                    }
+                                  />
+                                ))}
+                              </div>
+                            </SortableContext>
+                          </Card>
+                        );
+                      })}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addSession}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        {t('addWorkoutPlanDialog.addSession', 'Add session')}
+                      </Button>
+                    </div>
+                  )}
                 </DndContext>
               </div>
             )}
@@ -626,11 +959,19 @@ const AddWorkoutPlanDialog = ({
               onOpenChange={setIsAddExerciseDialogOpen}
               onExerciseAdded={(exercise, sourceMode) => {
                 if (exercise && sourceMode) {
-                  handleAddExerciseOrPreset(exercise, sourceMode);
+                  handleAddExerciseOrPreset(
+                    exercise,
+                    sourceMode,
+                    selectedSessionForAssignment
+                  );
                 }
               }}
               onWorkoutPresetSelected={(preset) =>
-                handleAddExerciseOrPreset(preset, 'preset')
+                handleAddExerciseOrPreset(
+                  preset,
+                  'preset',
+                  selectedSessionForAssignment
+                )
               }
               mode="workout-plan"
             />

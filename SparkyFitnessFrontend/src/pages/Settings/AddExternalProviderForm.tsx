@@ -17,6 +17,7 @@ import {
   useConnectFitbitMutation,
   useConnectOuraMutation,
   useConnectPolarMutation,
+  useConnectCorosMutation,
   useConnectStravaMutation,
   useConnectWithingsMutation,
   useLoginGarminMutation,
@@ -72,6 +73,8 @@ const AddExternalProviderForm = ({
     useConnectOuraMutation();
   const { mutateAsync: handleConnectPolar, isPending: isConnectingPolar } =
     useConnectPolarMutation();
+  const { mutateAsync: handleConnectCoros, isPending: isConnectingCoros } =
+    useConnectCorosMutation();
   const { mutateAsync: handleConnectStrava, isPending: isConnectingStrava } =
     useConnectStravaMutation();
   const {
@@ -88,6 +91,7 @@ const AddExternalProviderForm = ({
     isConnectingFitbit ||
     isConnectingOura ||
     isConnectingPolar ||
+    isConnectingCoros ||
     isConnectingStrava ||
     isConnectingWithings;
 
@@ -114,6 +118,7 @@ const AddExternalProviderForm = ({
     fitbit: () => handleConnectFitbit(),
     oura: () => handleConnectOura(),
     polar: (id) => handleConnectPolar(id),
+    coros_mcp: (id) => handleConnectCoros(id),
     strava: () => handleConnectStrava(),
   };
   const handleAddProvider = async () => {
@@ -312,7 +317,10 @@ const AddExternalProviderForm = ({
                       value as ExternalDataProvider['provider_type'],
                     app_id: '',
                     app_key: '',
-                    base_url: '',
+                    base_url:
+                      value === 'coros_mcp'
+                        ? 'https://mcpus.coros.com/mcp'
+                        : '',
                     garmin_connect_status: 'disconnected',
                     garmin_last_status_check: '',
                     garmin_token_expires: '',

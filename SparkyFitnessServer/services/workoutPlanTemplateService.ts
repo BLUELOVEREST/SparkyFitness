@@ -17,7 +17,9 @@ export interface WorkoutPlanAssignmentSetInput {
 
 export interface WorkoutPlanAssignmentInput {
   id?: number | string | null;
-  day_of_week: number;
+  day_of_week?: number | null;
+  session_index?: number | null;
+  session_name?: string | null;
   workout_preset_id?: number | string | null;
   exercise_id?: string | null;
   sort_order?: number | null;
@@ -30,6 +32,8 @@ export interface CreateWorkoutPlanTemplateInput {
   start_date?: string | null;
   end_date?: string | null;
   is_active?: boolean | null;
+  schedule_type?: 'weekly' | 'sequential';
+  entry_mode?: 'prompt' | 'prefill';
   assignments?: WorkoutPlanAssignmentInput[] | null;
   currentClientDate?: string | null;
   plan_mode?: 'detailed' | 'training_focus';
@@ -47,6 +51,8 @@ export interface UpdateWorkoutPlanTemplateInput {
   start_date?: string | null;
   end_date?: string | null;
   is_active?: boolean | null;
+  schedule_type?: 'weekly' | 'sequential';
+  entry_mode?: 'prompt' | 'prefill';
   assignments?: WorkoutPlanAssignmentInput[] | null;
   currentClientDate?: string | null;
   plan_mode?: 'detailed' | 'training_focus';
@@ -66,8 +72,17 @@ const TRAINING_FOCUS_TIME_SLOTS = [
 ] as const;
 
 type TrainingFocusTimeSlot = (typeof TRAINING_FOCUS_TIME_SLOTS)[number];
+type TrainingFocusSessionInput = NonNullable<
+  CreateWorkoutPlanTemplateInput['focus_sessions']
+>[number];
+type NormalizedFocusSession = Omit<TrainingFocusSessionInput, 'is_primary'> & {
+  time_slot: TrainingFocusTimeSlot;
+  is_primary: boolean;
+};
 
-function normalizePlanMode(planData: any): 'detailed' | 'training_focus' {
+function normalizePlanMode(planData: {
+  plan_mode?: 'detailed' | 'training_focus';
+}): 'detailed' | 'training_focus' {
   return planData.plan_mode === 'training_focus'
     ? 'training_focus'
     : 'detailed';
@@ -79,9 +94,12 @@ function normalizeTrainingFocus(value: unknown): string {
 }
 
 export function normalizeTrainingFocusSessions(
-  sessions: any[] | undefined | null
-) {
-  const byDay = new Map<number, Map<TrainingFocusTimeSlot, any>>();
+  sessions: TrainingFocusSessionInput[] | undefined | null
+): NormalizedFocusSession[] {
+  const byDay = new Map<
+    number,
+    Map<TrainingFocusTimeSlot, NormalizedFocusSession>
+  >();
 
   for (const session of sessions ?? []) {
     const day = Number(session.day_of_week);
@@ -104,7 +122,7 @@ export function normalizeTrainingFocusSessions(
     });
   }
 
-  const normalized = [];
+  const normalized: NormalizedFocusSession[] = [];
   for (let day = 0; day < 7; day += 1) {
     const dayMap = byDay.get(day) ?? new Map();
     const daySessions = TRAINING_FOCUS_TIME_SLOTS.map((slot) => {
@@ -137,14 +155,68 @@ export function normalizeTrainingFocusSessions(
 
   return normalized;
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function createWorkoutPlanTemplate(userId: any, planData: any) {
+async function validateAndNormalizeAssignments(
+  assignments: WorkoutPlanAssignmentInput[],
+  scheduleType: 'weekly' | 'sequential',
+  userId: string
+): Promise<void> {
+  for (const assignment of assignments) {
+    if (scheduleType === 'weekly') {
+      if (
+        !Number.isInteger(assignment.day_of_week) ||
+        (assignment.day_of_week ?? -1) < 0 ||
+        (assignment.day_of_week ?? 7) > 6
+      ) {
+        throw new Error(
+          'Weekly workout plan assignments must have a valid day_of_week (0-6).'
+        );
+      }
+    } else {
+      assignment.day_of_week = null;
+    }
+    if (assignment.workout_preset_id) {
+      const preset = await workoutPresetRepository.getWorkoutPresetById(
+        assignment.workout_preset_id,
+        userId
+      );
+      if (!preset) {
+        throw new Error(
+          `Workout Preset with ID ${assignment.workout_preset_id} not found.`
+        );
+      }
+    }
+    if (assignment.exercise_id) {
+      const exercise = await exerciseRepository.getExerciseById(
+        assignment.exercise_id,
+        userId
+      );
+      if (!exercise) {
+        throw new Error(
+          `Exercise with ID ${assignment.exercise_id} not found.`
+        );
+      }
+    }
+  }
+}
+
+async function createWorkoutPlanTemplate(
+  userId: string,
+  planData: CreateWorkoutPlanTemplateInput
+) {
   log(
     'info',
     'createWorkoutPlanTemplate service - received planData:',
     planData
   );
   const planMode = normalizePlanMode(planData);
+  const scheduleType =
+    planMode === 'training_focus'
+      ? 'weekly'
+      : (planData.schedule_type ?? 'sequential');
+  const entryMode =
+    scheduleType === 'sequential'
+      ? 'prompt'
+      : (planData.entry_mode ?? 'prompt');
   const focusSessions =
     planMode === 'training_focus'
       ? normalizeTrainingFocusSessions(planData.focus_sessions)
@@ -152,36 +224,19 @@ async function createWorkoutPlanTemplate(userId: any, planData: any) {
 
   // Validate assignments
   if (planMode === 'detailed' && planData.assignments) {
-    for (const assignment of planData.assignments) {
-      if (assignment.workout_preset_id) {
-        const preset = await workoutPresetRepository.getWorkoutPresetById(
-          assignment.workout_preset_id,
-          userId
-        );
-        if (!preset) {
-          throw new Error(
-            `Workout Preset with ID ${assignment.workout_preset_id} not found.`
-          );
-        }
-      }
-      if (assignment.exercise_id) {
-        const exercise = await exerciseRepository.getExerciseById(
-          assignment.exercise_id,
-          userId
-        );
-        if (!exercise) {
-          throw new Error(
-            `Exercise with ID ${assignment.exercise_id} not found.`
-          );
-        }
-      }
-    }
+    await validateAndNormalizeAssignments(
+      planData.assignments,
+      scheduleType,
+      userId
+    );
   }
   try {
     const newPlan =
       await workoutPlanTemplateRepository.createWorkoutPlanTemplate({
         ...planData,
         plan_mode: planMode,
+        schedule_type: scheduleType,
+        entry_mode: entryMode,
         focus_sessions: focusSessions,
         assignments: planMode === 'training_focus' ? [] : planData.assignments,
         user_id: userId,
@@ -191,10 +246,15 @@ async function createWorkoutPlanTemplate(userId: any, planData: any) {
       'createWorkoutPlanTemplate service - newPlan created:',
       newPlan
     );
-    if (newPlan.is_active && newPlan.plan_mode !== 'training_focus') {
+    if (
+      newPlan.is_active &&
+      newPlan.plan_mode !== 'training_focus' &&
+      newPlan.schedule_type === 'weekly' &&
+      newPlan.entry_mode === 'prefill'
+    ) {
       log(
         'info',
-        `createWorkoutPlanTemplate service - New plan is active, creating exercise entries from template ${newPlan.id}`
+        `createWorkoutPlanTemplate service - New plan is active, weekly, and prefill, creating exercise entries from template ${newPlan.id}`
       );
       const today = await resolveTemplateStartDay(
         userId,
@@ -208,7 +268,7 @@ async function createWorkoutPlanTemplate(userId: any, planData: any) {
     } else {
       log(
         'info',
-        'createWorkoutPlanTemplate service - New plan is not active, skipping exercise entry creation.'
+        'createWorkoutPlanTemplate service - Skipping exercise entry creation (inactive, sequential, or prompt mode).'
       );
     }
     return newPlan;
@@ -262,6 +322,9 @@ async function updateWorkoutPlanTemplate(
       templateId,
       userId
     );
+  if (!ownerId) {
+    throw new Error('Workout plan template not found.');
+  }
   if (ownerId !== userId) {
     throw new Error(
       'Forbidden: You do not have permission to update this workout plan template.'
@@ -272,6 +335,19 @@ async function updateWorkoutPlanTemplate(
       templateId,
       userId
     );
+  if (!existingPlan) {
+    throw new Error('Workout plan template not found.');
+  }
+  if (
+    updateData.schedule_type &&
+    existingPlan.schedule_type &&
+    updateData.schedule_type !== existingPlan.schedule_type &&
+    !updateData.assignments
+  ) {
+    throw new Error(
+      'Changing schedule_type requires providing updated assignments.'
+    );
+  }
   const mergedUpdateData = {
     ...existingPlan,
     ...updateData,
@@ -279,6 +355,14 @@ async function updateWorkoutPlanTemplate(
     focus_sessions: updateData.focus_sessions ?? existingPlan?.focus_sessions,
   };
   const planMode = normalizePlanMode(mergedUpdateData);
+  const scheduleType =
+    planMode === 'training_focus'
+      ? 'weekly'
+      : (mergedUpdateData.schedule_type ?? 'sequential');
+  const entryMode =
+    scheduleType === 'sequential'
+      ? 'prompt'
+      : (mergedUpdateData.entry_mode ?? 'prompt');
   const focusSessions =
     planMode === 'training_focus'
       ? normalizeTrainingFocusSessions(mergedUpdateData.focus_sessions)
@@ -286,30 +370,11 @@ async function updateWorkoutPlanTemplate(
 
   // Validate assignments if they are being updated
   if (planMode === 'detailed' && mergedUpdateData.assignments) {
-    for (const assignment of mergedUpdateData.assignments) {
-      if (assignment.workout_preset_id) {
-        const preset = await workoutPresetRepository.getWorkoutPresetById(
-          assignment.workout_preset_id,
-          userId
-        );
-        if (!preset) {
-          throw new Error(
-            `Workout Preset with ID ${assignment.workout_preset_id} not found.`
-          );
-        }
-      }
-      if (assignment.exercise_id) {
-        const exercise = await exerciseRepository.getExerciseById(
-          assignment.exercise_id,
-          userId
-        );
-        if (!exercise) {
-          throw new Error(
-            `Exercise with ID ${assignment.exercise_id} not found.`
-          );
-        }
-      }
-    }
+    await validateAndNormalizeAssignments(
+      mergedUpdateData.assignments,
+      scheduleType,
+      userId
+    );
   }
   try {
     const today = await resolveTemplateStartDay(
@@ -326,6 +391,14 @@ async function updateWorkoutPlanTemplate(
       userId,
       today
     );
+    const shouldUnlinkHistoricalEntries =
+      existingPlan.schedule_type === 'weekly' && scheduleType === 'sequential';
+    if (shouldUnlinkHistoricalEntries) {
+      log(
+        'info',
+        `updateWorkoutPlanTemplate service - Unlinking historical exercise entries for template ${templateId} on transition to sequential`
+      );
+    }
     const updatedPlan =
       await workoutPlanTemplateRepository.updateWorkoutPlanTemplate(
         templateId,
@@ -333,20 +406,28 @@ async function updateWorkoutPlanTemplate(
         {
           ...mergedUpdateData,
           plan_mode: planMode,
+          schedule_type: scheduleType,
+          entry_mode: entryMode,
           focus_sessions: focusSessions,
           assignments:
             planMode === 'training_focus' ? [] : mergedUpdateData.assignments,
-        }
+        },
+        shouldUnlinkHistoricalEntries
       );
     log(
       'info',
       'updateWorkoutPlanTemplate service - updatedPlan:',
       updatedPlan
     );
-    if (updatedPlan.is_active && updatedPlan.plan_mode !== 'training_focus') {
+    if (
+      updatedPlan.is_active &&
+      updatedPlan.plan_mode !== 'training_focus' &&
+      updatedPlan.schedule_type === 'weekly' &&
+      updatedPlan.entry_mode === 'prefill'
+    ) {
       log(
         'info',
-        `updateWorkoutPlanTemplate service - Updated plan is active, creating exercise entries from template ${updatedPlan.id}`
+        `updateWorkoutPlanTemplate service - Updated plan is active, weekly, and prefill, creating exercise entries from template ${updatedPlan.id}`
       );
       await exerciseRepository.createExerciseEntriesFromTemplate(
         updatedPlan.id,
@@ -356,7 +437,7 @@ async function updateWorkoutPlanTemplate(
     } else {
       log(
         'info',
-        'updateWorkoutPlanTemplate service - Updated plan is not active, skipping exercise entry creation.'
+        'updateWorkoutPlanTemplate service - Skipping exercise entry creation (inactive, sequential, or prompt mode).'
       );
     }
     return updatedPlan;

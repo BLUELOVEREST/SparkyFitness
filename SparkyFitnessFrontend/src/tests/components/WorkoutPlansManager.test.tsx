@@ -37,6 +37,7 @@ jest.mock('@/hooks/use-mobile', () => ({
 }));
 
 jest.mock('@/hooks/Exercises/useWorkoutPlans', () => ({
+  useActiveWorkoutPlan: () => ({ data: null }),
   useWorkoutPlanTemplates: () => ({
     data: [
       {
