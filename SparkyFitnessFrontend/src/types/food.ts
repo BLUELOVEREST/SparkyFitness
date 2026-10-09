@@ -83,6 +83,7 @@ export interface Food {
     | 'yazio'
     | 'norish'
     | 'swissfood'
+    | 'canadian-nutrient-file'
     | 'china-food-composition'
     | 'boohee'
     | 'grocy';

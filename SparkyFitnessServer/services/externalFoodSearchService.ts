@@ -17,6 +17,7 @@ import {
 } from '../integrations/fatsecret/fatsecretService.js';
 import { searchYazioFoods } from '../integrations/yazio/yazioService.js';
 import { searchSwissFoods } from '../integrations/swissfood/swissFoodService.js';
+import { searchCanadianNutrientFoods } from '../integrations/cnf/cnfService.js';
 import { searchChinaFoodCompositionFoods } from '../integrations/chinafood/chinaFoodCompositionService.js';
 import { searchBooheeFoods } from '../integrations/boohee/booheeService.js';
 import { searchGrocyFoods } from '../integrations/grocy/grocyFoodService.js';
@@ -108,7 +109,11 @@ export async function resolveProviderCredentials(
     return {};
   }
 
-  if (providerType === 'swissfood' && !providerId) {
+  if (
+    (providerType === 'swissfood' ||
+      providerType === 'canadian-nutrient-file') &&
+    !providerId
+  ) {
     return {};
   }
 
@@ -490,6 +495,19 @@ export async function searchProviderFoods(
 
     case 'swissfood': {
       const result = await searchSwissFoods(
+        query,
+        page,
+        pageSize,
+        language,
+        credentials.base_url || undefined
+      );
+      foods = result.foods || [];
+      pagination = result.pagination;
+      break;
+    }
+
+    case 'canadian-nutrient-file': {
+      const result = await searchCanadianNutrientFoods(
         query,
         page,
         pageSize,

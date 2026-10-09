@@ -1,5 +1,6 @@
 import {
   fetchDailyGoals,
+  fetchGoalsRange,
   previewCarbCycleWeek,
 } from '../../src/services/api/goalsApi';
 import {
@@ -178,5 +179,37 @@ describe('goalsApi', () => {
         })
       );
     });
+  });
+
+  describe('fetchGoalsRange', () => {
+    const testConfig: ServerConfig = {
+      id: 'test-id',
+      url: 'https://example.com',
+      apiKey: 'test-api-key-12345',
+    };
+
+    test.each([true, false])(
+      'fetches daily goals with adjust=%s',
+      async (adjust) => {
+        const responseData = { '2026-09-01': { calories: 1800 } };
+        mockGetActiveServerConfig.mockResolvedValue(testConfig);
+        mockFetch.mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve(responseData),
+        });
+
+        const result = await fetchGoalsRange(
+          '2026-09-01',
+          '2026-09-07',
+          adjust
+        );
+
+        expect(result).toEqual(responseData);
+        expect(mockFetch).toHaveBeenCalledWith(
+          `https://example.com/api/goals/for-date?date=2026-09-01&end_date=2026-09-07&adjust=${adjust}`,
+          expect.anything()
+        );
+      }
+    );
   });
 });

@@ -51,6 +51,10 @@ export type ExternalResultWrapper =
       food: Food;
     }
   | {
+      provider_type: 'canadian-nutrient-file';
+      food: Food;
+    }
+  | {
       provider_type: 'china-food-composition';
       food: Food;
     }

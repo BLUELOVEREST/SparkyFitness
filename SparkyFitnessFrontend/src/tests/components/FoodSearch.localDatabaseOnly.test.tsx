@@ -132,13 +132,17 @@ describe('FoodSearch local database only mode', () => {
     jest.clearAllMocks();
     mockUseDatabaseFoodSearchQuery.mockReturnValue({
       data: {
-        searchResults: [
-          { id: 'rice', name: 'Rice', is_custom: true, macro_role: 'carb' },
+        pages: [
           {
-            id: 'chicken',
-            name: 'Chicken Breast',
-            is_custom: true,
-            macro_role: 'protein',
+            foods: [
+              { id: 'rice', name: 'Rice', is_custom: true, macro_role: 'carb' },
+              {
+                id: 'chicken',
+                name: 'Chicken Breast',
+                is_custom: true,
+                macro_role: 'protein',
+              },
+            ],
           },
         ],
       },
@@ -159,7 +163,7 @@ describe('FoodSearch local database only mode', () => {
     expect(mockUseDatabaseFoodSearchQuery).toHaveBeenCalledWith(
       '',
       20,
-      undefined,
+      'all',
       true
     );
     expect(screen.getByText('Rice')).toBeInTheDocument();
@@ -174,7 +178,7 @@ describe('FoodSearch local database only mode', () => {
     expect(mockUseDatabaseFoodSearchQuery).toHaveBeenLastCalledWith(
       '',
       20,
-      undefined,
+      'all',
       true
     );
 
@@ -185,7 +189,7 @@ describe('FoodSearch local database only mode', () => {
     expect(mockUseDatabaseFoodSearchQuery).not.toHaveBeenLastCalledWith(
       'rice',
       20,
-      undefined,
+      'all',
       true
     );
 
@@ -194,7 +198,7 @@ describe('FoodSearch local database only mode', () => {
     expect(mockUseDatabaseFoodSearchQuery).toHaveBeenLastCalledWith(
       'rice',
       20,
-      undefined,
+      'all',
       true
     );
   });
@@ -213,7 +217,7 @@ describe('FoodSearch local database only mode', () => {
     expect(mockUseDatabaseFoodSearchQuery).toHaveBeenLastCalledWith(
       'chicken',
       20,
-      undefined,
+      'all',
       true
     );
   });

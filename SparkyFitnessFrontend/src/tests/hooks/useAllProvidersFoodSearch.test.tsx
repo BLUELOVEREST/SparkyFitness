@@ -68,7 +68,8 @@ describe('useAllProvidersFoodSearch cache key', () => {
       'provider-usda',
       undefined,
       10,
-      undefined
+      undefined,
+      { suppressErrorToast: true }
     );
 
     rerender({ limit: 25 });
@@ -81,7 +82,8 @@ describe('useAllProvidersFoodSearch cache key', () => {
       'provider-usda',
       undefined,
       25,
-      undefined
+      undefined,
+      { suppressErrorToast: true }
     );
   });
 

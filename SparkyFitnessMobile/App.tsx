@@ -27,9 +27,18 @@ import {
   useSyncHealthData,
   useCycleMode,
   useServerConnection,
+  drainQuickActionNavigation,
+  useQuickActions,
   useWatchCheckInBridge,
+  useWatchPlanSync,
+  useWatchSetTargetsSync,
   useWatchWorkoutBridge,
 } from './src/hooks';
+import { useWatchWorkoutStart } from './src/hooks/useWatchWorkoutStart';
+import {
+  useStartLiveWorkout,
+  type StartLiveWorkoutNavigation,
+} from './src/hooks/useStartLiveWorkout';
 import WatchConnectivity from './modules/watch-connectivity';
 import { useAppStartup } from './src/hooks/useAppStartup';
 import { useAppBootstrap } from './src/hooks/useAppBootstrap';
@@ -83,6 +92,7 @@ import {
   SafeWorkoutComplete,
   SafeActivityDetail,
   SafeFastingDetail,
+  SafeMindfulnessDetail,
   SafeSleepDetail,
   SafeLogs,
   SafeSync,
@@ -94,9 +104,11 @@ import {
   SafeChat,
   SafeCalorieSettings,
   SafeMealTypeSettings,
+  SafeAiSettings,
   SafeFoodSettings,
   SafeDashboardSettings,
   SafeHealthTrendsSettings,
+  SafeWatchSettings,
   SafeDiarySettings,
   SafeWorkoutSettings,
   SafeServerSettings,
@@ -122,6 +134,10 @@ import {
   SafeMedicationDetail,
   SafeMedicationForm,
   SafeMedicationScheduleForm,
+  SafeSymptomLog,
+  SafeSymptomHistory,
+  SafeManageSymptoms,
+  SafeSymptomDefinitionEditor,
 } from './src/navigation/safeScreens';
 import ReauthModal from './src/components/ReauthModal';
 import ServerConfigModal from './src/components/ServerConfigModal';
@@ -136,6 +152,9 @@ import { FullWindowOverlay } from 'react-native-screens';
 import type { RootStackParamList } from './src/types/navigation';
 import type { WorkoutCelebration } from './src/utils/workoutCelebration';
 import AddSheet, { addSheetRef } from './src/components/AddSheet';
+import { MindfulnessSessionModal } from './src/components/mindfulness/MindfulnessSessionModal';
+import { useMindfulnessMutations } from './src/hooks/useMindfulness';
+import { useDiaryDateStore } from './src/stores/diaryDateStore';
 import { toastConfig } from './src/components/ui/toastConfig';
 import { TabsLayout } from './src/components/TabsLayout';
 import { createIOSSmallNativeHeaderOptions } from './src/utils/nativeHeaderItems';
@@ -171,6 +190,16 @@ function WatchCheckInGate() {
 }
 
 /**
+ * Home Screen long-press shortcuts (iOS). Needs a server connection, since
+ * "Log water" posts straight to the server.
+ */
+function QuickActionsGate() {
+  const { isConnected: isServerConnected } = useServerConnection();
+  useQuickActions(isServerConnected);
+  return null;
+}
+
+/**
  * Unlike `WatchCheckInGate`, listeners stay up while the server is offline
  * so a set or heart-rate batch is not dropped. The /health poll only runs
  * when WatchConnectivity is available and a telemetry buffer still needs a
@@ -199,12 +228,30 @@ function WatchWorkoutGate() {
   const { isConnected: isServerConnected } = useServerConnection({
     enablePolling: watchSupported && telemetryPending,
   });
+  const watchStartNavigation = useMemo(
+    () =>
+      ({
+        // Starting from the wrist must not replace whatever screen the phone
+        // is on. The active-workout bar appears on its own once the session
+        // exists. `navigate` is only the conflict prompt's "Go to Workout".
+        isFocused: () => false,
+        replace: () => {},
+        navigate: (screen: 'ActiveWorkout') => {
+          if (rootNavigationRef.isReady()) rootNavigationRef.navigate(screen);
+        },
+      }) as unknown as StartLiveWorkoutNavigation,
+    []
+  );
+  const { startLiveWorkout } = useStartLiveWorkout(watchStartNavigation);
   useWatchWorkoutBridge(
     watchSupported,
     isServerConnected,
     setTelemetryPending,
     handleWatchFinishedWorkout
   );
+  useWatchSetTargetsSync(watchSupported);
+  useWatchWorkoutStart(watchSupported, isServerConnected, startLiveWorkout);
+  useWatchPlanSync(watchSupported);
   return null;
 }
 
@@ -259,11 +306,21 @@ function AppContent() {
     handleAddActivity,
     handleAddMeasurements,
     handleAddProgressPhotos,
+    handleAddSymptoms,
     handleAskSparky,
     handleOpenCycle,
     handleSyncHealthData,
     handleAddSheetDismissWithoutAction,
   } = useAddSheetActions({ syncMutation });
+
+  const [mindfulnessLogModalVisible, setMindfulnessLogModalVisible] =
+    useState(false);
+  const selectedDiaryDate = useDiaryDateStore((s) => s.selectedDate);
+  const { saveSession: saveMindfulSession } =
+    useMindfulnessMutations(selectedDiaryDate);
+  const handleAddMindfulness = useCallback(() => {
+    setMindfulnessLogModalVisible(true);
+  }, []);
 
   const {
     enabled: cycleEnabled,
@@ -379,6 +436,7 @@ function AppContent() {
       ref={rootNavigationRef}
       theme={navigationTheme}
       linking={linkingEnabled ? linking : undefined}
+      onReady={drainQuickActionNavigation}
       onStateChange={(state) => {
         // Enable deep-link handling once the user has left Onboarding.
         // Without this, widget URLs are ignored for the rest of the session
@@ -391,6 +449,7 @@ function AppContent() {
       }}
     >
       <WatchCheckInGate />
+      <QuickActionsGate />
       <WatchWorkoutGate />
       <SafeAreaProvider>
         {/* Inside SafeAreaProvider on purpose: the viewer positions its close
@@ -1080,6 +1139,11 @@ function AppContent() {
               )}
             />
             <Stack.Screen
+              name="MindfulnessDetail"
+              component={SafeMindfulnessDetail}
+              options={{ headerShown: false, gestureEnabled: true }}
+            />
+            <Stack.Screen
               name="SleepDetail"
               component={SafeSleepDetail}
               options={createStackScreenOptions(
@@ -1227,6 +1291,18 @@ function AppContent() {
               component={SafeDiarySettings}
               options={createStackScreenOptions(
                 t('screens.diarySettings', { defaultValue: 'Diary Settings' }),
+                {
+                  headerBackTitle: t('navigation.settings', {
+                    defaultValue: 'Settings',
+                  }),
+                }
+              )}
+            />
+            <Stack.Screen
+              name="WatchSettings"
+              component={SafeWatchSettings}
+              options={createStackScreenOptions(
+                t('screens.watchSettings', { defaultValue: 'Apple Watch' }),
                 {
                   headerBackTitle: t('navigation.settings', {
                     defaultValue: 'Settings',
@@ -1430,6 +1506,64 @@ function AppContent() {
                 }
               )}
             />
+            <Stack.Screen
+              name="SymptomLog"
+              component={SafeSymptomLog}
+              options={createStackScreenOptions(
+                t('screens.symptomLog', { defaultValue: 'Log Symptom' }),
+                {
+                  presentation: 'modal',
+                  headerBackButtonDisplayMode: 'minimal',
+                  ...(Platform.OS === 'android' ? androidModalAnimation : {}),
+                }
+              )}
+            />
+            <Stack.Screen
+              name="AiSettings"
+              component={SafeAiSettings}
+              options={createStackScreenOptions(
+                t('screens.aiSettings', { defaultValue: 'AI' }),
+                {
+                  headerBackTitle: t('navigation.settings', {
+                    defaultValue: 'Settings',
+                  }),
+                }
+              )}
+            />
+            <Stack.Screen
+              name="SymptomHistory"
+              component={SafeSymptomHistory}
+              options={createStackScreenOptions(
+                t('screens.symptomHistory', {
+                  defaultValue: 'Symptom History',
+                }),
+                { headerBackButtonDisplayMode: 'minimal' }
+              )}
+            />
+            <Stack.Screen
+              name="ManageSymptoms"
+              component={SafeManageSymptoms}
+              options={createStackScreenOptions(
+                t('screens.manageSymptoms', {
+                  defaultValue: 'Manage Symptoms',
+                }),
+                { headerBackButtonDisplayMode: 'minimal' }
+              )}
+            />
+            <Stack.Screen
+              name="SymptomDefinitionEditor"
+              component={SafeSymptomDefinitionEditor}
+              options={createStackScreenOptions(
+                t('screens.symptomDefinition', {
+                  defaultValue: 'Symptom Details',
+                }),
+                {
+                  presentation: 'modal',
+                  headerBackButtonDisplayMode: 'minimal',
+                  ...(Platform.OS === 'android' ? androidModalAnimation : {}),
+                }
+              )}
+            />
           </Stack.Navigator>
           <AddSheet
             ref={addSheetRef}
@@ -1441,11 +1575,19 @@ function AppContent() {
             onBarcodeScan={handleBarcodeScan}
             onAddMeasurements={handleAddMeasurements}
             onAddProgressPhotos={handleAddProgressPhotos}
+            onAddSymptoms={handleAddSymptoms}
+            onAddMindfulness={handleAddMindfulness}
             onAskSparky={handleAskSparky}
             onOpenCycle={handleOpenCycle}
             showCycleCard={cycleEnabled}
             cycleLabel={cycleSheetLabel}
             onDismissWithoutAction={handleAddSheetDismissWithoutAction}
+          />
+          <MindfulnessSessionModal
+            visible={mindfulnessLogModalVisible}
+            onClose={() => setMindfulnessLogModalVisible(false)}
+            onSave={saveMindfulSession}
+            selectedDate={selectedDiaryDate}
           />
           <ReauthModal
             visible={showReauthModal}

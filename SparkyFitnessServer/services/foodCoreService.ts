@@ -513,7 +513,8 @@ async function getFoodsWithPagination(
   foodFilter: string,
   currentPage: string | number,
   itemsPerPage: string | number,
-  sortBy: string
+  sortBy: string,
+  providerType?: string
 ) {
   try {
     const limit = parseInt(String(itemsPerPage), 10) || 10;
@@ -525,9 +526,15 @@ async function getFoodsWithPagination(
         authenticatedUserId,
         limit,
         offset,
-        sortBy
+        sortBy,
+        providerType
       ),
-      foodRepository.countFoods(searchTerm, foodFilter, authenticatedUserId),
+      foodRepository.countFoods(
+        searchTerm,
+        foodFilter,
+        authenticatedUserId,
+        providerType
+      ),
     ]);
     return { foods, totalCount };
   } catch (error) {

@@ -5,6 +5,7 @@ const DETAIL_FETCH_PROVIDER_TYPES = new Set([
   'usda',
   'yazio',
   'swissfood',
+  'canadian-nutrient-file',
 ]);
 
 export function isGrocyExternalCandidate(

@@ -16,6 +16,17 @@ export const fetchDailyGoals = async (date: string): Promise<DailyGoals> => {
   });
 };
 
+export const fetchGoalsRange = async (
+  startDate: string,
+  endDate: string,
+  adjust: boolean
+): Promise<Record<string, DailyGoals>> =>
+  apiFetch<Record<string, DailyGoals>>({
+    endpoint: `/api/goals/for-date?date=${startDate}&end_date=${endDate}&adjust=${adjust}`,
+    serviceName: 'Goals API',
+    operation: 'fetch goals range',
+  });
+
 export const previewCarbCycleWeek = async (
   input: CarbCycleInput
 ): Promise<CarbCycleWeekResult> =>
