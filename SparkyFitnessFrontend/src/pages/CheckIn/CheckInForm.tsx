@@ -56,6 +56,36 @@ const UseLastButton: React.FC<UseLastButtonProps> = ({
   );
 };
 
+interface MeasurementFieldProps {
+  id: string;
+  label: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+// Share header/control tracks across each desktop pair, including wrapped labels.
+// Reserve the normal action height even when "Use last" disappears.
+const MeasurementField = ({
+  id,
+  label,
+  actions,
+  children,
+}: MeasurementFieldProps) => (
+  <div className="grid min-w-0 gap-1 md:row-span-2 md:grid-rows-subgrid">
+    <div className="flex min-h-7 min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <Label htmlFor={id} className="min-w-0 break-words leading-5">
+        {label}
+      </Label>
+      {actions && (
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          {actions}
+        </div>
+      )}
+    </div>
+    <div className="min-w-0">{children}</div>
+  </div>
+);
+
 interface CheckInFormProps {
   bodyFatPercentage: string;
   bodyCircumferences: Record<ExtraBodyCircumferencePart, string>;
@@ -153,15 +183,17 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <Label htmlFor="weight">{t('checkIn.weight', 'Weight')}</Label>
+            <MeasurementField
+              id="weight"
+              label={t('checkIn.weight', 'Weight')}
+              actions={
                 <UseLastButton
                   value={weight}
                   lastValue={placeholders.weight}
                   onAdopt={setWeight}
                 />
-              </div>
+              }
+            >
               <UnitInput
                 id="weight"
                 type="weight"
@@ -172,17 +204,19 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                   setWeight(val !== null ? val.toString() : '')
                 }
               />
-            </div>
+            </MeasurementField>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <Label htmlFor="height">{t('checkIn.height', 'Height')}</Label>
+            <MeasurementField
+              id="height"
+              label={t('checkIn.height', 'Height')}
+              actions={
                 <UseLastButton
                   value={height}
                   lastValue={placeholders.height}
                   onAdopt={setHeight}
                 />
-              </div>
+              }
+            >
               <UnitInput
                 id="height"
                 type="height"
@@ -193,10 +227,9 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                   setHeight(val !== null ? val.toString() : '')
                 }
               />
-            </div>
+            </MeasurementField>
 
-            <div>
-              <Label htmlFor="steps">{t('checkIn.steps', 'Steps')}</Label>
+            <MeasurementField id="steps" label={t('checkIn.steps', 'Steps')}>
               <Input
                 id="steps"
                 type="number"
@@ -206,17 +239,19 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                 }}
                 placeholder={t('checkIn.enterDailySteps', 'Enter daily steps')}
               />
-            </div>
+            </MeasurementField>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <Label htmlFor="neck">{t('checkIn.neck', 'Neck')}</Label>
+            <MeasurementField
+              id="neck"
+              label={t('checkIn.neck', 'Neck')}
+              actions={
                 <UseLastButton
                   value={neck}
                   lastValue={placeholders.neck}
                   onAdopt={setNeck}
                 />
-              </div>
+              }
+            >
               <UnitInput
                 id="neck"
                 type="measurement"
@@ -225,17 +260,19 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                 placeholderValue={placeholders.neck}
                 onChange={(val) => setNeck(val !== null ? val.toString() : '')}
               />
-            </div>
+            </MeasurementField>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <Label htmlFor="waist">{t('checkIn.waist', 'Waist')}</Label>
+            <MeasurementField
+              id="waist"
+              label={t('checkIn.waist', 'Waist')}
+              actions={
                 <UseLastButton
                   value={waist}
                   lastValue={placeholders.waist}
                   onAdopt={setWaist}
                 />
-              </div>
+              }
+            >
               <UnitInput
                 id="waist"
                 type="measurement"
@@ -244,17 +281,19 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                 placeholderValue={placeholders.waist}
                 onChange={(val) => setWaist(val !== null ? val.toString() : '')}
               />
-            </div>
+            </MeasurementField>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <Label htmlFor="hips">{t('checkIn.hips', 'Hips')}</Label>
+            <MeasurementField
+              id="hips"
+              label={t('checkIn.hips', 'Hips')}
+              actions={
                 <UseLastButton
                   value={hips}
                   lastValue={placeholders.hips}
                   onAdopt={setHips}
                 />
-              </div>
+              }
+            >
               <UnitInput
                 id="hips"
                 type="measurement"
@@ -263,13 +302,13 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                 placeholderValue={placeholders.hips}
                 onChange={(val) => setHips(val !== null ? val.toString() : '')}
               />
-            </div>
+            </MeasurementField>
             {EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => (
-              <div key={part.key}>
-                <div className="mb-1 flex items-center justify-between">
-                  <Label htmlFor={part.key}>
-                    {t(`checkIn.${part.key}`, part.label)}
-                  </Label>
+              <MeasurementField
+                key={part.key}
+                id={part.key}
+                label={t(`checkIn.${part.key}`, part.label)}
+                actions={
                   <UseLastButton
                     value={bodyCircumferences[part.key] || ''}
                     lastValue={placeholders.bodyCircumferences[part.key]}
@@ -280,7 +319,8 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                       }))
                     }
                   />
-                </div>
+                }
+              >
                 <UnitInput
                   id={part.key}
                   type="measurement"
@@ -294,14 +334,13 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                     }))
                   }
                 />
-              </div>
+              </MeasurementField>
             ))}
-            <div>
-              <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <Label htmlFor="bodyFat" className="whitespace-nowrap">
-                  {t('checkIn.bodyFatPercentage', 'Body Fat %')}
-                </Label>
-                <div className="ml-auto flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+            <MeasurementField
+              id="bodyFat"
+              label={t('checkIn.bodyFatPercentage', 'Body Fat %')}
+              actions={
+                <>
                   <UseLastButton
                     value={bodyFatPercentage}
                     lastValue={placeholders.bodyFatPercentage}
@@ -318,7 +357,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                           />
                           <Label
                             htmlFor="use-most-recent-toggle"
-                            className="whitespace-nowrap"
+                            className="leading-5"
                           >
                             {t('checkIn.useRecent', 'Use Recent')}
                           </Label>
@@ -334,8 +373,9 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                </div>
-              </div>
+                </>
+              }
+            >
               <div className="flex items-center">
                 <Input
                   id="bodyFat"
@@ -360,16 +400,16 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                   {t('checkIn.calculate', 'Calculate')}
                 </Button>
               </div>
-            </div>
+            </MeasurementField>
 
             {/* Smart Scale Composition Metrics. Masses go through UnitInput so
                 they follow the user's weight-unit preference like weight does;
                 state stays metric (kg). BMI is intentionally not a field here —
                 it is derived from weight and height at the point of use. */}
-            <div>
-              <Label htmlFor="muscleMass">
-                {t('checkIn.muscleMass', 'Muscle Mass')}
-              </Label>
+            <MeasurementField
+              id="muscleMass"
+              label={t('checkIn.muscleMass', 'Muscle Mass')}
+            >
               <UnitInput
                 id="muscleMass"
                 type="weight"
@@ -379,12 +419,12 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                   setMuscleMassKg(val !== null ? val.toString() : '')
                 }
               />
-            </div>
+            </MeasurementField>
 
-            <div>
-              <Label htmlFor="boneMass">
-                {t('checkIn.boneMass', 'Bone Mass')}
-              </Label>
+            <MeasurementField
+              id="boneMass"
+              label={t('checkIn.boneMass', 'Bone Mass')}
+            >
               <UnitInput
                 id="boneMass"
                 type="weight"
@@ -394,12 +434,12 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                   setBoneMassKg(val !== null ? val.toString() : '')
                 }
               />
-            </div>
+            </MeasurementField>
 
-            <div>
-              <Label htmlFor="bodyWater">
-                {t('checkIn.bodyWater', 'Body Water %')}
-              </Label>
+            <MeasurementField
+              id="bodyWater"
+              label={t('checkIn.bodyWater', 'Body Water %')}
+            >
               <Input
                 id="bodyWater"
                 type="number"
@@ -408,10 +448,9 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                 onChange={(e) => setBodyWaterPercentage(e.target.value)}
                 placeholder="0.0"
               />
-            </div>
+            </MeasurementField>
 
-            <div>
-              <Label htmlFor="bmr">{t('checkIn.bmr', 'BMR (kcal)')}</Label>
+            <MeasurementField id="bmr" label={t('checkIn.bmr', 'BMR (kcal)')}>
               <Input
                 id="bmr"
                 type="number"
@@ -424,8 +463,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                   placeholders.bmr ? placeholders.bmr.toString() : 'e.g. 1650'
                 }
               />
-            </div>
-            {/* Custom Categories */}
+            </MeasurementField>
 
             {/* Custom Categories */}
             {customCategories.map((category) => {
@@ -459,17 +497,18 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                 }));
 
               return (
-                <div key={category.id}>
-                  <div className="mb-1 flex items-center justify-between">
-                    <Label htmlFor={`custom-${category.id}`}>
-                      {categoryLabel} ({displayUnit})
-                    </Label>
+                <MeasurementField
+                  key={category.id}
+                  id={`custom-${category.id}`}
+                  label={`${categoryLabel} (${displayUnit})`}
+                  actions={
                     <UseLastButton
                       value={currentValue}
                       lastValue={offerPrevious ? previousValue : null}
                       onAdopt={adoptPrevious}
                     />
-                  </div>
+                  }
+                >
                   {isConvertible && category.data_type === 'numeric' ? (
                     <UnitInput
                       id={`custom-${category.id}`}
@@ -531,7 +570,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                     placeholder={t('checkIn.notesOptional', 'Notes (optional)')}
                     className="mt-2"
                   />
-                </div>
+                </MeasurementField>
               );
             })}
           </div>

@@ -20,6 +20,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 
 open class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
@@ -46,7 +47,9 @@ open class HydrationWidgetReceiver : GlanceAppWidgetReceiver() {
                 Log.i(TAG, "Received water adjustment action amountMl=$amountMl")
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        adjustWater(context, amountMl)
+                        WidgetSnapshotLock.mutex.withLock {
+                            adjustWater(context, amountMl)
+                        }
                         scheduleMidnightRefresh(context)
                     } finally {
                         pending.finish()

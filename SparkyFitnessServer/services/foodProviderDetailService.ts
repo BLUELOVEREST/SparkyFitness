@@ -33,6 +33,7 @@ import {
   getGrocyFoodDetails,
   importGrocyFoodFromSource,
 } from '../integrations/grocy/grocyFoodService.js';
+import { getLivsmedelsverketFoodDetails } from '../integrations/livsmedelsverket/livsmedelsverketService.js';
 import {
   getFatSecretNutrients,
   getMealieFoodDetails,
@@ -356,6 +357,15 @@ export async function fetchProviderFoodDetails({
           productId,
           credentials.base_url,
           credentials.app_key
+        )) ?? null
+      );
+    }
+    case 'livsmedelsverket': {
+      return (
+        (await getLivsmedelsverketFoodDetails(
+          externalId,
+          language,
+          credentials.base_url || undefined
         )) ?? null
       );
     }

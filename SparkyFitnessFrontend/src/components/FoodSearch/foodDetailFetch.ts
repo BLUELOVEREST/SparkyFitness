@@ -1,12 +1,5 @@
 import type { Food } from '@/types/food';
-
-const DETAIL_FETCH_PROVIDER_TYPES = new Set([
-  'fatsecret',
-  'usda',
-  'yazio',
-  'swissfood',
-  'canadian-nutrient-file',
-]);
+import { foodProviderNeedsDetailFetch } from '@workspace/shared';
 
 export function isGrocyExternalCandidate(
   food: Pick<Food, 'provider_type' | 'provider_external_id'>
@@ -26,7 +19,7 @@ export function shouldFetchFoodDetailsBeforeEdit(
   }
 
   return (
-    DETAIL_FETCH_PROVIDER_TYPES.has(food.provider_type ?? '') ||
+    foodProviderNeedsDetailFetch(food.provider_type) ||
     isGrocyExternalCandidate(food)
   );
 }

@@ -59,18 +59,17 @@ class HydrationWidget : GlanceAppWidget() {
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val fallbackSnapshot = loadSnapshot(context)
         provideContent {
             GlanceTheme {
-                WidgetContent(context = context, fallbackSnapshot = fallbackSnapshot)
+                WidgetContent(context = context)
             }
         }
     }
 
     @Composable
-    private fun WidgetContent(context: Context, fallbackSnapshot: HydrationSnapshot?) {
+    private fun WidgetContent(context: Context) {
         val state = currentState<Preferences>()
-        val snapshot = parseSnapshot(state[SNAPSHOT_STATE_KEY]) ?: fallbackSnapshot
+        val snapshot = parseSnapshot(state[SNAPSHOT_STATE_KEY]) ?: loadSnapshot(context)
         val size = LocalSize.current
         val openAppIntent = Intent(Intent.ACTION_VIEW, Uri.parse("sparkyfitnessmobile://"))
             .setPackage(context.packageName)

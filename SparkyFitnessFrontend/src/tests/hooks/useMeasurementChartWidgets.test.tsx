@@ -13,6 +13,9 @@ jest.mock('@/contexts/PreferencesContext', () => ({
     formatDateInUserTimezone: () => 'May 15',
     weightUnit: 'lbs',
     measurementUnit: 'in',
+    energyUnit: 'kcal',
+    getEnergyUnitString: () => 'kcal',
+    convertEnergy: (value: number) => value,
     convertWeight: (value: number) => value,
     convertMeasurement: (value: number) => value,
   }),
@@ -56,6 +59,16 @@ describe('useMeasurementChartWidgets', () => {
 
     expect(result.current.map((widget) => widget.key)).toEqual(
       expect.arrayContaining(['shoulders', 'chest', 'left_calf', 'right_calf'])
+    );
+    const keys = result.current.map((widget) => widget.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        'muscle_mass_kg',
+        'bone_mass_kg',
+        'body_water_percentage',
+        'bmr',
+      ])
     );
   });
 });

@@ -4,6 +4,40 @@ import type {
 } from '../types/workoutPlan';
 import { normalizeTrainingFocusValue } from '@workspace/shared';
 import i18n from '../localization/i18n';
+import type { TFunction } from 'i18next';
+
+export function getTrainingFocusLabel(
+  value: string,
+  fallback: string,
+  t: TFunction
+): string {
+  switch (value) {
+    case 'rest':
+      return t('workoutPlan.focusLabels.rest', { defaultValue: 'Rest' });
+    case 'chest':
+      return t('workoutPlan.focusLabels.chest', { defaultValue: 'Chest' });
+    case 'back':
+      return t('workoutPlan.focusLabels.back', { defaultValue: 'Back' });
+    case 'legs':
+      return t('workoutPlan.focusLabels.legs', { defaultValue: 'Legs' });
+    case 'shoulders':
+      return t('workoutPlan.focusLabels.shoulders', {
+        defaultValue: 'Shoulders',
+      });
+    case 'arms':
+      return t('workoutPlan.focusLabels.arms', { defaultValue: 'Arms' });
+    case 'cardio':
+      return t('workoutPlan.focusLabels.cardio', { defaultValue: 'Cardio' });
+    case 'full_body':
+      return t('workoutPlan.focusLabels.fullBody', {
+        defaultValue: 'Full Body',
+      });
+    case 'custom':
+      return t('workoutPlan.focusLabels.custom', { defaultValue: 'Custom' });
+    default:
+      return fallback;
+  }
+}
 
 export {
   CUSTOM_TRAINING_FOCUS_VALUE,

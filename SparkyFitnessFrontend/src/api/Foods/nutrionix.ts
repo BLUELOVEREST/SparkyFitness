@@ -3,6 +3,7 @@ import { apiCall } from '@/api/api';
 import { getErrorMessage } from '@/utils/api';
 import { NutritionixItem } from '@/types/food';
 
+import i18n from 'i18next';
 interface NutritionixFood {
   food_name: string;
   brand_name?: string | null;
@@ -46,8 +47,12 @@ const fetchFoodDataProvider = async (
     const message = getErrorMessage(error);
     console.error('Error fetching food data provider:', error);
     toast({
-      title: 'Error',
-      description: `Failed to retrieve food data provider details: ${message}`,
+      title: i18n.t('common.error', 'Error'),
+      description: i18n.t(
+        'hooks.nutrionix.failedToRetrieveFoodData',
+        'Failed to retrieve food data provider details: {{message}}',
+        { message }
+      ),
       variant: 'destructive',
     });
     return null;
@@ -98,8 +103,11 @@ export const searchNutritionixFoods = async (
     }
 
     toast({
-      title: 'Error',
-      description: 'No default Nutritionix provider configured.',
+      title: i18n.t('common.error', 'Error'),
+      description: i18n.t(
+        'hooks.nutrionix.noDefaultNutritionixProviderConfigured',
+        'No default Nutritionix provider configured.'
+      ),
       variant: 'destructive',
     });
     return [];
@@ -174,8 +182,11 @@ export const searchNutritionixFoods = async (
 
     console.error('Network error during Nutritionix instant search:', error);
     toast({
-      title: 'Error',
-      description: 'Network error during Nutritionix search. Please try again.',
+      title: i18n.t('common.error', 'Error'),
+      description: i18n.t(
+        'hooks.nutrionix.networkErrorDuringNutritionixSearch',
+        'Network error during Nutritionix search. Please try again.'
+      ),
       variant: 'destructive',
     });
     return [];
@@ -188,8 +199,11 @@ export const getNutritionixNutrients = async (
 ) => {
   if (!defaultFoodDataProviderId) {
     toast({
-      title: 'Error',
-      description: 'No default Nutritionix provider configured.',
+      title: i18n.t('common.error', 'Error'),
+      description: i18n.t(
+        'hooks.nutrionix.noDefaultNutritionixProviderConfigured',
+        'No default Nutritionix provider configured.'
+      ),
       variant: 'destructive',
     });
     return null;
@@ -250,9 +264,11 @@ export const getNutritionixNutrients = async (
   } catch (error) {
     console.error('Network error during Nutritionix nutrient lookup:', error);
     toast({
-      title: 'Error',
-      description:
-        'Network error during Nutritionix nutrient lookup. Please try again.',
+      title: i18n.t('common.error', 'Error'),
+      description: i18n.t(
+        'hooks.nutrionix.networkErrorDuringNutritionixNutrient',
+        'Network error during Nutritionix nutrient lookup. Please try again.'
+      ),
       variant: 'destructive',
     });
     return null;
@@ -265,8 +281,11 @@ export const getNutritionixBrandedNutrients = async (
 ): Promise<NutritionixItem | null> => {
   if (!defaultFoodDataProviderId) {
     toast({
-      title: 'Error',
-      description: 'No default Nutritionix provider configured.',
+      title: i18n.t('common.error', 'Error'),
+      description: i18n.t(
+        'hooks.nutrionix.noDefaultNutritionixProviderConfigured',
+        'No default Nutritionix provider configured.'
+      ),
       variant: 'destructive',
     });
     return null;
@@ -330,9 +349,11 @@ export const getNutritionixBrandedNutrients = async (
       error
     );
     toast({
-      title: 'Error',
-      description:
-        'Network error during Nutritionix branded item lookup. Please try again.',
+      title: i18n.t('common.error', 'Error'),
+      description: i18n.t(
+        'hooks.nutrionix.networkErrorDuringNutritionixBranded',
+        'Network error during Nutritionix branded item lookup. Please try again.'
+      ),
       variant: 'destructive',
     });
     return null;

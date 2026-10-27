@@ -7,6 +7,8 @@ import {
   useWorkoutPlanTemplates,
 } from '../../src/hooks/useWorkoutPlanTemplates';
 import { usePreferences } from '../../src/hooks/usePreferences';
+import i18n from '../../src/localization/i18n';
+import en from '../../src/localization/locales/en/translation.json';
 
 jest.mock('../../src/hooks/useWorkoutPlanTemplates', () => ({
   useCreateWorkoutPlanTemplate: jest.fn(),
@@ -41,6 +43,19 @@ const mockUsePreferences = usePreferences as jest.MockedFunction<
 describe('WorkoutPlanTemplateFormScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    i18n.addResourceBundle(
+      'en',
+      'translation',
+      {
+        workoutPlan: {
+          sessionCount_one: en.workoutPlan.sessionCount_one,
+          sessionCount_other: en.workoutPlan.sessionCount_other,
+          focusLabels: en.workoutPlan.focusLabels,
+        },
+      },
+      true,
+      true
+    );
     mockUsePreferences.mockReturnValue({
       preferences: { language: 'en' },
       isLoading: false,

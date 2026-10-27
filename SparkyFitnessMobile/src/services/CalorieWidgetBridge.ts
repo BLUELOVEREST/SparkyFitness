@@ -18,6 +18,11 @@ interface CalorieWidgetNativeModule {
   reloadWidget(): Promise<void>;
   reloadMacroWidget(): Promise<void>;
   reloadHydrationWidget(): Promise<void>;
+  /** Absent in a build made before it existed. */
+  clearSnapshots?(): Promise<void>;
+  /** Absent in a build made before the water widget existed. */
+  setWaterSnapshot?(json: string): Promise<void>;
+  reloadWaterWidget?(): Promise<void>;
 }
 
 const nativeModule: CalorieWidgetNativeModule | undefined =
@@ -49,6 +54,19 @@ export const CalorieWidgetBridge = {
   async reloadHydrationWidget(): Promise<void> {
     if (!nativeModule) return;
     await nativeModule.reloadHydrationWidget();
+  },
+  async setWaterSnapshot(json: string): Promise<void> {
+    if (!nativeModule?.setWaterSnapshot) return;
+    await nativeModule.setWaterSnapshot(json);
+  },
+  async reloadWaterWidget(): Promise<void> {
+    if (!nativeModule?.reloadWaterWidget) return;
+    await nativeModule.reloadWaterWidget();
+  },
+  /** Erases every widget's snapshot and redraws them empty. */
+  async clearSnapshots(): Promise<void> {
+    if (!nativeModule?.clearSnapshots) return;
+    await nativeModule.clearSnapshots();
   },
   /**
    * Commits the user preference and effective render language atomically before

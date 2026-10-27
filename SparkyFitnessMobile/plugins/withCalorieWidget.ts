@@ -55,6 +55,11 @@ const WIDGET_RECEIVERS = [
     label: '@string/sparky_hydration_widget_large_name',
     provider: '@xml/sparky_hydration_widget_large_info',
   },
+  {
+    name: `${WIDGET_PACKAGE}.WaterWidgetReceiver`,
+    label: '@string/sparky_water_widget_name',
+    provider: '@xml/sparky_water_widget_info',
+  },
 ];
 
 const TEMPLATE_SUFFIX = '.tmpl';

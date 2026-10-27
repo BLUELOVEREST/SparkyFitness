@@ -53,9 +53,6 @@ const CheckIn = () => {
     height,
     hips,
     loading,
-    mood,
-    moodNotes,
-    moodTags,
     neck,
     placeholders,
     recentMeasurements,
@@ -70,9 +67,6 @@ const CheckIn = () => {
     setCustomValues,
     setHeight,
     setHips,
-    setMood,
-    setMoodNotes,
-    setMoodTags,
     setNeck,
     setSelectedDate,
     setSteps,
@@ -84,8 +78,12 @@ const CheckIn = () => {
     useMostRecentForCalculation,
     waist,
     weight,
-    handleSaveMood,
-    isSavingMood,
+    moodCheckins,
+    isLoadingMoodCheckins,
+    isSavingMoodCheckin,
+    handleCreateMoodCheckin,
+    handleUpdateMoodCheckin,
+    handleDeleteMoodCheckin,
   } = useCheckInLogic(currentUserId);
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -201,14 +199,13 @@ const CheckIn = () => {
           className="focus-visible:outline-none space-y-6"
         >
           <CheckInTopRow
-            mood={mood}
-            moodNotes={moodNotes}
-            moodTags={moodTags}
-            setMood={setMood}
-            setMoodNotes={setMoodNotes}
-            setMoodTags={setMoodTags}
-            onSaveMood={handleSaveMood}
-            isSavingMood={isSavingMood}
+            selectedDate={selectedDate}
+            checkins={moodCheckins}
+            isLoadingCheckins={isLoadingMoodCheckins}
+            isSavingCheckin={isSavingMoodCheckin}
+            onCreateCheckin={handleCreateMoodCheckin}
+            onUpdateCheckin={handleUpdateMoodCheckin}
+            onDeleteCheckin={handleDeleteMoodCheckin}
           />
           <RecentActivity
             convertMeasurement={convertMeasurement}
@@ -295,7 +292,17 @@ const CheckIn = () => {
         </TabsContent>
 
         <TabsContent value="photos" className="focus-visible:outline-none">
-          <CheckInPhotos selectedDate={selectedDate} />
+          <CheckInPhotos
+            selectedDate={selectedDate}
+            onLogWeight={(dateString) => {
+              setSelectedDate(dateString);
+              setSearchParams((prev) => {
+                prev.set('tab', 'measurements');
+                prev.set('date', dateString);
+                return prev;
+              });
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="symptoms" className="focus-visible:outline-none">

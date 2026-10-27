@@ -12,11 +12,13 @@ describe('frontend nginx uploads proxy', () => {
       /location \^~ \/uploads\/ \{[\s\S]*?\n {2}\}/
     )?.[0];
 
-    expect(uploadsLocation).toContain(
-      'proxy_pass $sparky_backend$request_uri;'
+    // The upstream DNS resolver uses $backend. A URI-less proxy_pass keeps the
+    // incoming uploads path; an explicit $request_uri is equivalent here.
+    expect(uploadsLocation).toMatch(
+      /proxy_pass\s+http:\/\/\$backend(?:\$request_uri)?;/
     );
     expect(uploadsLocation).not.toContain(
-      'proxy_pass $sparky_backend/uploads/;'
+      'proxy_pass http://$backend/uploads/;'
     );
   });
 });

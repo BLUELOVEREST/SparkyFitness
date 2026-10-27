@@ -38,7 +38,9 @@ import { NutrientGrid } from './NutrientFormGrid';
 import { AiEstimateSection } from '@/components/FoodUnitSelector/AiEstimateSection';
 import type { AiEstimateData } from '@/hooks/Foods/useUnitConversion';
 import { NumericInput } from '../NumericInput';
+import { formatServingLabel } from '@/utils/foodServing';
 
+import { useTranslation } from 'react-i18next';
 // Tone classes for the AI provenance badge ("Good/Fair/Rough estimate").
 // `green` (true grass-green, hue ~142°) replaces `emerald` (~160°,
 // teal-leaning) so "Good" reads as a standard success color, not mint.
@@ -80,6 +82,7 @@ const COMMON_ALLERGENS = [
 interface VariantCardProps {
   index: number;
   variant: FormFoodVariant & { equivalents?: EquivalentUnit[] };
+  nutritionReadOnly?: boolean;
   variantError: string;
   visibleNutrients: string[];
   energyUnit: 'kcal' | 'kJ';
@@ -139,6 +142,7 @@ interface VariantCardProps {
 export function VariantCard({
   index,
   variant,
+  nutritionReadOnly = false,
   variantError,
   visibleNutrients,
   energyUnit,
@@ -159,6 +163,7 @@ export function VariantCard({
   onDuplicate,
   onRemove,
 }: VariantCardProps) {
+  const { t } = useTranslation();
   const equivalents = useMemo(
     () => variant.equivalents ?? [],
     [variant.equivalents]
@@ -278,10 +283,10 @@ export function VariantCard({
           )}
           <span className="min-w-0">
             <span className="block font-medium">
-              {variant.serving_size} {variant.serving_unit}
+              {formatServingLabel(variant)}
               {variant.is_default ? (
                 <Badge variant="outline" className="ml-2 align-middle">
-                  Default
+                  {t('foodSearch.variantCard.default', 'Default')}
                 </Badge>
               ) : null}
             </span>
@@ -301,7 +306,10 @@ export function VariantCard({
               variant="ghost"
               size="sm"
               onClick={addEquivalent}
-              title="Add Equivalent Unit"
+              title={t(
+                'foodSearch.variantCard.addEquivalentUnit',
+                'Add Equivalent Unit'
+              )}
             >
               <Plus className="w-4 h-4" />
             </Button>
@@ -311,7 +319,7 @@ export function VariantCard({
             variant="ghost"
             size="sm"
             onClick={() => onDuplicate(index)}
-            title="Duplicate Unit"
+            title={t('foodSearch.variantCard.duplicateUnit', 'Duplicate Unit')}
           >
             <Copy className="w-4 h-4" />
           </Button>
@@ -321,7 +329,7 @@ export function VariantCard({
               variant="ghost"
               size="sm"
               onClick={() => onRemove(index)}
-              title="Remove Unit"
+              title={t('foodSearch.variantCard.removeUnit', 'Remove Unit')}
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -335,7 +343,9 @@ export function VariantCard({
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 flex-wrap">
               <div className="flex items-end gap-2">
                 <div className="flex flex-col">
-                  <Label htmlFor={`serving-size-${index}`}>Serving Size</Label>
+                  <Label htmlFor={`serving-size-${index}`}>
+                    {t('foodSearch.variantCard.servingSize', 'Serving Size')}
+                  </Label>
                   <NumericInput
                     id={`serving-size-${index}`}
                     step="any"
@@ -353,7 +363,9 @@ export function VariantCard({
                 </div>
 
                 <div className="flex flex-col">
-                  <Label htmlFor={`serving-unit-${index}`}>Unit Type</Label>
+                  <Label htmlFor={`serving-unit-${index}`}>
+                    {t('foodSearch.variantCard.unitType', 'Unit Type')}
+                  </Label>
                   <Select
                     value={variant.serving_unit}
                     onValueChange={(value) =>
@@ -396,7 +408,16 @@ export function VariantCard({
                                     <Sparkles
                                       data-testid={`ai-unit-option-indicator-${index}-${unit}`}
                                       className={`h-3 w-3 ${AI_SPARKLE_TONE_CLASSES[CONFIDENCE_TONES[matchedAi.confidence]]}`}
-                                      aria-label={`AI estimate (${OVERALL_CONFIDENCE_LABELS[matchedAi.confidence]} confidence)`}
+                                      aria-label={t(
+                                        'foodSearch.variantCard.aiEstimateConfidence',
+                                        'AI estimate ({{confidence}} confidence)',
+                                        {
+                                          confidence:
+                                            OVERALL_CONFIDENCE_LABELS[
+                                              matchedAi.confidence
+                                            ],
+                                        }
+                                      )}
                                       fill="currentColor"
                                       strokeWidth={0.75}
                                     />
@@ -409,7 +430,9 @@ export function VariantCard({
                       ))}
                       {customUnitsForDropdown.length > 0 && (
                         <SelectGroup key="custom-units">
-                          <SelectLabel>Custom</SelectLabel>
+                          <SelectLabel>
+                            {t('foodSearch.variantCard.custom', 'Custom')}
+                          </SelectLabel>
                           {customUnitsForDropdown.map((unit) => {
                             const compatible =
                               showCompatibleUnitIndicators &&
@@ -433,7 +456,16 @@ export function VariantCard({
                                     <Sparkles
                                       data-testid={`ai-unit-option-indicator-${index}-${unit}`}
                                       className={`h-3 w-3 ${AI_SPARKLE_TONE_CLASSES[CONFIDENCE_TONES[matchedAi.confidence]]}`}
-                                      aria-label={`AI estimate (${OVERALL_CONFIDENCE_LABELS[matchedAi.confidence]} confidence)`}
+                                      aria-label={t(
+                                        'foodSearch.variantCard.aiEstimateConfidence',
+                                        'AI estimate ({{confidence}} confidence)',
+                                        {
+                                          confidence:
+                                            OVERALL_CONFIDENCE_LABELS[
+                                              matchedAi.confidence
+                                            ],
+                                        }
+                                      )}
                                       fill="currentColor"
                                       strokeWidth={0.75}
                                     />
@@ -465,7 +497,7 @@ export function VariantCard({
                     className="form-checkbox h-4 w-4 text-blue-600"
                   />
                   <Label htmlFor={`is-default-${index}`} className="text-sm">
-                    Default
+                    {t('foodSearch.variantCard.default', 'Default')}
                   </Label>
                 </div>
 
@@ -480,7 +512,7 @@ export function VariantCard({
                     className="form-checkbox h-4 w-4 text-blue-600"
                   />
                   <Label htmlFor={`is-locked-${index}`} className="text-sm">
-                    Auto-Scale
+                    {t('foodSearch.variantCard.autoScale', 'Auto-Scale')}
                   </Label>
                 </div>
               </div>
@@ -490,7 +522,10 @@ export function VariantCard({
               <div key={eqIndex} className="flex items-end gap-2 ">
                 <div className="flex flex-col">
                   <Label htmlFor={`eq-size-${index}-${eqIndex}`}>
-                    Equivalent Size
+                    {t(
+                      'foodSearch.variantCard.equivalentSize',
+                      'Equivalent Size'
+                    )}
                   </Label>
                   <Input
                     id={`eq-size-${index}-${eqIndex}`}
@@ -509,7 +544,7 @@ export function VariantCard({
                 </div>
                 <div className="flex flex-col">
                   <Label htmlFor={`eq-unit-${index}-${eqIndex}`}>
-                    Unit Type
+                    {t('foodSearch.variantCard.unitType', 'Unit Type')}
                   </Label>
                   <Select
                     value={eq.serving_unit}
@@ -536,7 +571,9 @@ export function VariantCard({
                       ))}
                       {customUnitsForDropdown.length > 0 && (
                         <SelectGroup key="custom-units">
-                          <SelectLabel>Custom</SelectLabel>
+                          <SelectLabel>
+                            {t('foodSearch.variantCard.custom', 'Custom')}
+                          </SelectLabel>
                           {customUnitsForDropdown.map((unit) => (
                             <SelectItem key={unit} value={unit}>
                               {unit}
@@ -552,7 +589,10 @@ export function VariantCard({
                   variant="ghost"
                   size="sm"
                   onClick={() => removeEquivalent(eqIndex)}
-                  title="Remove Equivalent"
+                  title={t(
+                    'foodSearch.variantCard.removeEquivalent',
+                    'Remove Equivalent'
+                  )}
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
@@ -576,36 +616,62 @@ export function VariantCard({
 
           <h4 className="text-md font-medium mb-2 flex items-center gap-2">
             <span>
-              Nutrition per {variant.serving_size} {variant.serving_unit}
+              {t(
+                'foodSearch.variantCard.nutritionPer2',
+                'Nutrition per {{variant}}',
+                { variant: formatServingLabel(variant) }
+              )}
             </span>
             {showAiEstimateBadge && (
               <span
                 className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${AI_BADGE_TONE_CLASSES[CONFIDENCE_TONES[variant.ai_confidence as AiConfidence]]}`}
-                aria-label={`AI estimate (${OVERALL_CONFIDENCE_LABELS[variant.ai_confidence as AiConfidence]} confidence)`}
+                aria-label={t(
+                  'foodSearch.variantCard.aiEstimateConfidence',
+                  'AI estimate ({{confidence}} confidence)',
+                  {
+                    confidence:
+                      OVERALL_CONFIDENCE_LABELS[
+                        variant.ai_confidence as AiConfidence
+                      ],
+                  }
+                )}
               >
-                {
-                  OVERALL_CONFIDENCE_LABELS[
-                    variant.ai_confidence as AiConfidence
-                  ]
-                }{' '}
-                estimate
+                {t(
+                  'foodSearch.variantCard.estimate2',
+                  '{{ai_confidence}} estimate',
+                  {
+                    ai_confidence:
+                      OVERALL_CONFIDENCE_LABELS[
+                        variant.ai_confidence as AiConfidence
+                      ],
+                  }
+                )}
               </span>
             )}
           </h4>
 
-          {/* Pass the array straight through */}
-          <NutrientGrid
-            variantIndex={index}
-            variant={variant}
-            visibleNutrients={visibleNutrients}
-            energyUnit={energyUnit}
-            convertEnergy={convertEnergy}
-            customNutrients={customNutrients}
-            onUpdate={onUpdate}
-          />
+          {nutritionReadOnly && (
+            <p className="mb-3 text-sm text-muted-foreground">
+              {t(
+                'customFoodForm.portionNutritionCalculated',
+                'Nutrition is calculated from the reference unit. Edit that unit to change nutrition.'
+              )}
+            </p>
+          )}
+          <fieldset disabled={nutritionReadOnly}>
+            <NutrientGrid
+              variantIndex={index}
+              variant={variant}
+              visibleNutrients={visibleNutrients}
+              energyUnit={energyUnit}
+              convertEnergy={convertEnergy}
+              customNutrients={customNutrients}
+              onUpdate={onUpdate}
+            />
+          </fieldset>
 
           <div className="mt-4 space-y-2">
-            <Label>Allergens</Label>
+            <Label>{t('foodSearch.variantCard.allergens', 'Allergens')}</Label>
             <div className="flex flex-wrap gap-1 mb-2">
               {COMMON_ALLERGENS.map((a) => (
                 <Badge
@@ -653,7 +719,10 @@ export function VariantCard({
                     addAllergen(allergenInput);
                   }
                 }}
-                placeholder="Custom allergen…"
+                placeholder={t(
+                  'foodSearch.variantCard.customAllergen',
+                  'Custom allergen…'
+                )}
                 className="max-w-xs h-8 text-sm"
               />
               <Button
@@ -663,7 +732,7 @@ export function VariantCard({
                 onClick={() => addAllergen(allergenInput)}
                 disabled={!allergenInput.trim()}
               >
-                Add
+                {t('common.add', 'Add')}
               </Button>
             </div>
           </div>

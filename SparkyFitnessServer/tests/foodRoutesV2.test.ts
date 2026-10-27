@@ -216,6 +216,31 @@ describe('GET /v2/foods/search/:providerType', () => {
     vi.clearAllMocks();
   });
 
+  it.each([
+    { query: '', expected: false },
+    { query: '&includeExternal=false', expected: false },
+    { query: '&includeExternal=true', expected: true },
+  ])(
+    'forwards Grocy external-search opt-in ($query)',
+    async ({ query, expected }) => {
+      vi.mocked(searchProviderFoods).mockResolvedValue({
+        foods: [],
+        pagination: { page: 1, pageSize: 20, totalCount: 0, hasMore: false },
+      });
+      const response = await request(app).get(
+        `/v2/foods/search/grocy?query=rice${query}`
+      );
+      expect(response.statusCode).toBe(200);
+      expect(searchProviderFoods).toHaveBeenCalledWith(
+        'user-123',
+        'grocy',
+        'rice',
+        expect.objectContaining({ includeExternal: expected }),
+        'user-123'
+      );
+    }
+  );
+
   it('delegates to searchProviderFoods and normalizes the result', async () => {
     vi.mocked(searchProviderFoods).mockResolvedValue({
       foods: [

@@ -299,32 +299,43 @@ describe('extractNutritionFromLabel', () => {
       expect(init.body).toContain('Extract the nutrition facts');
     });
 
-    it('gives the Ollama agent the 5-minute cold-start timeout', async () => {
-      mockGetVisionSetting.mockResolvedValue(
-        makeAiSetting({ service_type: 'ollama' })
-      );
-      mockGetBackendSetting.mockResolvedValue(
-        makeAiServiceDetail({
-          service_type: 'ollama',
-          api_key: null,
-          custom_url: 'http://localhost:11434',
-        })
-      );
-      mockFetch(ollamaBody(sampleNutrition));
-      const result = await extractNutritionFromLabel(
-        TEST_BASE64,
-        TEST_MIME,
-        TEST_USER_ID,
-        true
-      );
-      expect(result.success).toBe(true);
-      expect(mockAgent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          headersTimeout: 300_000,
-          bodyTimeout: 300_000,
-        })
-      );
-    });
+    it.each([
+      { timeoutSeconds: undefined, expectedMs: 120_000 },
+      { timeoutSeconds: null, expectedMs: 120_000 },
+      { timeoutSeconds: 300, expectedMs: 300_000 },
+      { timeoutSeconds: 45, expectedMs: 45_000 },
+    ])(
+      'uses the vision timeout ($timeoutSeconds seconds -> $expectedMs ms) ahead of the Ollama fallback',
+      async ({ timeoutSeconds, expectedMs }) => {
+        mockGetVisionSetting.mockResolvedValue(
+          makeAiSetting({ service_type: 'ollama' })
+        );
+        mockGetBackendSetting.mockResolvedValue(
+          makeAiServiceDetail({
+            service_type: 'ollama',
+            api_key: null,
+            custom_url: 'http://localhost:11434',
+            ...(timeoutSeconds !== undefined && {
+              profile_settings: { vision: { timeout_seconds: timeoutSeconds } },
+            }),
+          })
+        );
+        mockFetch(ollamaBody(sampleNutrition));
+        const result = await extractNutritionFromLabel(
+          TEST_BASE64,
+          TEST_MIME,
+          TEST_USER_ID,
+          true
+        );
+        expect(result.success).toBe(true);
+        expect(mockAgent).toHaveBeenCalledWith(
+          expect.objectContaining({
+            headersTimeout: expectedMs,
+            bodyTimeout: expectedMs,
+          })
+        );
+      }
+    );
 
     it('asks Ollama to keep the model resident between requests', async () => {
       mockGetVisionSetting.mockResolvedValue(

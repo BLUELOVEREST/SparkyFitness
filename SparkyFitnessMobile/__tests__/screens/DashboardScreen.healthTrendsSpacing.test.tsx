@@ -1,8 +1,13 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import DashboardScreen from '../../src/screens/DashboardScreen';
+import {
+  useActiveMealPlanDay,
+  useDailySummary,
+  useNutrientDisplayPreferences,
+} from '../../src/hooks';
 import {
   useAppPreferencesStore,
   __resetAppPreferencesStoreForTests,
@@ -115,6 +120,13 @@ jest.mock('../../src/hooks', () => ({
     refetch: jest.fn(),
   })),
   useProfile: jest.fn(() => ({ profile: {} })),
+  useActiveMealPlanDay: jest.fn(() => ({
+    activeMealPlanDay: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: jest.fn(),
+  })),
   usePreferences: jest.fn(() => ({
     preferences,
     isLoading: false,
@@ -186,6 +198,7 @@ jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
   return {
     ...actual,
+    useIsFocused: () => true,
     useFocusEffect: (callback: () => void | (() => void)) => {
       callback();
     },
@@ -210,6 +223,28 @@ const renderDashboard = () => {
 
 describe('DashboardScreen Health Trends spacing', () => {
   beforeEach(() => {
+    jest.mocked(useDailySummary).mockReturnValue({
+      summary,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    jest.mocked(useActiveMealPlanDay).mockReturnValue({
+      activeMealPlanDay: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    jest.mocked(useNutrientDisplayPreferences).mockReturnValue({
+      preferences: [],
+      summaryNutrients: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+    });
     __resetAppPreferencesStoreForTests();
     const store = useAppPreferencesStore.getState();
     // askSparky is the cheapest sibling card to render directly below Health
@@ -227,7 +262,11 @@ describe('DashboardScreen Health Trends spacing', () => {
     store.setFastingCardVisible(false);
     store.setCycleCardVisible(false);
     store.setMedicationsCardVisible(false);
+    store.setSymptomsCardVisible(false);
+    store.setMoodCardVisible(false);
     store.setProgressPhotosCardVisible(false);
+    store.setMindfulnessCardVisible(false);
+    store.setTrainingLoadCardVisible(false);
   });
 
   it('wraps the Health Trends card in a view carrying the shared card bottom margin', () => {
@@ -243,5 +282,87 @@ describe('DashboardScreen Health Trends spacing', () => {
     }
 
     expect(node?.props.className).toContain('mb-3');
+  });
+
+  it('links to the Reports page from the Health Trends heading', () => {
+    renderDashboard();
+
+    fireEvent.press(screen.getByTestId('dashboard-reports-link'));
+
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Reports');
+  });
+
+  it('honors hidden cards and renders each enabled card only once', () => {
+    renderDashboard();
+
+    expect(screen.queryByText('remaining')).toBeNull();
+    expect(screen.queryByText('Tap to add food')).toBeNull();
+    expect(screen.getAllByText('Ask Sparky…')).toHaveLength(1);
+  });
+
+  it('renders visible cards once with carb-cycle targets in the ordered cards', () => {
+    const store = useAppPreferencesStore.getState();
+    store.setDashboardCardOrder([
+      'calorieRing',
+      'macros',
+      'healthTrends',
+      'askSparky',
+    ]);
+    store.setCalorieRingCardVisible(true);
+    store.setMacrosCardVisible(true);
+    jest.mocked(useDailySummary).mockReturnValue({
+      summary: {
+        ...summary,
+        supplementTotals: { ...emptySupplementTotals, calories: 100 },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    jest.mocked(useNutrientDisplayPreferences).mockReturnValue({
+      preferences: [],
+      summaryNutrients: ['protein', 'carbs', 'fat'],
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    jest.mocked(useActiveMealPlanDay).mockReturnValue({
+      activeMealPlanDay: {
+        mode: 'carbCycle',
+        date: summary.date,
+        meals: [
+          {
+            mealTypeId: 'planned-meal-type',
+            key: 'planned-meal',
+            label: 'Planned meal',
+            target: { calories: 580, protein: 30, carbs: 70, fat: 20 },
+            items: [],
+            logged: false,
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    renderDashboard();
+
+    for (const heading of [
+      'remaining',
+      'Nutrients',
+      'Health Trends',
+      'Ask Sparky…',
+    ]) {
+      expect(screen.getAllByText(heading)).toHaveLength(1);
+    }
+    expect(screen.getByText('of 580 kcal')).toBeTruthy();
+    expect(screen.getByText('0g / 30g')).toBeTruthy();
+    expect(screen.getByText('0g / 70g')).toBeTruthy();
+    expect(screen.getByText('0g / 20g')).toBeTruthy();
+    expect(screen.queryByText('of 2000 kcal')).toBeNull();
   });
 });

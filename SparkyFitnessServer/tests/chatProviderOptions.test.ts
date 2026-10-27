@@ -1,7 +1,10 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { generateText, streamText } from 'ai';
 import { vi, describe, expect, it } from 'vitest';
-import { buildChatProviderOptions } from '../services/chatService.js';
+import {
+  buildChatProviderOptions,
+  buildProfiledChatProviderOptions,
+} from '../services/chatService.js';
 
 // Loading the real foodEntryService (pulled in transitively via the chatbot
 // tool registry) trips on a deep '@workspace/shared' subpath import; this pure
@@ -62,6 +65,54 @@ function expectSystemMessage(request: RecordedOpenAiRequest) {
 }
 
 describe('buildChatProviderOptions', () => {
+  it('retains service reasoning and profile extras for GPT-6', () => {
+    expect(
+      buildProfiledChatProviderOptions(
+        'openai',
+        'user-1',
+        'gpt-6-astra',
+        {
+          reasoning_effort: 'low',
+          extra_body_json: { service_tier: 'flex', reasoningEffort: 'max' },
+        },
+        'xhigh'
+      )
+    ).toMatchObject({
+      openai: { reasoningEffort: 'xhigh', service_tier: 'flex', store: false },
+    });
+  });
+
+  it('retains compatible system role alongside profile reasoning and extras', () => {
+    expect(
+      buildProfiledChatProviderOptions('openai_compatible', 'user-1', 'local', {
+        reasoning_effort: 'high',
+        extra_body_json: { custom_option: true },
+      })
+    ).toEqual({
+      openai: {
+        systemMessageMode: 'system',
+        reasoningEffort: 'high',
+        reasoning_effort: 'high',
+        custom_option: true,
+      },
+    });
+  });
+
+  it.each(['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-sol'])(
+    'uses supported reasoning and cache fields for %s',
+    (model) => {
+      expect(
+        buildChatProviderOptions('openai', 'user-1', model, 'high')
+      ).toEqual({
+        openai: {
+          promptCacheKey: 'sparky-chat-user-1',
+          reasoningEffort: 'high',
+          promptCacheOptions: { ttl: '30m' },
+          store: false,
+        },
+      });
+    }
+  );
   // Provider-gating: only the canonical 'openai' service type gets the
   // openai-namespaced prompt_cache_* options. OpenAI-compatible services share
   // the namespace but receive only adapter-level compatibility options.

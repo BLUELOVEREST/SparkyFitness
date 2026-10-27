@@ -122,13 +122,14 @@ const searchHandler: RequestHandler<{ providerType: string }> = async (
   }
   const providerId = req.query.providerId as string | undefined;
   const autoScale = ((req.query.autoScale as string) ?? 'true') !== 'false';
+  const includeExternal = req.query.includeExternal === 'true';
 
   try {
     const { foods, pagination } = await searchProviderFoods(
       req.userId,
       providerType,
       query,
-      { page, pageSize, providerId, autoScale },
+      { page, pageSize, providerId, autoScale, includeExternal },
       req.authenticatedUserId
     );
 

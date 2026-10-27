@@ -1,9 +1,6 @@
 name: Build Eric Android Release APK
 
-# Runs on publish rather than on the v* tag push. release-please.yml creates the
-# tag together with the draft, before anyone has approved the release, and a tag
-# pushed with GITHUB_TOKEN would not trigger this workflow at all. On a release
-# event github.ref is still refs/tags/<tag>, so the steps below are unchanged.
+# Eric tags build the production arm64 APK independently of upstream releases.
 on:
   push:
     tags:
@@ -16,11 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     env:
       APP_VARIANT: production
       NODE_ENV: production
-      GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8"
+      GRADLE_OPTS: '-Dorg.gradle.jvmargs="-Xmx6144m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" -Dorg.gradle.caching=true'
 
     steps:
       - name: Checkout repository
@@ -47,7 +43,12 @@ jobs:
 
       - name: Generate production Android project
         working-directory: SparkyFitnessMobile
-        run: pnpm exec expo prebuild --platform android --clean
+        env:
+          GOOGLE_MAPS_ANDROID_API_KEY: ${{ secrets.GOOGLE_MAPS_ANDROID_API_KEY }}
+        run: |
+          pnpm exec expo prebuild --platform android --clean
+          sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=1024m/' android/gradle.properties
+          printf '\norg.gradle.caching=true\n' >> android/gradle.properties
 
       - name: Cache Gradle packages
         uses: actions/cache@v4
@@ -67,6 +68,10 @@ jobs:
 
       - name: Verify production Android variant
         run: grep -n "applicationId 'com.SparkyApps.SparkyFitnessMobile'" SparkyFitnessMobile/android/app/build.gradle
+
+      - name: Generate async-storage codegen
+        working-directory: SparkyFitnessMobile/android
+        run: ./gradlew :react-native-async-storage_async-storage:generateCodegenArtifactsFromSchema --no-daemon --max-workers=2
 
       - name: Build release APK
         working-directory: SparkyFitnessMobile/android

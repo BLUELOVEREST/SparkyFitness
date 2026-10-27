@@ -11,38 +11,38 @@ export interface TrainingFocusLikeTemplate {
   focus_sessions?: TrainingFocusLikeSession[] | null;
 }
 
-export const CUSTOM_TRAINING_FOCUS_VALUE = "custom";
+export const CUSTOM_TRAINING_FOCUS_VALUE = 'custom';
 
 export const BUILT_IN_TRAINING_FOCUS_OPTIONS: TrainingFocusOption[] = [
-  { value: "rest", label: "Rest" },
-  { value: "chest", label: "Chest" },
-  { value: "back", label: "Back" },
-  { value: "legs", label: "Legs" },
-  { value: "shoulders", label: "Shoulders" },
-  { value: "arms", label: "Arms" },
-  { value: "cardio", label: "Cardio" },
-  { value: "full_body", label: "Full Body" },
+  { value: 'rest', label: 'Rest' },
+  { value: 'chest', label: 'Chest' },
+  { value: 'back', label: 'Back' },
+  { value: 'legs', label: 'Legs' },
+  { value: 'shoulders', label: 'Shoulders' },
+  { value: 'arms', label: 'Arms' },
+  { value: 'cardio', label: 'Cardio' },
+  { value: 'full_body', label: 'Full Body' }, // i18n-ignore: stable legacy normalization alias
 ];
 
 export const CUSTOM_TRAINING_FOCUS_OPTION: TrainingFocusOption = {
   value: CUSTOM_TRAINING_FOCUS_VALUE,
-  label: "Custom",
+  label: 'Custom',
 };
 
 const builtInLookup = new Map(
   BUILT_IN_TRAINING_FOCUS_OPTIONS.flatMap((option) => [
     [normalizeComparableFocus(option.value), option.value],
     [normalizeComparableFocus(option.label), option.value],
-  ]),
+  ])
 );
 
 function normalizeComparableFocus(value: string): string {
-  return value.trim().replaceAll("_", " ").replace(/\s+/g, " ").toLowerCase();
+  return value.trim().replaceAll('_', ' ').replace(/\s+/g, ' ').toLowerCase();
 }
 
 export function normalizeTrainingFocusValue(value: string): string {
-  const trimmed = value.trim().replace(/\s+/g, " ");
-  if (!trimmed) return "rest";
+  const trimmed = value.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return 'rest';
 
   const builtInValue = builtInLookup.get(normalizeComparableFocus(trimmed));
   return builtInValue ?? trimmed;
@@ -54,7 +54,7 @@ export function isBuiltInTrainingFocus(value: string): boolean {
 
 export function resolveTrainingFocusValue(
   selectedValue: string,
-  customValue: string,
+  customValue: string
 ): string {
   if (selectedValue === CUSTOM_TRAINING_FOCUS_VALUE) {
     return normalizeTrainingFocusValue(customValue);
@@ -63,7 +63,7 @@ export function resolveTrainingFocusValue(
 }
 
 export function buildTrainingFocusOptions(
-  sessions: TrainingFocusLikeSession[] = [],
+  sessions: TrainingFocusLikeSession[] = []
 ): TrainingFocusOption[] {
   const customOptions: TrainingFocusOption[] = [];
   const seenCustom = new Set<string>();
@@ -99,10 +99,10 @@ export function buildTrainingFocusOptions(
 
 export function buildTrainingFocusOptionsFromTemplates(
   templates: TrainingFocusLikeTemplate[] = [],
-  currentSessions: TrainingFocusLikeSession[] = [],
+  currentSessions: TrainingFocusLikeSession[] = []
 ): TrainingFocusOption[] {
   const historicalSessions = templates.flatMap(
-    (template) => template.focus_sessions ?? [],
+    (template) => template.focus_sessions ?? []
   );
   return buildTrainingFocusOptions([...historicalSessions, ...currentSessions]);
 }

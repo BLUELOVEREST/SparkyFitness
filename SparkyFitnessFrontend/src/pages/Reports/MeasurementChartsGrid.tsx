@@ -21,6 +21,9 @@ import {
   CheckInMeasurementsResponse,
   EXTRA_BODY_CIRCUMFERENCE_PARTS,
   getPrecision,
+  computeWeightTrend,
+  forecastGoalDate,
+  summarizeWeightTrend,
 } from '@workspace/shared';
 import {
   calculateSmartYAxisDomain,
@@ -68,6 +71,22 @@ const EXTRA_CIRCUMFERENCE_STROKES = [
   '#65a30d',
   '#db2777',
 ] as const;
+
+interface MeasurementMetric {
+  key: string;
+  titleKey: string;
+  defaultTitle: string;
+  dataKey: string;
+  rawKey: string;
+  unit: string;
+  stroke: string | undefined;
+  icon: typeof Scale;
+  showHeaderIcon: boolean;
+  trendKey?: string;
+  trendRawKey?: string;
+  formatValue: (value: number) => string;
+  axisTickFormat: (value: number) => string;
+}
 
 /**
  * Uniform default layout for the reports-measurements widget grid: the six
@@ -123,6 +142,8 @@ const EMPTY_MEASUREMENTS: CheckInMeasurementsResponse[] = [];
 
 interface UseMeasurementChartWidgetsArgs {
   measurementData?: CheckInMeasurementsResponse[];
+  /** Profile target weight in kg; enables the projected goal date. */
+  targetWeightKg?: number | null;
 }
 
 /**
@@ -133,6 +154,7 @@ interface UseMeasurementChartWidgetsArgs {
  */
 export function useMeasurementChartWidgets({
   measurementData = EMPTY_MEASUREMENTS,
+  targetWeightKg = null,
 }: UseMeasurementChartWidgetsArgs): Widget[] {
   const { t } = useTranslation();
   const {
@@ -147,6 +169,37 @@ export function useMeasurementChartWidgets({
     getEnergyUnitString,
     chartScaleMode,
   } = usePreferences();
+
+  // Trend is computed in kg (the stored unit) and converted for display.
+  const trendPoints = React.useMemo(
+    () =>
+      computeWeightTrend(
+        measurementData.flatMap((d) =>
+          d.weight ? [{ date: d.entry_date, weight: Number(d.weight) }] : []
+        )
+      ),
+    [measurementData]
+  );
+  const trendByDate = React.useMemo(
+    () => new Map(trendPoints.map((p) => [p.date, p.trend])),
+    [trendPoints]
+  );
+
+  const displayWeightUnit = weightUnit === 'st_lbs' ? 'lbs' : weightUnit;
+
+  // Kept in kg: the summary line passes these to `formatWeight`, which takes
+  // kg and converts to the user's unit itself. Converting here as well made
+  // an lbs user see the trend and rate times 2.2.
+  const weightTrendSummary = React.useMemo(() => {
+    const summary = summarizeWeightTrend(trendPoints);
+    if (!summary) return null;
+    const forecast = forecastGoalDate(trendPoints, targetWeightKg);
+    return {
+      currentTrend: summary.currentTrend,
+      weeklyRate: summary.weeklyRate,
+      forecastDate: forecast?.date ?? null,
+    };
+  }, [trendPoints, targetWeightKg]);
 
   const chartData = React.useMemo(() => {
     const rows = measurementData.map((d) => {
@@ -170,6 +223,14 @@ export function useMeasurementChartWidgets({
         ...extraCircumferenceValues,
         date: d.entry_date,
         rawWeight: d.weight,
+        rawWeightTrend: trendByDate.get(d.entry_date),
+        weightTrend: trendByDate.has(d.entry_date)
+          ? convertWeight(
+              trendByDate.get(d.entry_date)!,
+              'kg',
+              displayWeightUnit
+            )
+          : 0,
         rawNeck: d.neck,
         rawWaist: d.waist,
         rawHips: d.hips,
@@ -238,6 +299,8 @@ export function useMeasurementChartWidgets({
     return prepareTimeChartData(rows, chartScaleMode);
   }, [
     measurementData,
+    trendByDate,
+    displayWeightUnit,
     weightUnit,
     measurementUnit,
     energyUnit,
@@ -295,7 +358,7 @@ export function useMeasurementChartWidgets({
     setIsMounted(true);
   }, []);
 
-  const metrics = React.useMemo(() => {
+  const metrics = React.useMemo<MeasurementMetric[]>(() => {
     const extraCircumferenceMetrics = EXTRA_BODY_CIRCUMFERENCE_PARTS.map(
       (part, index) => ({
         key: part.key,
@@ -327,6 +390,8 @@ export function useMeasurementChartWidgets({
         stroke: '#e74c3c',
         icon: Scale,
         showHeaderIcon: true,
+        trendKey: 'weightTrend',
+        trendRawKey: 'rawWeightTrend',
         formatValue: (val: number) => formatWeight(val, weightUnit),
         axisTickFormat: (value: number) =>
           value.toFixed(getPrecision('weight', weightUnit)),
@@ -402,7 +467,7 @@ export function useMeasurementChartWidgets({
         axisTickFormat: (value: number) => value.toFixed(1),
       },
       {
-        key: METRIC_WIDGET_KEYS[6],
+        key: 'muscle_mass_kg',
         titleKey: 'reports.muscleMass',
         defaultTitle: 'Muscle Mass',
         dataKey: 'muscle_mass_kg',
@@ -419,7 +484,7 @@ export function useMeasurementChartWidgets({
           ),
       },
       {
-        key: METRIC_WIDGET_KEYS[7],
+        key: 'bone_mass_kg',
         titleKey: 'reports.boneMass',
         defaultTitle: 'Bone Mass',
         dataKey: 'bone_mass_kg',
@@ -436,7 +501,7 @@ export function useMeasurementChartWidgets({
           ),
       },
       {
-        key: METRIC_WIDGET_KEYS[8],
+        key: 'body_water_percentage',
         titleKey: 'reports.bodyWaterPercentage',
         defaultTitle: 'Body Water %',
         dataKey: 'body_water_percentage',
@@ -449,7 +514,7 @@ export function useMeasurementChartWidgets({
         axisTickFormat: (value: number) => value.toFixed(1),
       },
       {
-        key: METRIC_WIDGET_KEYS[9],
+        key: 'bmr',
         titleKey: 'reports.bmr',
         defaultTitle: 'BMR',
         dataKey: 'bmr',
@@ -519,6 +584,57 @@ export function useMeasurementChartWidgets({
                   )}
                   {t(metric.titleKey, metric.defaultTitle)} ({metric.unit})
                 </CardTitle>
+                {metric.trendKey && weightTrendSummary && (
+                  <p
+                    className="text-xs text-muted-foreground"
+                    data-testid="weight-trend-summary"
+                  >
+                    {(() => {
+                      const weight = formatWeight(
+                        weightTrendSummary.currentTrend,
+                        weightUnit
+                      );
+                      const rate =
+                        weightTrendSummary.weeklyRate !== null
+                          ? `${weightTrendSummary.weeklyRate > 0 ? '+' : ''}${formatWeight(
+                              weightTrendSummary.weeklyRate,
+                              weightUnit
+                            )}`
+                          : null;
+                      const date = weightTrendSummary.forecastDate
+                        ? formatDateInUserTimezone(
+                            weightTrendSummary.forecastDate,
+                            'PP'
+                          )
+                        : null;
+                      if (rate && date)
+                        return t(
+                          'reports.weightTrendRateAndForecast',
+                          'Trend {{weight}} · {{rate}} per week · Goal projected {{date}}',
+                          { weight, rate, date }
+                        );
+                      if (rate)
+                        return t(
+                          'reports.weightTrendWithRate',
+                          'Trend {{weight}} · {{rate}} per week',
+                          { weight, rate }
+                        );
+                      if (date)
+                        return t(
+                          'reports.weightTrendWithForecast',
+                          'Trend {{weight}} · Goal projected {{date}}',
+                          { weight, date }
+                        );
+                      return t(
+                        'reports.weightTrendSummary',
+                        'Trend {{weight}}',
+                        {
+                          weight,
+                        }
+                      );
+                    })()}
+                  </p>
+                )}
               </CardHeader>
               <CardContent
                 className={`grow min-h-0 ${isMaximized ? 'flex flex-col' : ''}`}
@@ -571,17 +687,24 @@ export function useMeasurementChartWidgets({
                         labelFormatter={(value) => formatDateForChart(value)}
                         formatter={(
                           _value: unknown,
-                          _name: unknown,
+                          name: unknown,
                           props: { payload?: Record<string, number> }
-                        ) => [
-                          props.payload &&
-                          props.payload[metric.rawKey] !== undefined
-                            ? metric.formatValue(
-                                props.payload[metric.rawKey] as number
-                              )
-                            : '-',
-                          t(metric.titleKey, metric.defaultTitle),
-                        ]}
+                        ) => {
+                          const isTrend = name === metric.trendKey;
+                          const rawKey = isTrend
+                            ? metric.trendRawKey!
+                            : metric.rawKey;
+                          return [
+                            props.payload && props.payload[rawKey] !== undefined
+                              ? metric.formatValue(
+                                  props.payload[rawKey] as number
+                                )
+                              : '-',
+                            isTrend
+                              ? t('reports.weightTrend', 'Trend')
+                              : t(metric.titleKey, metric.defaultTitle),
+                          ];
+                        }}
                         contentStyle={{
                           backgroundColor: 'hsl(var(--background))',
                         }}
@@ -594,6 +717,17 @@ export function useMeasurementChartWidgets({
                         dot={false}
                         isAnimationActive={false}
                       />
+                      {metric.trendKey && (
+                        <Line
+                          type="monotone"
+                          dataKey={metric.trendKey}
+                          stroke="hsl(var(--foreground))"
+                          strokeWidth={2}
+                          strokeDasharray="5 3"
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      )}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -690,6 +824,8 @@ export function useMeasurementChartWidgets({
     isMounted,
     metrics,
     chartData,
+    weightTrendSummary,
+    weightUnit,
     t,
     formatDateForChart,
     formatDateInUserTimezone,

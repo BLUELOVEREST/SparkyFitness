@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import {
   buildTrainingFocusOptionsFromTemplates,
   CUSTOM_TRAINING_FOCUS_VALUE,
   getDayName,
+  getTrainingFocusLabel,
   resolveTrainingFocusValue,
   setPrimaryTrainingFocusSession,
   TRAINING_FOCUS_TIME_SLOTS,
@@ -69,6 +71,7 @@ function focusSessionKey(dayOfWeek: number, timeSlot: TrainingFocusTimeSlot) {
 const WorkoutPlanTemplateFormScreen: React.FC<
   WorkoutPlanTemplateFormScreenProps
 > = ({ navigation, route }) => {
+  const { t: translateFocus } = useTranslation();
   const insets = useSafeAreaInsets();
   const activeWorkoutBarPadding = useActiveWorkoutBarPadding();
   const { preferences } = usePreferences();
@@ -87,7 +90,7 @@ const WorkoutPlanTemplateFormScreen: React.FC<
     return t('workoutPlan.summaryLine', {
       defaultValue: '{{day}} · {{sessions}} · Main: {{slot}}',
       day: dayLabel,
-      sessions: t('workoutPlan.sessionCount', {
+      sessions: translateFocus('workoutPlan.sessionCount', {
         defaultValue: '{{count}} sessions',
         count: activeSessions.length,
       }),
@@ -395,10 +398,17 @@ const WorkoutPlanTemplateFormScreen: React.FC<
                   {session?.is_primary
                     ? t('workoutPlan.mainPrefix', {
                         defaultValue: 'Main · {{focus}}',
-                        focus: session.training_focus,
+                        focus: getTrainingFocusLabel(
+                          session.training_focus,
+                          session.training_focus,
+                          translateFocus
+                        ),
                       })
-                    : (session?.training_focus ??
-                      t('workoutPlan.rest', { defaultValue: 'rest' }))}
+                    : getTrainingFocusLabel(
+                        session?.training_focus ?? 'rest',
+                        session?.training_focus ?? '',
+                        translateFocus
+                      )}
                 </Text>
               </Pressable>
             );
@@ -424,7 +434,11 @@ const WorkoutPlanTemplateFormScreen: React.FC<
                     isSelected ? 'text-white' : 'text-text-primary'
                   }`}
                 >
-                  {option.label}
+                  {getTrainingFocusLabel(
+                    option.value,
+                    option.label,
+                    translateFocus
+                  )}
                 </Text>
               </Pressable>
             );

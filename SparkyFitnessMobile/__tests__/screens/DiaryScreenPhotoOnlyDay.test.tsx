@@ -12,6 +12,14 @@ import type { CheckInPhoto } from '../../src/types/checkInPhotos';
 jest.mock('../../src/hooks', () => ({
   useServerConnection: () => ({ isConnected: true }),
   useDailySummary: jest.fn(),
+  useActiveMealPlanDay: () => ({
+    activeMealPlanDay: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: jest.fn(),
+  }),
+  useLogActiveMealPlanMeal: () => ({ mutate: jest.fn(), isPending: false }),
   useCustomNutrients: () => ({ customNutrients: [] }),
   useNutrientDisplayPreferences: () => ({ preferences: [] }),
   useMealTypes: () => ({ mealTypes: [], isLoading: false, isError: false }),

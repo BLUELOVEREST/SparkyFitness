@@ -25,6 +25,7 @@ import type {
 } from '@/types/goals';
 import { DEFAULT_GOALS } from '@/constants/goals';
 
+import i18n from 'i18next';
 // --- DAILY GOALS ---
 
 export const useDailyGoals = (date: string) => {
@@ -60,7 +61,10 @@ export const useGoalPresets = () => {
     queryKey: goalKeys.presets.all(),
     queryFn: getGoalPresets,
     meta: {
-      errorMessage: 'Failed to load goal presets.',
+      errorMessage: i18n.t(
+        'hooks.useGoals.failedToLoadGoalPresets',
+        'Failed to load goal presets.'
+      ),
     },
   });
 };
@@ -179,7 +183,10 @@ export const useWeeklyGoalPlans = () => {
     queryKey: goalKeys.plans.all(),
     queryFn: getWeeklyGoalPlans,
     meta: {
-      errorMessage: 'Failed to load weekly plans.',
+      errorMessage: i18n.t(
+        'hooks.useGoals.failedToLoadWeeklyPlans',
+        'Failed to load weekly plans.'
+      ),
     },
   });
 };

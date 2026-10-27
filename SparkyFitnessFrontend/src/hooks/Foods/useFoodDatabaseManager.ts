@@ -196,10 +196,10 @@ export function useFoodDatabaseManager() {
     if (type === 'food') {
       toast({
         title: t('common.success', 'Success'),
-        description: t(
-          'foodDatabaseManager.foodImported',
-          `${(item as Food).name} has been added to your Food Database.`
-        ),
+        description: t('foodDatabaseManager.foodImported', {
+          name: item.name,
+          defaultValue: '{{name}} has been added to your Food Database.',
+        }),
       });
     }
   };

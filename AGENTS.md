@@ -1,6 +1,6 @@
 # AGENTS.md
 
-*Last updated: 2026-10-05*
+*Last updated: 2026-10-27*
 
 This is the repo-root monorepo guide for SparkyFitness. Use it to choose the right package, understand shared repo-level rules, and find the next guide to read.
 
@@ -46,8 +46,57 @@ For `docs/` and `SparkyFitnessGarmin/`, there is no package-level `AGENTS.md`. `
 
 - `pnpm-workspace.yaml` currently lists `frontend`, `SparkyFitnessFrontend`, `shared`, `SparkyFitnessMobile`, `SparkyFitnessServer`, and `docs`.
 - Only `SparkyFitnessFrontend/` exists on disk right now; treat `frontend` as a legacy workspace entry unless the task is specifically about workspace cleanup.
-- `shared/` is a library package, not an app. Validate shared changes from the consuming package(s), not in isolation.
+- `shared/` is a library package, not an app; its `pnpm run validate` runs typecheck, a hardcoded-string audit, and the Prettier check. CI runs that in a `Shared Validate` job and also re-runs the frontend, mobile, and server jobs whenever `shared/` changes, so validate shared changes from the consuming package(s), not in isolation.
 - `SparkyFitnessGarmin/` is outside the current workspace. Inspect its own manifest and scripts before working there.
+
+## Eric Development, Releases, and Deployment
+
+These fork-specific rules supplement the upstream package guides.
+
+### Development and Upstream Merges
+
+- The development mainline is `sparky-custom-eric-flow`, not the Git branch named `main`. Edit the upstream source packages directly; no `external/` checkout is required.
+- Gitea `origin`: `https://gitea.blueloverest.site:44443/zhangzhicheng/eric-sparkyfitness.git`.
+- GitHub APK remote: `git@github.com:BLUELOVEREST/SparkyFitness.git`. Official upstream: `https://github.com/CodeWithCJ/SparkyFitness.git`.
+- Merge a selected official release tag in an isolated worktree and an upgrade branch based on the development mainline. Resolve conflicts and validate there before merging back into `sparky-custom-eric-flow`.
+- Preserve Eric customizations, including carb-cycle planning, Grocy, added circumference fields, AI profiles, and hydration widgets. Adapt their implementation to upstream architecture, i18n, and build requirements.
+- Preserve upstream translations. For Simplified Chinese translation conflicts, upstream text wins; custom translation enhancements supplement upstream text rather than replace existing translations. Do not use blanket whole-file "ours" conflict resolution.
+- Preserve upstream translations, including official translation fixes. The user accepted the six known v1.8.0 German placeholder errors during that upgrade; v1.9.0 fixes those upstream, so retain the official fix.
+- Known v1.9.0 mobile audit failure: `zh-Hans` and `zh-Hant` duplicate `done` in `recordActivity.program.paused`. Keep these official catalogs unchanged and report the failure; do not disable the audit or claim full mobile validation passes.
+- Ask the user about unresolved semantic conflicts, data-model decisions, or removal of custom behavior. Routine adaptations to established upstream conventions can proceed.
+- Run the affected packages' validation and tests, report remaining failures, and complete local acceptance before production deployment.
+
+### Version and Build Rules
+
+- Release tags use `v<upstream-version>-eric.<global-release-number>`, for example `v1.8.0-eric.58`.
+- Increment the Eric release number for each new release; never reset it when the upstream version changes. Inspect existing local and remote tags before choosing the next number.
+- Published tags are immutable. A fix gets a new tag rather than overwriting an existing release.
+- Frontend, server, and APK artifacts belonging to one release use the same tag.
+- Push the release tag to Gitea for frontend/server images and to GitHub for APK builds when those builds are requested. Check the workflows and confirm the pushes actually succeeded.
+- Registry repositories are independent of the Git repository name: `192.168.200.101:54453/zhangzhicheng/sparkyfitness` (frontend) and `192.168.200.101:54453/zhangzhicheng/sparkyfitness-server` (server).
+- Gitea builds the container images; local and production machines pull and run those images. Do not start expensive local APK builds unless requested.
+
+### Local Test Environment
+
+- Deployment directory: `/home/zhangzhicheng/workspace/own/eric-sparkyfitness-test`.
+- Compose project name: `eric-sparkyfitness-test`. Its `docker-compose.yml`, `.env`, and persistent `data/` live in that directory, outside this source repository.
+- Wired LAN address: `192.168.200.118`. Web UI: `http://192.168.200.118:3006/`; direct server API: `http://192.168.200.118:3016/api`.
+- Containers: `sparkyfitness-test-frontend`, `sparkyfitness-test-server`, and `sparkyfitness-test-postgres`.
+- Set `SPARKY_CUSTOM_VERSION` in the test `.env` to the intended release before deployment; do not leave an old version hidden behind a one-off shell override.
+- From the test directory, use `docker compose -p eric-sparkyfitness-test --env-file .env -f docker-compose.yml pull` and then `docker compose -p eric-sparkyfitness-test --env-file .env -f docker-compose.yml up -d`.
+- Verify container image tags, health, the web page, and the frontend-proxied `/api/health`. Preserve test database and uploads when updating images.
+- The previous deployment directory was `eric-body-tracker-test` (later moved under `own/archived/`). It is no longer the active deployment directory.
+
+### Production Environment
+
+- SSH host: `ubuntu-nas`; NAS LAN IP: `192.168.200.101`.
+- Deployment directory: `/share/CACHEDEV1_DATA/Container/container-station-data/appdata/eric-sparkyfitness`.
+- LAN entry point: `http://192.168.200.101:8800/`. Frontend and API share this entry point through the frontend proxy.
+- Public entry point: `https://health.blueloverest.site:44443/`, behind Nginx Proxy Manager.
+- Inspect the production Compose configuration and running image tags before changing anything. Do not infer the deployed version from the latest Git tag.
+- Before an upgrade or migration, make and verify a database backup, preserve uploads, and retain the previous image tags and deployment configuration needed for recovery. Keep backups and secrets outside Git history.
+- Deploy the locally accepted release via Docker Compose without deleting persistent data or using `down -v`. A database migration can require restoring its backup for rollback; switching image tags alone may be insufficient.
+- Verify startup/migration logs, container health, web/API access, and relevant user data after deployment. Production and test databases remain separate.
 
 ## Agent Efficiency (read this before searching)
 

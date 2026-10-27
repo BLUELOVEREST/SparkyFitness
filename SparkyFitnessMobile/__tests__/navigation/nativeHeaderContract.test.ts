@@ -7,6 +7,15 @@ const NATIVE_TABS_ROUTE_EXCLUSIONS = {
   Onboarding: 'First-run setup route shown before the tab host exists.',
   FoodsLibrary: 'Root-stack library drill-in presented above the tab host.',
   MealsLibrary: 'Root-stack library drill-in presented above the tab host.',
+  Kitchen: 'Eric meal-preparation drill-in presented above the tab host.',
+  MealPlanTemplates:
+    'Eric carb-cycle plan library presented above the tab host.',
+  MealPlanTemplateForm:
+    'Eric carb-cycle plan editor presented above the tab host.',
+  WorkoutPlanTemplates:
+    'Eric training-focus plan library presented above the tab host.',
+  WorkoutPlanTemplateForm:
+    'Eric training-focus plan editor presented above the tab host.',
   ExercisesLibrary: 'Root-stack library drill-in presented above the tab host.',
   WorkoutPresetsLibrary:
     'Root-stack library drill-in presented above the tab host.',
@@ -55,6 +64,8 @@ const NATIVE_TABS_ROUTE_EXCLUSIONS = {
   MeasurementsAdd: 'Root-stack measurement modal presented from the tab host.',
   CalorieSettings: 'Root-stack settings route presented above the tab host.',
   FoodSettings: 'Root-stack settings route presented above the tab host.',
+  AllergenSettings: 'Root-stack settings route presented above the tab host.',
+  ChatSettings: 'Root-stack voice settings route presented above the tab host.',
   DashboardSettings: 'Root-stack settings route presented above the tab host.',
   WorkoutSettings: 'Root-stack settings route presented above the tab host.',
   ServerSettings: 'Root-stack settings route presented above the tab host.',
@@ -311,11 +322,8 @@ function getStackScreenBlock(
   const start = source.lastIndexOf('<Stack.Screen', routeIndex);
   if (start === -1) return undefined;
 
-  const nextScreen = source.indexOf('\n          <Stack.Screen', routeIndex);
-  const navigatorEnd = source.indexOf(
-    '\n        </Stack.Navigator>',
-    routeIndex
-  );
+  const nextScreen = source.indexOf('<Stack.Screen', routeIndex);
+  const navigatorEnd = source.indexOf('</Stack.Navigator>', routeIndex);
   const candidates = [nextScreen, navigatorEnd].filter((index) => index !== -1);
   const end = candidates.length > 0 ? Math.min(...candidates) : source.length;
 

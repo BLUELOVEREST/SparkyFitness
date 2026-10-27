@@ -14,16 +14,22 @@ describe('foodDetailFetch', () => {
     expect(shouldFetchFoodDetailsBeforeEdit(food)).toBe(true);
   });
 
-  it('does not fetch details for local Grocy foods', () => {
+  it('uses the shared registry to fetch details for local Grocy foods', () => {
     expect(
       shouldFetchFoodDetailsBeforeEdit({
         provider_type: 'grocy',
         provider_external_id: '42',
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('keeps existing provider detail fetch behavior', () => {
+    expect(
+      shouldFetchFoodDetailsBeforeEdit({
+        provider_type: 'livsmedelsverket',
+        provider_external_id: '123',
+      })
+    ).toBe(true);
     expect(
       shouldFetchFoodDetailsBeforeEdit({
         provider_type: 'usda',

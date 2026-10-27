@@ -1512,16 +1512,23 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                           <span className="font-medium">
                             {dailyTotals.totalCalories.toFixed(0)} kcal
                           </span>
+
                           <span className="text-green-500">
-                            {t('mealPlanTemplateForm.carbsShort', 'C:')}{' '}
-                            {dailyTotals.totalCarbs.toFixed(1)}g
+                            {t(
+                              'mealPlanTemplateForm.cTotalCarbsg',
+                              'C: {{totalCarbs}}g',
+                              { totalCarbs: dailyTotals.totalCarbs.toFixed(1) }
+                            )}
                           </span>
                           <span className="text-blue-500">
                             P: {dailyTotals.totalProtein.toFixed(1)}g
                           </span>
                           <span className="text-yellow-500">
-                            {t('mealPlanTemplateForm.fatShort', 'F:')}{' '}
-                            {dailyTotals.totalFat.toFixed(1)}g
+                            {t(
+                              'mealPlanTemplateForm.fTotalFatg',
+                              'F: {{totalFat}}g',
+                              { totalFat: dailyTotals.totalFat.toFixed(1) }
+                            )}
                           </span>
                         </div>
                       </div>

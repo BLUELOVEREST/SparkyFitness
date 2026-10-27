@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { isBuiltInTrainingFocus } from '@workspace/shared';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 import { Input } from '@/components/ui/input';
@@ -644,7 +645,16 @@ const AddWorkoutPlanDialog = ({
                                       key={option.value}
                                       value={option.value}
                                     >
-                                      {option.label}
+                                      {isBuiltInTrainingFocus(option.value) ||
+                                      option.value ===
+                                        CUSTOM_TRAINING_FOCUS_VALUE
+                                        ? t(
+                                            `workoutPlan.trainingFocus.${option.value}`,
+                                            {
+                                              defaultValue: option.label,
+                                            }
+                                          )
+                                        : option.label}
                                     </option>
                                   ))}
                                 </select>

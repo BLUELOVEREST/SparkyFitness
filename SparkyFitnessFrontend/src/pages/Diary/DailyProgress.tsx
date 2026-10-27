@@ -427,8 +427,11 @@ const DailyProgress = ({
                 <span>{display.eaten}</span>
               </div>
               <div className="text-xs text-gray-500 whitespace-nowrap">
-                {getEnergyUnitString(energyUnit)}{' '}
-                {t('exercise.dailyProgress.eaten', 'eaten')}
+                {t(
+                  'exercise.dailyProgress.eaten2',
+                  '{{energyUnitString}} eaten',
+                  { energyUnitString: getEnergyUnitString(energyUnit) }
+                )}
               </div>
             </div>
 
@@ -496,11 +499,15 @@ const DailyProgress = ({
                       </p>
                     )}
 
-                    {bmr && (
+                    {!!bmr && (
                       <p>
                         {t(
-                          'exercise.dailyProgress.bmrCalories',
-                          'BMR: {{bmr}} {{energyUnit}}',
+                          bmrSource === 'measured'
+                            ? 'exercise.dailyProgress.bmrMeasured'
+                            : 'exercise.dailyProgress.bmrAlgorithm',
+                          bmrSource === 'measured'
+                            ? 'BMR: {{bmr}} {{energyUnit}} (Measured)'
+                            : 'BMR: {{bmr}} {{energyUnit}} (Algorithm)',
                           {
                             bmr: display.bmr,
                             energyUnit: getEnergyUnitString(energyUnit),
@@ -539,8 +546,11 @@ const DailyProgress = ({
                 </span>
               </div>
               <div className="text-xs dark:text-slate-400 text-gray-500 whitespace-nowrap">
-                {getEnergyUnitString(energyUnit)}{' '}
-                {t('exercise.dailyProgress.goal', 'goal')}
+                {t(
+                  'exercise.dailyProgress.goal2',
+                  '{{energyUnitString}} goal',
+                  { energyUnitString: getEnergyUnitString(energyUnit) }
+                )}
               </div>
             </div>
           </div>
@@ -596,19 +606,20 @@ const DailyProgress = ({
                 </div>
               )}
 
-              {bmr && (
+              {!!bmr && (
                 <div className="text-xs text-blue-600">
                   {t(
-                    'exercise.dailyProgress.bmrCalories',
-                    'BMR: {{bmr}} {{energyUnit}}',
+                    bmrSource === 'measured'
+                      ? 'exercise.dailyProgress.bmrMeasured'
+                      : 'exercise.dailyProgress.bmrAlgorithm',
+                    bmrSource === 'measured'
+                      ? 'BMR: {{bmr}} {{energyUnit}} (Measured)'
+                      : 'BMR: {{bmr}} {{energyUnit}} (Algorithm)',
                     {
                       bmr: display.bmr,
                       energyUnit: getEnergyUnitString(energyUnit),
                     }
                   )}
-                  {bmrSource === 'measured'
-                    ? ` (${t('exercise.dailyProgress.bmrSourceMeasured', 'Measured')})`
-                    : ` (${t('exercise.dailyProgress.bmrSourceAlgorithm', 'Algorithm')})`}
                 </div>
               )}
             </div>
@@ -702,8 +713,9 @@ const DailyProgress = ({
                     {t('exercise.dailyProgress.dataPoints', 'Data Points')}
                   </span>
                   <span className="font-semibold text-gray-800 dark:text-slate-200">
-                    {adaptiveTdeeData.daysOfData || 0}{' '}
-                    {t('exercise.dailyProgress.days', 'days')}
+                    {t('exercise.dailyProgress.days2', '{{daysOfData}} days', {
+                      daysOfData: adaptiveTdeeData.daysOfData || 0,
+                    })}
                   </span>
                 </div>
               </div>

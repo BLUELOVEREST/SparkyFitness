@@ -8,6 +8,40 @@ function read(relativePath: string): string {
 }
 
 describe('Android hydration widget registration', () => {
+  it('keeps official Water separate from all four Eric hydration providers', () => {
+    const plugin = read('plugins/withCalorieWidget.ts');
+    for (const receiver of [
+      'HydrationWidgetReceiver',
+      'HydrationWidgetQuickAddReceiver',
+      'HydrationWidgetMediumReceiver',
+      'HydrationWidgetLargeReceiver',
+      'WaterWidgetReceiver',
+    ]) {
+      expect(plugin.match(new RegExp(`\\.${receiver}\\x60`, 'g'))).toHaveLength(
+        1
+      );
+    }
+    const widget = read(
+      'targets/android-widget/kotlin/com/sparkyapps/sparkyfitness/widget/HydrationWidget.kt.tmpl'
+    );
+    for (const amount of [250, 350, 500, -250]) {
+      expect(widget).toContain(`, ${amount}, GlanceModifier.defaultWeight()`);
+    }
+  });
+
+  it('clears both water families, including Eric action credentials, on account changes', () => {
+    const bridge = read(
+      'targets/android-widget/kotlin/com/sparkyapps/sparkyfitness/widget/CalorieWidgetModule.kt.tmpl'
+    );
+    const clear = bridge.slice(
+      bridge.indexOf('fun clearSnapshots('),
+      bridge.indexOf('private suspend fun clearWaterWidget(')
+    );
+    expect(clear).toContain('HydrationWidgetReceiver.PREFS_KEY_SNAPSHOT');
+    expect(clear).toContain('HydrationWidget.SNAPSHOT_STATE_KEY');
+    expect(clear).toContain('clearWaterWidget(ctx)');
+  });
+
   it('registers a 1x1 quick-add hydration widget provider and receiver', () => {
     const plugin = read('plugins/withCalorieWidget.ts');
     const strings = read(

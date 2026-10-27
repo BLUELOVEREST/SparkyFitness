@@ -1,5 +1,6 @@
 import {
   fetchMeasurements,
+  fetchWaterIntakeRange,
   fetchWaterContainers,
   changeWaterIntake,
   adjustWaterIntakeAmount,
@@ -207,7 +208,7 @@ describe('measurementsApi', () => {
     });
   });
 
-  describe('fetchWaterIntake', () => {
+  describe('fetchWaterIntakeRange', () => {
     const testConfig: ServerConfig = {
       id: 'test-id',
       url: 'https://example.com',
@@ -219,22 +220,22 @@ describe('measurementsApi', () => {
     test('throws error when no server config exists', async () => {
       mockGetActiveServerConfig.mockResolvedValue(null);
 
-      await expect(fetchWaterIntake(testDate)).rejects.toThrow(
+      await expect(fetchWaterIntakeRange(testDate, testDate)).rejects.toThrow(
         'Server configuration not found.'
       );
     });
 
-    test('sends GET request to /api/measurements/water-intake/:date', async () => {
+    test('sends an authenticated GET request for a single-day water range', async () => {
       mockGetActiveServerConfig.mockResolvedValue(testConfig);
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ water_ml: 750 }),
+        json: () => Promise.resolve([{ entry_date: testDate, water_ml: 750 }]),
       });
 
-      await fetchWaterIntake(testDate);
+      await fetchWaterIntakeRange(testDate, testDate);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://example.com/api/measurements/water-intake/2024-06-15',
+        'https://example.com/api/measurements/water-intake-range/2024-06-15/2024-06-15',
         expect.objectContaining({
           method: 'GET',
           headers: {
@@ -247,14 +248,14 @@ describe('measurementsApi', () => {
     });
 
     test('returns parsed JSON response on success', async () => {
-      const responseData = { water_ml: 1500 };
+      const responseData = [{ entry_date: testDate, water_ml: 1500 }];
       mockGetActiveServerConfig.mockResolvedValue(testConfig);
       mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(responseData),
       });
 
-      const result = await fetchWaterIntake(testDate);
+      const result = await fetchWaterIntakeRange(testDate, testDate);
 
       expect(result).toEqual(responseData);
     });
@@ -267,8 +268,20 @@ describe('measurementsApi', () => {
         text: () => Promise.resolve('Not Found'),
       });
 
-      await expect(fetchWaterIntake(testDate)).rejects.toThrow(
+      await expect(fetchWaterIntakeRange(testDate, testDate)).rejects.toThrow(
         'Server error: 404 - Not Found'
+      );
+    });
+
+    test('keeps days without logged water absent instead of fabricating a zero total', async () => {
+      mockGetActiveServerConfig.mockResolvedValue(testConfig);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve([]),
+      });
+
+      await expect(fetchWaterIntakeRange(testDate, testDate)).resolves.toEqual(
+        []
       );
     });
   });

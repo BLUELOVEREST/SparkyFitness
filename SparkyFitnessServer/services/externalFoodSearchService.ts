@@ -21,6 +21,8 @@ import { searchCanadianNutrientFoods } from '../integrations/cnf/cnfService.js';
 import { searchChinaFoodCompositionFoods } from '../integrations/chinafood/chinaFoodCompositionService.js';
 import { searchBooheeFoods } from '../integrations/boohee/booheeService.js';
 import { searchGrocyFoods } from '../integrations/grocy/grocyFoodService.js';
+import { searchLivsmedelsverketFoods } from '../integrations/livsmedelsverket/livsmedelsverketService.js';
+import { isPublicFoodProvider } from '@workspace/shared';
 import {
   searchFatSecretFoods,
   getFatSecretNutrients,
@@ -105,15 +107,7 @@ export async function resolveProviderCredentials(
   providerId: string | undefined,
   providerType: ProviderType
 ): Promise<ProviderCredentials> {
-  if (providerType === 'openfoodfacts') {
-    return {};
-  }
-
-  if (
-    (providerType === 'swissfood' ||
-      providerType === 'canadian-nutrient-file') &&
-    !providerId
-  ) {
+  if (isPublicFoodProvider(providerType) && !providerId) {
     return {};
   }
 
@@ -550,6 +544,18 @@ export async function searchProviderFoods(
         page,
         pageSize,
         includeExternal
+      );
+      foods = result.foods || [];
+      pagination = result.pagination;
+      break;
+    }
+    case 'livsmedelsverket': {
+      const result = await searchLivsmedelsverketFoods(
+        query,
+        page,
+        pageSize,
+        language,
+        credentials.base_url || undefined
       );
       foods = result.foods || [];
       pagination = result.pagination;

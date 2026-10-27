@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 export const dailyGoalsResponseSchema = z.object({
   calories: z.number(),
@@ -23,6 +23,7 @@ export const dailyGoalsResponseSchema = z.object({
   alcohol_g: z.number().nullable().optional(),
   target_exercise_calories_burned: z.number(),
   target_exercise_duration_minutes: z.number(),
+  target_steps: z.number().nullable().optional(),
   protein_percentage: z.number().nullable(),
   carbs_percentage: z.number().nullable(),
   fat_percentage: z.number().nullable(),
@@ -30,16 +31,22 @@ export const dailyGoalsResponseSchema = z.object({
   lunch_percentage: z.number(),
   dinner_percentage: z.number(),
   snacks_percentage: z.number(),
-  custom_nutrients: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  custom_nutrients: z
+    .record(z.string(), z.union([z.string(), z.number()]))
+    .optional(),
   custom_meal_percentages: z.record(z.string(), z.number()).optional(),
-  meal_macro_targets: z.array(z.object({
-    slotKey: z.string(),
-    label: z.string(),
-    calories: z.number(),
-    protein: z.number(),
-    carbs: z.number(),
-    fat: z.number(),
-  })).optional(),
+  meal_macro_targets: z
+    .array(
+      z.object({
+        slotKey: z.string(),
+        label: z.string(),
+        calories: z.number(),
+        protein: z.number(),
+        carbs: z.number(),
+        fat: z.number(),
+      })
+    )
+    .optional(),
 });
 
 export type DailyGoalsResponse = z.infer<typeof dailyGoalsResponseSchema>;

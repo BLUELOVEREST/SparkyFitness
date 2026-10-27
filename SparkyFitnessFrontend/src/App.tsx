@@ -45,6 +45,7 @@ import {
 import { error as logError } from '@/utils/logging';
 import { getUserLoggingLevel } from '@/utils/userPreferences.ts';
 import { lazyWithChunkRecovery } from '@/utils/chunkRecovery';
+import { useTranslation } from 'react-i18next';
 const Auth = lazyWithChunkRecovery(() => import('@/pages/Auth/Auth'));
 const ForgotPassword = lazyWithChunkRecovery(
   () => import('@/pages/Auth/ForgotPassword')
@@ -71,6 +72,9 @@ const CyclePage = lazyWithChunkRecovery(
 );
 const ExerciseDatabaseManager = lazyWithChunkRecovery(
   () => import('./pages/Exercises/Exercises')
+);
+const TrainingPrograms = lazyWithChunkRecovery(
+  () => import('./pages/Exercises/TrainingPrograms/TrainingPrograms')
 );
 const WorkoutPlaybackPage = lazyWithChunkRecovery(
   () => import('./pages/Diary/WorkoutPlaybackPage')
@@ -112,12 +116,13 @@ const StravaCallback = lazyWithChunkRecovery(
 );
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
+  const { t } = useTranslation();
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        Loading...
+        {t('common.loading', 'Loading...')}
       </div>
     );
   }
@@ -144,6 +149,7 @@ export const ComponentFallback = () => {
   return <></>;
 };
 const Root = () => {
+  const { t } = useTranslation();
   const [showAboutDialog, setShowAboutDialog] = useState(false);
   const [latestRelease, setLatestRelease] = useState<ReleaseInfo | null>(null);
   const [showNewReleaseDialog, setShowNewReleaseDialog] = useState(false);
@@ -194,7 +200,7 @@ const Root = () => {
                 <Suspense
                   fallback={
                     <div className="min-h-screen flex items-center justify-center">
-                      Loading Site...
+                      {t('app.loadingSite', 'Loading Site...')}
                     </div>
                   }
                 >
@@ -411,6 +417,11 @@ const router = createBrowserRouter([
           {
             path: 'exercises',
             Component: ExerciseDatabaseManager,
+            ErrorBoundary: RouteErrorBoundary,
+          },
+          {
+            path: 'exercises/training-programs',
+            Component: TrainingPrograms,
             ErrorBoundary: RouteErrorBoundary,
           },
           {

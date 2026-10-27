@@ -5,7 +5,11 @@ import { VariantCard } from '@/components/FoodSearch/VariantCard';
 import type { FoodVariant } from '@/types/food';
 
 jest.mock('@/components/FoodSearch/NutrientFormGrid', () => ({
-  NutrientGrid: () => <div data-testid="nutrient-grid" />,
+  NutrientGrid: () => (
+    <div data-testid="nutrient-grid">
+      <input aria-label="Test calories" />
+    </div>
+  ),
 }));
 
 jest.mock('@/components/FoodUnitSelector/AiEstimateSection', () => ({
@@ -121,6 +125,7 @@ const renderVariantCard = ({
   aiEstimateAnchorUnit = null,
   aiEstimatesAvailable = false,
   isExpanded = true,
+  nutritionReadOnly = false,
 }: {
   showCompatibleUnitIndicators?: boolean;
   variantOverrides?: Partial<FoodVariant>;
@@ -133,11 +138,13 @@ const renderVariantCard = ({
   aiEstimateAnchorUnit?: string | null;
   aiEstimatesAvailable?: boolean;
   isExpanded?: boolean;
+  nutritionReadOnly?: boolean;
 } = {}) =>
   render(
     <VariantCard
       index={0}
       variant={createVariant(variantOverrides)}
+      nutritionReadOnly={nutritionReadOnly}
       variantError=""
       visibleNutrients={['calories']}
       energyUnit="kcal"
@@ -183,6 +190,15 @@ describe('VariantCard', () => {
     expect(screen.queryByTestId('nutrient-grid')).not.toBeInTheDocument();
   });
 
+  it('makes calculated portion nutrition read-only while retaining serving controls', () => {
+    renderVariantCard({ nutritionReadOnly: true });
+    expect(screen.getByLabelText('Test calories')).toBeDisabled();
+    expect(
+      screen.getByText(
+        'Nutrition is calculated from the reference unit. Edit that unit to change nutrition.'
+      )
+    ).toBeInTheDocument();
+  });
   it('shows a trusted manual-path checkmark for cross-category units', () => {
     renderVariantCard({
       variantOverrides: { serving_unit: 'g', source: 'manual' },

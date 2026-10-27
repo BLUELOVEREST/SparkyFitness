@@ -3,6 +3,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 import FoodSummary from '../../src/components/FoodSummary';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import type { ActiveMealPlanDayMeal } from '../../src/types/mealPlan';
+import type { MealType } from '../../src/types/mealTypes';
 
 jest.mock('uniwind', () => ({
   useCSSVariable: () => '#2563EB',
@@ -46,6 +47,17 @@ const plannedMeal: ActiveMealPlanDayMeal = {
 const mockUsePreferences = usePreferences as jest.MockedFunction<
   typeof usePreferences
 >;
+const mealTypes: MealType[] = [
+  {
+    id: plannedMeal.mealTypeId!,
+    name: 'Pre-Workout',
+    sort_order: 0,
+    user_id: 'plan-owner',
+    created_at: '2026-07-15T00:00:00Z',
+    is_visible: true,
+    show_in_quick_log: true,
+  },
+];
 
 describe('FoodSummary planned meals', () => {
   beforeEach(() => {
@@ -62,6 +74,7 @@ describe('FoodSummary planned meals', () => {
     const onLogPlannedMeal = jest.fn();
     const { getByText, queryByText } = render(
       <FoodSummary
+        mealTypes={mealTypes}
         foodEntries={[]}
         plannedMeals={[plannedMeal]}
         onLogPlannedMeal={onLogPlannedMeal}
@@ -78,14 +91,17 @@ describe('FoodSummary planned meals', () => {
   });
 
   it('labels logged entries with the planned dynamic meal name', () => {
+    const onPressMealType = jest.fn();
     const { getByText, queryByText } = render(
       <FoodSummary
+        mealTypes={mealTypes}
+        onPressMealType={onPressMealType}
         plannedMeals={[{ ...plannedMeal, logged: true }]}
         foodEntries={[
           {
             id: 'entry-rice',
             food_id: 'food-rice',
-            meal_type: 'Pre-Workout',
+            meal_type: 'Historical pre-workout name',
             meal_type_id: 'meal-type-pre-workout',
             quantity: 180,
             unit: 'g',
@@ -104,12 +120,19 @@ describe('FoodSummary planned meals', () => {
     expect(getByText('Target: C 60g / P 30g / F 5g')).toBeTruthy();
     expect(queryByText('Other')).toBeNull();
     expect(queryByText('Logged from Plan')).toBeNull();
+    fireEvent.press(getByText('Pre-Workout'));
+    expect(onPressMealType).toHaveBeenCalledWith(
+      'meal-type-pre-workout',
+      'Pre-Workout',
+      expect.arrayContaining([expect.objectContaining({ id: 'entry-rice' })])
+    );
   });
 
   it('disables logging for already logged planned meals without matching entries', () => {
     const onLogPlannedMeal = jest.fn();
     const { getByText } = render(
       <FoodSummary
+        mealTypes={mealTypes}
         plannedMeals={[{ ...plannedMeal, logged: true }]}
         foodEntries={[]}
         onLogPlannedMeal={onLogPlannedMeal}
@@ -132,6 +155,7 @@ describe('FoodSummary planned meals', () => {
 
     const { getByText } = render(
       <FoodSummary
+        mealTypes={mealTypes}
         plannedMeals={[plannedMeal]}
         foodEntries={[]}
         onLogPlannedMeal={jest.fn()}

@@ -15,18 +15,18 @@ export const MEASUREMENT_PRECISION = {
   measurement: {
     cm: 1, // 0.1 cm resolution for waist/neck/etc.
     inches: 1,
-    "%": 1, // Body fat, etc.
+    '%': 1, // Body fat, etc.
     bpm: 0, // Heart rate
     mmHg: 0, // Blood pressure
-    "°C": 1, // Temperature
-    "°F": 1, // Temperature
+    '°C': 1, // Temperature
+    '°F': 1, // Temperature
     step: 0,
     count: 0,
     kcal: 0, // Calories
     g: 1, // Macros (Proteins/Carbs/Fats)
-    "mg/dL": 0, // Blood Glucose (US)
-    "mmol/L": 1, // Blood Glucose (International)
-    "ml/kg/min": 1, // VO2 Max
+    'mg/dL': 0, // Blood Glucose (US)
+    'mmol/L': 1, // Blood Glucose (International)
+    'ml/kg/min': 1, // VO2 Max
     W: 0, // Power
     rpm: 0, // Cadence (Cyclist)
     spm: 0, // Cadence (Runner)
@@ -41,39 +41,39 @@ export type MeasurementType = keyof typeof MEASUREMENT_PRECISION;
 export type MeasurementUnit<T extends MeasurementType> =
   keyof (typeof MEASUREMENT_PRECISION)[T];
 
+// Labels are stable measurement display_name identifiers; apps translate their UI.
 export const EXTRA_BODY_CIRCUMFERENCE_PARTS = [
-  { key: "shoulders", label: "Shoulders" },
-  { key: "chest", label: "Chest" },
-  { key: "abdomen", label: "Abdomen" },
-  { key: "left_biceps", label: "Left Biceps" },
-  { key: "right_biceps", label: "Right Biceps" },
-  { key: "left_thigh", label: "Left Thigh" },
-  { key: "right_thigh", label: "Right Thigh" },
-  { key: "left_calf", label: "Left Calf" },
-  { key: "right_calf", label: "Right Calf" },
+  { key: 'shoulders', label: 'Shoulders' },
+  { key: 'chest', label: 'Chest' },
+  { key: 'abdomen', label: 'Abdomen' },
+  { key: 'left_biceps', label: 'Left Biceps' }, // i18n-ignore: canonical measurement identifier
+  { key: 'right_biceps', label: 'Right Biceps' }, // i18n-ignore: canonical measurement identifier
+  { key: 'left_thigh', label: 'Left Thigh' }, // i18n-ignore: canonical measurement identifier
+  { key: 'right_thigh', label: 'Right Thigh' }, // i18n-ignore: canonical measurement identifier
+  { key: 'left_calf', label: 'Left Calf' }, // i18n-ignore: canonical measurement identifier
+  { key: 'right_calf', label: 'Right Calf' }, // i18n-ignore: canonical measurement identifier
 ] as const;
 
 export const BODY_CIRCUMFERENCE_PARTS = [
-  { key: "neck", label: "Neck", storage: "check_in" },
-  { key: "waist", label: "Waist", storage: "check_in" },
-  { key: "hips", label: "Hips", storage: "check_in" },
+  { key: 'neck', label: 'Neck', storage: 'check_in' },
+  { key: 'waist', label: 'Waist', storage: 'check_in' },
+  { key: 'hips', label: 'Hips', storage: 'check_in' },
   ...EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => ({
     ...part,
-    storage: "check_in",
+    storage: 'check_in',
   })),
 ] as const;
 
 export const BUILT_IN_BODY_CIRCUMFERENCE_PARTS = BODY_CIRCUMFERENCE_PARTS.map(
-  (part) => part.key,
+  (part) => part.key
 );
 
 export type BuiltInBodyCircumferencePart =
   (typeof BUILT_IN_BODY_CIRCUMFERENCE_PARTS)[number];
 export type ExtraBodyCircumferencePart =
-  (typeof EXTRA_BODY_CIRCUMFERENCE_PARTS)[number]["key"];
+  (typeof EXTRA_BODY_CIRCUMFERENCE_PARTS)[number]['key'];
 export type BodyCircumferencePart =
-  | BuiltInBodyCircumferencePart
-  | ExtraBodyCircumferencePart;
+  BuiltInBodyCircumferencePart | ExtraBodyCircumferencePart;
 
 const BODY_CIRCUMFERENCE_PARTS_BY_KEY = new Map<
   string,
@@ -84,10 +84,10 @@ export const getBodyCircumferencePartDefinition = (part: string) =>
   BODY_CIRCUMFERENCE_PARTS_BY_KEY.get(part);
 
 export const isBuiltInBodyCircumferencePart = (
-  part: BodyCircumferencePart,
+  part: BodyCircumferencePart
 ): part is BuiltInBodyCircumferencePart =>
   BUILT_IN_BODY_CIRCUMFERENCE_PARTS.includes(
-    part as BuiltInBodyCircumferencePart,
+    part as BuiltInBodyCircumferencePart
   );
 
 /**
@@ -102,8 +102,8 @@ export const getPrecision = (type: MeasurementType, unit: string): number => {
   }
 
   // Fallback defaults for common fitness categories
-  if (type === "weight") return 1;
-  if (type === "measurement") {
+  if (type === 'weight') return 1;
+  if (type === 'measurement') {
     // Universal standard: if we don't know the unit, 1 decimal is safer
     // unless it's a known integer count (which we caught above).
     return 1;
