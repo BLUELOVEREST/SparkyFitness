@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-20_
+_Last updated: 2026-10-29_
 
 `@workspace/shared` is a source-first TypeScript workspace library package for schemas, constants, and timezone/day helpers consumed by SparkyFitnessServer, SparkyFitnessFrontend, and SparkyFitnessMobile.
 
@@ -33,6 +33,8 @@ _Last updated: 2026-10-20_
 - Export everything from `src/index.ts`; consuming packages import both types and values via `@workspace/shared`
 
 ## Cross-Package Contract Rules
+
+- `SparkyGym.api.zod.ts` reserves the integration event envelope and durable receipts. It does not validate resource payloads or authorize connections; no receiver may persist an event based on this schema alone. Domain routes are not registered by this foundation.
 
 - Changes to `src/schemas/api/` usually affect server routes and both frontend/mobile API clients.
 - Changes to `src/schemas/database/` require matching server migrations and RLS policies when changing the stored schema. CI regenerates the schema backup after merge; never hand-edit or regenerate it locally. Mirroring existing columns missing from a Zod schema does not require another migration.

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-*Last updated: 2026-10-27*
+*Last updated: 2026-10-29*
 
 This is the repo-root monorepo guide for SparkyFitness. Use it to choose the right package, understand shared repo-level rules, and find the next guide to read.
 
@@ -52,6 +52,13 @@ For `docs/` and `SparkyFitnessGarmin/`, there is no package-level `AGENTS.md`. `
 ## Eric Development, Releases, and Deployment
 
 These fork-specific rules supplement the upstream package guides.
+
+### openGym Integration Work
+
+- Companion repository: `/home/zhangzhicheng/workspace/own/eric-openGym`; Gitea origin and official upstream remain separate, with upstream pushes disabled.
+- Integration decisions and architecture: `docs/superpowers/specs/2026-10-29-opengym-integration-decisions.md` and `2026-10-29-sparkygym-architecture.md` in the same directory. Wire contract: `2026-10-29-sparkygym-contract-v1.md`.
+- Work is isolated in `/tmp/sparky-opengym-integration-20261029` and `/tmp/opengym-sparky-integration-20261029`. Protocol foundation does not enable synchronization or register API routes. E-class analytics remain deferred.
+- Share protocol specifications and synthetic vectors, not application source across the repositories' different licenses. Do not copy official openGym exercise media.
 
 ### Development and Upstream Merges
 
