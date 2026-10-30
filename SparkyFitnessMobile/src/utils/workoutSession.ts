@@ -15,6 +15,8 @@ import type {
 } from '@workspace/shared';
 import {
   NO_ADAPTIVE_ADJUSTMENT,
+  workoutCalories,
+  workoutDurationMinutes,
   adaptiveWeightStepKg,
   applyAdaptiveLoadFactorKg,
   carryDistanceFromKm,
@@ -153,6 +155,7 @@ export function getWorkoutIcon(session: ExerciseSessionResponse): IconName {
 }
 
 const SOURCE_DISPLAY_NAMES: Record<string, string> = {
+  opengym: 'openGym',
   manual: 'Sparky',
   sparky: 'Sparky',
   'workout plan': 'Sparky',
@@ -190,6 +193,7 @@ export function formatDuration(minutes: number): string {
 }
 
 export function getFirstImage(session: ExerciseSessionResponse): string | null {
+  if (session.source === 'opengym') return null;
   if (session.type === 'individual') {
     return session.exercise_snapshot?.images?.[0] ?? null;
   }
@@ -202,7 +206,7 @@ export function getFirstImage(session: ExerciseSessionResponse): string | null {
 
 export function getSessionCalories(session: ExerciseSessionResponse): number {
   if (session.type === 'preset') {
-    return session.exercises.reduce((sum, e) => sum + e.calories_burned, 0);
+    return workoutCalories(session) ?? 0;
   }
   return session.calories_burned || 0;
 }
@@ -230,7 +234,10 @@ export function calculateExerciseStats(
 
     if (session.type === 'preset') {
       otherExerciseCalories += sessionCals;
-      durationMinutes += session.total_duration_minutes;
+      durationMinutes +=
+        session.source_summary != null
+          ? (workoutDurationMinutes(session) ?? 0)
+          : session.total_duration_minutes;
     } else {
       const isActiveCals =
         session.exercise_snapshot?.name === 'Active Calories';
@@ -282,7 +289,10 @@ export function getWorkoutSummary(
   if (session.type === 'preset') {
     return {
       name: session.name,
-      duration: session.total_duration_minutes,
+      duration:
+        session.source_summary != null
+          ? (workoutDurationMinutes(session) ?? 0)
+          : session.total_duration_minutes,
       calories: getSessionCalories(session),
     };
   }

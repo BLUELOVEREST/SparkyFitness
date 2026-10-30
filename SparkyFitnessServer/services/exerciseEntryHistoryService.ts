@@ -3,6 +3,8 @@ import {
   earliestEntryTime,
   localDateToDay,
   presetSessionResponseSchema,
+  workoutSourceSummarySchema,
+  workoutDurationMinutes,
   type PresetSessionResponse,
   type ActivityDetailResponse,
   type ExerciseEntryResponse,
@@ -277,7 +279,7 @@ async function getExerciseEntryHistorySessions(
     batchQueries.push(
       client
         .query(
-          `SELECT id, workout_preset_id, name, description, notes, source, location
+          `SELECT id, workout_preset_id, name, description, notes, source, location, source_summary
            FROM exercise_preset_entries WHERE id = ANY($1::uuid[])`,
           [presetIds]
         )
@@ -414,10 +416,14 @@ async function getExerciseEntryHistorySessions(
         detail_type: d.detail_type,
         detail_data: _parseDetailData(d.detail_data),
       }));
-      const totalDuration = children.reduce(
-        (sum, c) => sum + (c.duration_minutes ?? 0),
-        0
-      );
+      const sourceSummary = workoutSourceSummarySchema
+        .nullable()
+        .parse(meta.source_summary ?? null);
+      const totalDuration =
+        workoutDurationMinutes({
+          source_summary: sourceSummary,
+          exercises: children,
+        }) ?? 0;
       sessions.push({
         type: 'preset' as const,
         id: meta.id as string,
@@ -429,6 +435,7 @@ async function getExerciseEntryHistorySessions(
         location: (meta.location as string) ?? null,
         source: meta.source as string,
         total_duration_minutes: totalDuration,
+        source_summary: sourceSummary,
         exercises: children,
         activity_details: presetDetails,
       });
@@ -520,7 +527,7 @@ async function _getExerciseEntriesByDateWithClient(
   // Fetch preset entries and all exercise entries for the date in parallel
   const [presetResult, entriesResult] = await Promise.all([
     client.query(
-      `SELECT id, workout_preset_id, name, description, notes, source, location, created_at
+      `SELECT id, workout_preset_id, name, description, notes, source, location, created_at, source_summary
        FROM exercise_preset_entries
        WHERE user_id = $1 AND entry_date = $2
        ORDER BY created_at ASC`,
@@ -695,10 +702,14 @@ async function _getExerciseEntriesByDateWithClient(
       const presetDetails = mapActivityDetails(
         presetActivityMap.get(stub.id) ?? []
       );
-      const totalDuration = children.reduce(
-        (sum, c) => sum + (c.duration_minutes ?? 0),
-        0
-      );
+      const sourceSummary = workoutSourceSummarySchema
+        .nullable()
+        .parse(presetRow.source_summary ?? null);
+      const totalDuration =
+        workoutDurationMinutes({
+          source_summary: sourceSummary,
+          exercises: children,
+        }) ?? 0;
 
       const childAssignmentId =
         children.find(
@@ -719,6 +730,7 @@ async function _getExerciseEntriesByDateWithClient(
         location: (presetRow.location as string) ?? null,
         source: presetRow.source as string,
         total_duration_minutes: totalDuration,
+        source_summary: sourceSummary,
         exercises: children,
         activity_details: presetDetails,
       });
@@ -762,7 +774,7 @@ export async function getGroupedExerciseSessionByIdWithClient(
   lockExerciseEntries = false
 ): Promise<PresetSessionResponse | null> {
   const metaResult = await client.query(
-    `SELECT id, workout_preset_id, name, description, notes, source, entry_date, location
+    `SELECT id, workout_preset_id, name, description, notes, source, entry_date, location, source_summary
      FROM exercise_preset_entries
      WHERE user_id = $1 AND id = $2`,
     [targetUserId, presetEntryId]
@@ -844,10 +856,14 @@ export async function getGroupedExerciseSessionByIdWithClient(
     notes: (meta.notes as string) ?? null,
     location: (meta.location as string) ?? null,
     source: meta.source as string,
-    total_duration_minutes: exercises.reduce(
-      (sum, exercise) => sum + (exercise.duration_minutes ?? 0),
-      0
-    ),
+    source_summary: meta.source_summary ?? null,
+    total_duration_minutes:
+      workoutDurationMinutes({
+        source_summary: workoutSourceSummarySchema
+          .nullable()
+          .parse(meta.source_summary ?? null),
+        exercises,
+      }) ?? 0,
     exercises,
     activity_details: presetActivityDetails,
   });

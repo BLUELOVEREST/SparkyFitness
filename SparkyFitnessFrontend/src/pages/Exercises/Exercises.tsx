@@ -94,7 +94,9 @@ const ExerciseRowThumbnail = ({
     EXERCISE_CATEGORY_META[exercise.category as ExerciseCategory] ??
     EXERCISE_CATEGORY_META['general'];
   const CategoryIcon = meta.icon;
-  const image = filterValidExerciseImages(exercise.images)[0];
+  const image = isOpenGymOwned(exercise)
+    ? undefined
+    : filterValidExerciseImages(exercise.images)[0];
   const src = resolveExerciseImageSrc(image);
 
   if (!src || imageError) {
@@ -266,6 +268,11 @@ const ExerciseDatabaseManager = () => {
               <div className="flex flex-col">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="font-semibold text-sm">{exercise.name}</span>
+                  {isOpenGymOwned(exercise) && (
+                    <span className="text-xs text-muted-foreground">
+                      openGym
+                    </span>
+                  )}
                   {exercise.tags
                     ?.filter(
                       (tag) =>
@@ -361,7 +368,8 @@ const ExerciseDatabaseManager = () => {
         header: t('common.actions', 'Actions'),
         cell: ({ row }) => {
           const exercise = row.original;
-          const isOwned = exercise.user_id === user?.id;
+          const readOnly = isOpenGymOwned(exercise);
+          const isOwned = exercise.user_id === user?.id && !readOnly;
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -381,7 +389,9 @@ const ExerciseDatabaseManager = () => {
                   onClick={() => editForm.openEditDialog(exercise)}
                 >
                   <Edit className="mr-2 h-4 w-4" />
-                  {t('common.edit', 'Edit')}
+                  {readOnly
+                    ? t('sparkyGym.edit', 'Edit in openGym')
+                    : t('common.edit', 'Edit')}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() =>
@@ -878,3 +888,4 @@ const ExerciseDatabaseManager = () => {
 };
 
 export default ExerciseDatabaseManager;
+import { isOpenGymOwned } from '@/utils/openGymSource';

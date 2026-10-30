@@ -44,6 +44,19 @@ interface EditExerciseDialogProps {
 export default function EditExerciseDialog({ form }: EditExerciseDialogProps) {
   const { t } = useTranslation();
   const isDuplicate = form.dialogMode === 'duplicate';
+  if (!isDuplicate && form.selectedExercise?.source === 'opengym')
+    return (
+      <Dialog
+        open={form.isEditDialogOpen}
+        onOpenChange={form.setIsEditDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('sparkyGym.edit', 'Edit in openGym')}</DialogTitle>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    );
 
   return (
     <Dialog

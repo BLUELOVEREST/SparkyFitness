@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-29_
+_Last updated: 2026-10-30_
 
 `@workspace/shared` is a source-first TypeScript workspace library package for schemas, constants, and timezone/day helpers consumed by SparkyFitnessServer, SparkyFitnessFrontend, and SparkyFitnessMobile.
 
@@ -16,8 +16,13 @@ _Last updated: 2026-10-29_
 
 ## Structure
 
+- SparkyGym has eleven tables: the ten owner-only tables below plus `sparkygym_archive_cleanup_jobs`, mirrored separately in `SparkyGymArchiveCleanupJobs.zod.ts`. Cleanup jobs are Tier 3 system/internal, default-deny to every request context, have no user FK, and expose no API contract.
+
+- SparkyGym persistence: `src/schemas/database/SparkyGym.zod.ts` mirrors the ten owner-only connection/stream/outbox/inbox/entity/source-head/notification/media/snapshot/snapshot-member tables. Internal connection states differ from public management status. Outbox `source_cursor`, entity `last_source_cursor` and retained peer source heads are durable safe integers; encrypted credential fields are never public API responses. Source-first shared imports use `.ts` for frontend Jest compatibility.
+
 - `src/schemas/database/` - one Zod file per table (`Foods.zod.ts`, `Exercises.zod.ts`, ~115 files). Agent shortcut: to learn a table shape, read the matching file here instead of the SQL dump.
 - `src/schemas/api/` - API request/response contracts (`*api.zod.ts`). `VoiceTranscription.api.zod.ts` defines multipart limits/MIME types, transcription responses, voice preference patches, and compatible public service options shared by web/mobile/server.
+- SparkyGym: `src/schemas/api/SparkyGym.api.zod.ts` (event envelope, receipts, seven source-owned resource payloads and domain-event validation), `src/schemas/api/SparkyGymManagement.api.zod.ts` (owner management, public status, peer pairing, capabilities and media-frame metadata).
 - `src/constants/` - shared constants and enums (exercises, nutrients, meal types, fasting protocols, medication schedules, cycle phases, etc.).
 - `src/utils/` - timezone helpers (`todayInZone`, `instantToDay`, `instantForDay`, `dayToUtcRange`, `compareDays`, `addDays`, `isDayString`), cycle/menstruation helpers, unit/calculation utilities, the race plan generator (`racePlan.ts`, `buildRacePlan`), the run program schedule helpers (`runProgramSchedule.ts`, `runProgramCatchUp.ts`, `runProgramTimeline.ts`: `buildProgramTimeline` / `itemsByDay`, and `runProgramActions.ts`: the `PUT /api/v2/run-program` body builders; web and mobile both use them), and the training pace zones (`racePaceZones.ts`: `racePaceZones` turns a recent race result into easy, interval, tempo, marathon-pace and stride ranges with Riegel's formula; `equivalent5kPace` is the shared 5K conversion; `paceZones.ts` holds the effort-based `paceZones`, `thresholdPaceFromEffort` and `PACE_ZONE_IDS`).
 - `src/nutrients/` - nutrient catalogs and the goal calculator used by web onboarding, the web Goals editor and mobile Goals (`nutrientCalculation.ts`: per-nutrient recommended values from age, sex, weight, calories and the saved algorithm choices; `nutrientAlgorithms.ts`: the algorithm enums and labels).
@@ -34,7 +39,9 @@ _Last updated: 2026-10-29_
 
 ## Cross-Package Contract Rules
 
-- `SparkyGym.api.zod.ts` reserves the integration event envelope and durable receipts. It does not validate resource payloads or authorize connections; no receiver may persist an event based on this schema alone. Domain routes are not registered by this foundation.
+- `schedule_summary` is SF-owned daily-hint metadata: name, zone, weekday convention, effective date range and native morning/noon/afternoon/evening buckets. No invented HH:MM, routine prerequisite or planned-session IDs. `sparkyGymResourceProducers` is the authoritative direction map; do not classify all non-body resources as openGym-owned.
+
+- `SparkyGym.api.zod.ts` defines the compatible event envelope/receipts plus strict seven-resource payload schemas and `sparkyGymDomainEventSchema`. Receivers must use the domain validator, paired identity and negotiated scopes before persistence; envelope parsing alone is insufficient. `SparkyGymManagement.api.zod.ts` defines secret-free public connection/status/control responses, invitation offers, peer claim/acceptance, capabilities and binary media metadata. These schemas do not authorize connections or register routes.
 
 - Changes to `src/schemas/api/` usually affect server routes and both frontend/mobile API clients.
 - Changes to `src/schemas/database/` require matching server migrations and RLS policies when changing the stored schema. CI regenerates the schema backup after merge; never hand-edit or regenerate it locally. Mirroring existing columns missing from a Zod schema does not require another migration.

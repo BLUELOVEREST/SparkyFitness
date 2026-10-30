@@ -106,7 +106,7 @@ const EditExerciseDatabaseDialog: React.FC<EditExerciseDatabaseDialogProps> = ({
   }
 
   const handleSaveExerciseDatabaseEdit = async () => {
-    if (!exerciseToEdit) return;
+    if (!exerciseToEdit || exerciseToEdit.source === 'opengym') return;
 
     try {
       const data = new FormData();
@@ -125,6 +125,16 @@ const EditExerciseDatabaseDialog: React.FC<EditExerciseDatabaseDialogProps> = ({
   const handleFieldChange = (field: keyof Exercise, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+  if (exerciseToEdit?.source === 'opengym')
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('sparkyGym.edit', 'Edit in openGym')}</DialogTitle>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[625px] overflow-y-auto max-h-[90vh]">

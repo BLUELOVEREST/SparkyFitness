@@ -92,6 +92,8 @@ import type { RootStackScreenProps } from '../types/navigation';
 import type { UpdatePresetSessionRequest } from '@workspace/shared';
 import {
   canEditGroupedWorkout,
+  workoutCalories,
+  workoutDurationMinutes,
   effectiveLoadKg,
   isBodyweightModality,
   resolveExerciseModality,
@@ -175,7 +177,8 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   }, []);
 
   const sourceLabel = getSourceLabel(session.source);
-  const canEdit = canEditGroupedWorkout(session.source);
+  const canEdit =
+    session.source !== 'opengym' && canEditGroupedWorkout(session.source);
   const entryDate = session.entry_date ?? '';
   const normalizedDate = normalizeDate(entryDate);
 
@@ -314,11 +317,12 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   );
 
   const startEditing = useCallback(() => {
+    if (!canEdit) return;
     populate(session, weightUnit as 'kg' | 'lbs', distanceUnit);
     setEditNotes(session.notes ?? '');
     setEligibleIds(new Set());
     setIsEditing(true);
-  }, [populate, session, weightUnit, distanceUnit]);
+  }, [canEdit, populate, session, weightUnit, distanceUnit]);
 
   const cancelEditing = useCallback(() => {
     setIsEditing(false);
@@ -486,6 +490,7 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   // --- Save ---
 
   const handleSave = useCallback(async () => {
+    if (!canEdit) return;
     const editedDate = submission.entryDate;
     const dateChanged = editedDate !== normalizedDate;
 
@@ -532,6 +537,7 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   }, [
     submission,
+    canEdit,
     normalizedDate,
     editNotes,
     updateSession,
@@ -675,10 +681,7 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           const cal = parseDecimalInput(ex.calories ?? '');
           return sum + (isNaN(cal) ? 0 : cal);
         }, 0)
-      : session.exercises.reduce(
-          (sum, ex) => sum + (ex.calories_burned ?? 0),
-          0
-        );
+      : workoutCalories(session);
 
     const summaryItems: {
       value: string;
@@ -708,7 +711,10 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         label: t('workoutDetail.summary.volume', { defaultValue: 'Volume' }),
       });
     }
-    if (totalCalories > 0) {
+    if (
+      totalCalories !== null &&
+      (totalCalories > 0 || session.source_summary != null)
+    ) {
       summaryItems.push({
         value: formatLocalizedNumber(Math.round(totalCalories)),
         label: t('workoutDetail.summary.calories', {
@@ -716,6 +722,14 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         }),
         icon: { name: 'flame', color: activeEnergyColor },
       });
+    }
+    if (!isEditing && session.source_summary != null) {
+      const minutes = workoutDurationMinutes(session);
+      if (minutes !== null)
+        summaryItems.push({
+          value: formatLocalizedNumber(minutes, { maximumFractionDigits: 1 }),
+          label: t('common.minutesUnit', 'min'),
+        });
     }
     // Heart rate is read-only — it only arrives from a paired watch or a
     // synced workout, and there is no field for typing one — so it is shown
@@ -927,6 +941,11 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           ) : null}
           <View className="flex-row items-center">
             <Text className="text-sm text-text-muted">{sourceLabel}</Text>
+            {session.source === 'opengym' && (
+              <Text className="text-sm text-text-muted">
+                {t('sparkyGym.edit', { defaultValue: 'Edit in openGym' })}
+              </Text>
+            )}
             <Text className="text-sm text-text-muted mx-2">{'\u2022'}</Text>
             {isEditing ? (
               <TouchableOpacity

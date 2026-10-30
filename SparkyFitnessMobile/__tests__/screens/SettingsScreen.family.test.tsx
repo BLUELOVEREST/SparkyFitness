@@ -9,6 +9,7 @@ import {
 } from '../../src/hooks';
 
 type ScreenProps = React.ComponentProps<typeof SettingsScreen>;
+jest.mock('../../src/components/SparkyGymSettings', () => () => null);
 
 const navigation = {
   navigate: jest.fn(),

@@ -122,6 +122,8 @@ export function useEditExerciseForm() {
 
   const handleEditExercise = async () => {
     if (!selectedExercise) return;
+    if (dialogMode !== 'duplicate' && selectedExercise.source === 'opengym')
+      return;
     try {
       const formData = new FormData();
       const updatedExerciseData: Partial<ExerciseInterface> = {

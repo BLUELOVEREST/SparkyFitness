@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Edit, Trash2, Settings, Play } from 'lucide-react';
+import { isOpenGymOwned } from '@/utils/openGymSource';
 import { formatWeight } from '@/utils/numberFormatting';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import { carryDistanceFromKm, carryDistanceUnitLabel } from '@workspace/shared';
@@ -95,21 +96,28 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
   const { weightUnit, distanceUnit, convertDistance, timeFormat } =
     usePreferences();
   const snapshot = exerciseEntry.exercise_snapshot;
+  const readOnly = isOpenGymOwned(exerciseEntry);
 
   // Distances are stored in km; render in the user's display unit.
   const formatDistance = (km: number) =>
     `${convertDistance(km, 'km', distanceUnit).toFixed(2)} ${distanceUnit}`;
 
   const [imageError, setImageError] = useState(false);
-  const sourceBadge = snapshot?.source
-    ? SOURCE_BADGES[snapshot.source]
-    : snapshot?.is_custom
-      ? {
-          label: t('exerciseCard.customSource', 'Custom'),
-          className:
-            'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-        }
-      : null;
+  const sourceBadge = readOnly
+    ? {
+        label: 'openGym',
+        className:
+          'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+      }
+    : snapshot?.source
+      ? SOURCE_BADGES[snapshot.source]
+      : snapshot?.is_custom
+        ? {
+            label: t('exerciseCard.customSource', 'Custom'),
+            className:
+              'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+          }
+        : null;
 
   const isActiveCalories = snapshot?.name === 'Active Calories';
   const entryModality = resolveExerciseModality(
@@ -129,11 +137,16 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
   // Sets carry their own timers (planks, holds, rest). When those sum to 0
   // (e.g. pure rep-based sets synced from Hevy), fall back to the entry-level
   // duration_minutes so the workout's session time still surfaces.
-  const durationDisplay = formatMinutesToHHMM(
-    setsDuration > 0 ? setsDuration : exerciseEntry.duration_minutes || 0
-  );
+  const durationDisplay =
+    isOpenGymOwned(exerciseEntry) && setsDuration === 0
+      ? '—'
+      : formatMinutesToHHMM(
+          setsDuration > 0 ? setsDuration : exerciseEntry.duration_minutes || 0
+        );
 
-  const caloriesDisplay = `${Math.round(convertEnergy(exerciseEntry.calories_burned || 0, 'kcal', energyUnit))} ${getEnergyUnitString(energyUnit)}`;
+  const caloriesDisplay = isOpenGymOwned(exerciseEntry)
+    ? '—'
+    : `${Math.round(convertEnergy(exerciseEntry.calories_burned || 0, 'kcal', energyUnit))} ${getEnergyUnitString(energyUnit)}`;
 
   const hasSets =
     exerciseEntry.sets &&
@@ -144,7 +157,9 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
   // stored shape depends on the importer, not on whether a source is set — the
   // old branch prefixed sourced entries that were already server-rooted and
   // left bare relative paths from source-less entries unprefixed.
-  const snapshotImage = filterValidExerciseImages(snapshot?.images)[0];
+  const snapshotImage = readOnly
+    ? undefined
+    : filterValidExerciseImages(snapshot?.images)[0];
   // Trimmed rather than passed through resolveExerciseImageSrc: image_url is a
   // user-set column that already holds a complete src, so resolving it would
   // prefix a relative value that previously rendered as-is. Trimming only stops
@@ -402,14 +417,22 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
             colorClass="hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50"
           />
         )}
-        <ActionButton
-          icon={<Edit className="w-3.5 h-3.5" />}
-          label={t('exerciseCard.editEntry', 'Edit Entry')}
-          onClick={() => handleEdit(exerciseEntry)}
-          colorClass="hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
-        />
+        {readOnly && (
+          <span className="text-xs text-muted-foreground">
+            {t('sparkyGym.edit', 'Edit in openGym')}
+          </span>
+        )}
+        {!readOnly && (
+          <ActionButton
+            icon={<Edit className="w-3.5 h-3.5" />}
+            label={t('exerciseCard.editEntry', 'Edit Entry')}
+            onClick={() => handleEdit(exerciseEntry)}
+            colorClass="hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
+          />
+        )}
         {/* Editing the library exercise needs a library exercise to edit. */}
-        {snapshot?.id &&
+        {!readOnly &&
+          snapshot?.id &&
           exerciseEntry.exercise_id &&
           snapshot.user_id === currentUserId && (
             <ActionButton
@@ -424,12 +447,14 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
               colorClass="hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
             />
           )}
-        <ActionButton
-          icon={<Trash2 className="w-3.5 h-3.5" />}
-          label={t('exerciseCard.deleteEntry', 'Delete Entry')}
-          onClick={() => handleDelete(exerciseEntry.id)}
-          colorClass="hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50"
-        />
+        {!readOnly && (
+          <ActionButton
+            icon={<Trash2 className="w-3.5 h-3.5" />}
+            label={t('exerciseCard.deleteEntry', 'Delete Entry')}
+            onClick={() => handleDelete(exerciseEntry.id)}
+            colorClass="hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50"
+          />
+        )}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { QueryClientProvider } from '@tanstack/react-query';
+import SparkyGymNotifications from './src/components/SparkyGymNotifications';
 import { FoodImageSourceProvider } from './src/components/FoodImageSourceProvider';
 import { LightboxProvider } from './src/components/LightboxProvider';
 import { Uniwind, useUniwind, useCSSVariable } from 'uniwind';
@@ -543,6 +544,7 @@ function AppContent() {
       }}
     >
       <WatchCheckInGate />
+      <SparkyGymNotifications />
       <QuickActionsGate />
       <WatchWorkoutGate />
       <PendingPresetUpdatePrompt />

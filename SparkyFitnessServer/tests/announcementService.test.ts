@@ -1,4 +1,6 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
+import axios from 'axios';
+import https from 'https';
 import announcementService, {
   parseFrontmatter,
 } from '../services/announcementService.js';
@@ -44,10 +46,23 @@ title: Extra Line Test
   });
 
   test('should return local fallback announcement when offline or fetching', async () => {
-    const result = await announcementService.getLatestAnnouncement();
-    expect(result).toBeDefined();
-    expect(typeof result.id).toBe('string');
-    expect(typeof result.active).toBe('boolean');
-    expect(typeof result.message).toBe('string');
+    const axiosFailure = vi
+      .spyOn(axios, 'get')
+      .mockRejectedValueOnce(new Error('Offline fixture'));
+    const httpsFailure = vi.spyOn(https, 'get').mockImplementation(() => {
+      throw new Error('Offline fixture');
+    });
+    try {
+      const result = await announcementService.getLatestAnnouncement(true);
+      expect(axiosFailure).toHaveBeenCalledOnce();
+      expect(httpsFailure).toHaveBeenCalledOnce();
+      expect(result).toBeDefined();
+      expect(typeof result.id).toBe('string');
+      expect(typeof result.active).toBe('boolean');
+      expect(typeof result.message).toBe('string');
+    } finally {
+      axiosFailure.mockRestore();
+      httpsFailure.mockRestore();
+    }
   });
 });

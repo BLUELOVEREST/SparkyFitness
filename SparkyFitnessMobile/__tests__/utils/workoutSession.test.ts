@@ -161,6 +161,26 @@ const makePreset = (overrides?: Partial<PresetSession>): PresetSession => ({
 });
 
 describe('workoutSession', () => {
+  describe('native source workout summary', () => {
+    it('uses session totals once, including fractional seconds, instead of child estimates', () => {
+      const session = makePreset({
+        source: 'opengym',
+        source_summary: { duration_seconds: 600.5, calories_kcal: 42.25 },
+        exercises: [makeIndividual({ calories_burned: 999 })],
+      });
+      expect(getSessionCalories(session)).toBe(42.25);
+      expect(calculateExerciseDuration([session])).toBe(600.5 / 60);
+    });
+    it('does not substitute child estimates for unknown source totals', () => {
+      const session = makePreset({
+        source: 'opengym',
+        source_summary: { duration_seconds: null, calories_kcal: null },
+        exercises: [makeIndividual({ calories_burned: 999 })],
+      });
+      expect(getSessionCalories(session)).toBe(0);
+      expect(calculateExerciseDuration([session])).toBe(0);
+    });
+  });
   describe('getWorkoutIcon', () => {
     it('returns exercise-weights for preset sessions', () => {
       expect(getWorkoutIcon(makePreset())).toBe('exercise-weights');

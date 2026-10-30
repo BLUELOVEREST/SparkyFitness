@@ -56,6 +56,25 @@ const renderCard = (entry: ExerciseEntry) =>
   );
 
 describe('ExerciseEntryDisplay cardio distance', () => {
+  it('does not present zero placeholders as observed openGym action totals', () => {
+    renderCard(
+      makeEntry({ source: 'opengym', duration_minutes: 0, calories_burned: 0 })
+    );
+    expect(screen.queryByText('0 kcal')).not.toBeInTheDocument();
+    expect(screen.queryByText('00:00')).not.toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
+  });
+  it('shows openGym authority instead of edit and delete actions', () => {
+    renderCard(makeEntry({ source: 'opengym' }));
+    expect(screen.getByText('openGym')).toBeInTheDocument();
+    expect(screen.getByText('Edit in openGym')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Edit Entry' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Delete Entry' })
+    ).not.toBeInTheDocument();
+  });
   it('shows the entry distance in the stats row and the set distance in the chip', () => {
     renderCard(
       makeEntry({

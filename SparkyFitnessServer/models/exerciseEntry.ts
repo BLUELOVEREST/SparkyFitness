@@ -1,4 +1,8 @@
-import { compareByEntryTime, earliestEntryTime } from '@workspace/shared';
+import {
+  compareByEntryTime,
+  earliestEntryTime,
+  workoutSourceSummarySchema,
+} from '@workspace/shared';
 import { getClient } from '../db/poolManager.js';
 import type { PoolClient } from 'pg';
 // @ts-expect-error TS(7016): Could not find a declaration file for module 'pg-f... Remove this comment to see the full error message
@@ -9,6 +13,7 @@ import activityDetailsRepository from './activityDetailsRepository.js';
 import * as workoutTelemetryRepository from './workoutTelemetryRepository.js';
 import { bodyWeightJoinSql } from '../utils/exerciseLoadSql.js';
 import { assertSetWeightSign } from '../utils/setWeightSign.js';
+import { workoutTotalsRowsSql } from '../utils/workoutTotalsSql.js';
 /**
  * Updates a daily calorie import, retaining entries created against shared exercises.
  * A matching exercise takes precedence; legacy matches require the same source.
@@ -1485,7 +1490,7 @@ async function getExerciseEntriesByDate(userId: any, selectedDate: any) {
   try {
     // 1. Fetch all exercise preset entries for the given date and user
     const presetEntriesResult = await client.query(
-      `SELECT id, workout_preset_id, name, description, notes, created_at, source, location
+      `SELECT id, workout_preset_id, name, description, notes, created_at, source, location, source_summary
        FROM exercise_preset_entries
        WHERE user_id = $1 AND entry_date = $2
        ORDER BY created_at ASC`,
@@ -1528,6 +1533,9 @@ async function getExerciseEntriesByDate(userId: any, selectedDate: any) {
         location: preset.location ?? null,
         created_at: preset.created_at,
         source: preset.source,
+        source_summary: workoutSourceSummarySchema
+          .nullable()
+          .parse(preset.source_summary ?? null),
         exercises: [], // This will hold the individual exercise entries
         total_duration_minutes: 0, // Initialize total duration for the preset
       });
@@ -1627,6 +1635,13 @@ async function getExerciseEntriesByDate(userId: any, selectedDate: any) {
     });
     // Now add the preset entries (which now contain their associated exercises) to the final list
     for (const preset of groupedEntries.values()) {
+      if (
+        preset.source_summary !== null &&
+        preset.source_summary !== undefined
+      ) {
+        preset.total_duration_minutes =
+          (preset.source_summary.duration_seconds ?? 0) / 60;
+      }
       preset.activity_details = activityDetailsByPresetId.get(preset.id) || [];
       finalEntriesMap.set(preset.id, preset); // Add preset to map, overwriting if already present (shouldn't happen for presets)
     }
@@ -2038,12 +2053,12 @@ async function getDailyExerciseTotalsRange(
   try {
     const result = await client.query(
       `SELECT entry_date,
-              COUNT(*)::int AS entry_count,
+              SUM(entry_count_weight)::int AS entry_count,
               SUM(COALESCE(duration_minutes, 0)) AS duration_minutes,
               SUM(COALESCE(calories_burned, 0)) AS calories_burned,
               SUM(COALESCE(distance, 0)) AS distance,
               SUM(COALESCE(steps, 0)) AS steps
-       FROM exercise_entries
+       FROM (${workoutTotalsRowsSql}) AS observations
        WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3
        GROUP BY entry_date
        ORDER BY entry_date ASC`,
@@ -2129,7 +2144,7 @@ async function getDailyExerciseCalorieSplitRange(
                 WHERE exercise_name IS DISTINCT FROM 'Active Calories'
                    OR exercise_preset_entry_id IS NOT NULL), 0)::float8 AS other_calories,
               COALESCE(SUM(steps), 0)::int AS activity_steps
-       FROM exercise_entries
+       FROM (${workoutTotalsRowsSql}) AS observations
        WHERE user_id = $1 AND entry_date BETWEEN $2 AND $3
        GROUP BY entry_date
        ORDER BY entry_date ASC`,

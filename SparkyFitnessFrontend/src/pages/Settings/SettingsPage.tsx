@@ -45,6 +45,7 @@ import { PreferenceSettings } from './PreferenceSettings';
 import { ProfileInformation } from './ProfileInformation';
 import { DataManagementSettings } from './DataManagementSettings';
 import { DataImportSettings } from './DataImportSettings';
+import SparkyGymSettings from './SparkyGymSettings';
 
 export interface PasswordFormState {
   current_password: string;
@@ -73,6 +74,7 @@ const SECTION_TO_TAB_MAP: Record<string, string> = {
   'api-settings': 'developer-integrations',
   'developer-resources': 'developer-integrations',
   integrations: 'developer-integrations',
+  sparkygym: 'developer-integrations',
 };
 
 const Settings = () => {
@@ -400,6 +402,7 @@ const Settings = () => {
             className="w-full"
             defaultValue={defaultExpanded}
           >
+            <SparkyGymSettings />
             <AccordionItem
               value="food-and-exercise-data-providers"
               className="border rounded-lg mb-4"

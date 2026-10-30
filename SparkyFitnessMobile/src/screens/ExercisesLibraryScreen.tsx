@@ -143,7 +143,7 @@ const ExercisesLibraryScreen: React.FC<ExercisesLibraryScreenProps> = ({
       item.sharedWithPublic,
       profile?.id
     );
-    const image = item.images?.[0] ?? null;
+    const image = item.source === 'opengym' ? null : (item.images?.[0] ?? null);
     const fallbackIcon =
       (item.category && CATEGORY_ICON_MAP[item.category]) || 'exercise-weights';
     return (
@@ -178,6 +178,11 @@ const ExercisesLibraryScreen: React.FC<ExercisesLibraryScreenProps> = ({
                 {item.name}
               </Text>
               <ShareStatusBadge status={status} />
+              {item.source === 'opengym' && (
+                <Text className="text-xs text-text-secondary">
+                  {t('sparkyGym.title', { defaultValue: 'openGym' })}
+                </Text>
+              )}
             </View>
             {item.category ? (
               <Text className="text-sm mt-0.5" style={{ color: textSecondary }}>

@@ -87,7 +87,8 @@ const ActivityDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { getImageSource } = useExerciseImageSource();
 
   const sourceLabel = getSourceLabel(session.source);
-  const canEditSource = canEditGroupedWorkout(session.source);
+  const canEditSource =
+    session.source !== 'opengym' && canEditGroupedWorkout(session.source);
   const entryDate = session.entry_date ?? '';
   const normalizedDate = normalizeDate(entryDate);
   const { name, duration, calories } = getWorkoutSummary(session, t);
@@ -163,6 +164,7 @@ const ActivityDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const submission = getActivityDraftSubmission(formState, distanceUnit);
 
   const startEditing = () => {
+    if (!canEditSource) return;
     populate(session, distanceUnit);
     setActiveField(null);
     const originals = new Map<string, ExerciseEntrySetResponse>();
@@ -279,6 +281,7 @@ const ActivityDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   }, []);
 
   const handleSave = async () => {
+    if (!canEditSource) return;
     if (!submission.exerciseId) return;
 
     const dateChanged = submission.entryDate !== normalizedDate;
@@ -702,6 +705,11 @@ const ActivityDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             )}
             <View className="flex-row items-center">
               <Text className="text-sm text-text-muted">{sourceLabel}</Text>
+              {session.source === 'opengym' && (
+                <Text className="text-sm text-text-muted">
+                  {t('sparkyGym.edit', { defaultValue: 'Edit in openGym' })}
+                </Text>
+              )}
               <Text className="text-sm text-text-muted mx-2">{'\u2022'}</Text>
               {isEditing ? (
                 <TouchableOpacity

@@ -7,6 +7,12 @@ import {
 } from '@workspace/shared';
 
 const MAX_BYTES = 1_048_576;
+
+export function sameBodyDigest(left: string, right: string): boolean {
+  if (!/^[a-f0-9]{64}$/.test(left) || !/^[a-f0-9]{64}$/.test(right))
+    return false;
+  return timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
+}
 const MAX_SKEW_SECONDS = 300;
 const KEY_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const TIMESTAMP = /^(0|[1-9]\d{0,15})$/;

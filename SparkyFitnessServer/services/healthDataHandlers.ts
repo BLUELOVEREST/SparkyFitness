@@ -1,4 +1,9 @@
 import { log } from '../config/logging.js';
+import { getClient } from '../db/poolManager.js';
+import {
+  extractSparkyGymHealthConnectLineage,
+  findSparkyGymHealthConnectCanonical,
+} from '../integrations/opengym/projections.js';
 import measurementRepository from '../models/measurementRepository.js';
 import exerciseDb from '../models/exercise.js';
 import exerciseEntryDb, {
@@ -2007,6 +2012,30 @@ const workoutHandler: HealthTypeHandler = {
         source_id,
         steps,
       } = entry;
+      if (
+        (source === 'Health Connect' || source === 'HealthConnect') &&
+        extractSparkyGymHealthConnectLineage(raw_data)
+      ) {
+        const client = await getClient(ctx.userId, ctx.actingUserId);
+        try {
+          const canonical = await findSparkyGymHealthConnectCanonical(
+            client,
+            ctx.userId,
+            raw_data
+          );
+          if (canonical)
+            return {
+              status: 'success',
+              data: {
+                source: 'opengym',
+                canonical_workout_id: canonical,
+                suppressed_indirect_copy: true,
+              },
+            };
+        } finally {
+          client.release();
+        }
+      }
       const exerciseName = activityType || `${source} Exercise`;
       const { category, modality } = resolveActivityMapping(
         activityType,

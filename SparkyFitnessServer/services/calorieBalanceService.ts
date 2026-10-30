@@ -8,6 +8,7 @@ import type {
 } from '@workspace/shared';
 import {
   CALORIE_CALCULATION_CONSTANTS,
+  workoutCalories,
   instantHourMinute,
   instantToDay,
   resolveExerciseCalories,
@@ -204,8 +205,8 @@ export function extractExerciseStats(
       }
       activitySteps += session.steps || 0;
     } else {
+      otherCalories += workoutCalories(session) ?? 0;
       for (const exercise of session.exercises) {
-        otherCalories += exercise.calories_burned || 0;
         activitySteps += exercise.steps || 0;
       }
     }

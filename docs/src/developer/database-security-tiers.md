@@ -1,6 +1,6 @@
 # Database Security & RLS Tiers
 
-*Last updated: 2026-10-20*
+*Last updated: 2026-10-30*
 
 SparkyFitness uses PostgreSQL Row-Level Security (RLS) to enforce strict data isolation between accounts, caregivers, family members, and third-party integrations (API keys). This document covers the security design, context switching mechanism, and the three-tier database table classifications.
 
@@ -38,6 +38,16 @@ These tables contain highly sensitive credentials, API keys, SSO tokens, 2FA rec
 | `food_assistant_preferences` | Explicit lasting food preferences | Owner-Only | Owner-Only |
 | `food_assistant_tasks` | Recoverable food tasks, ingredient drafts and source evidence | Owner-Only | Owner-Only |
 | `food_assistant_operations` | Idempotent operations and before/after audit records | Owner-Only | Owner-Only |
+| `sparkygym_connections` | Paired peer identity, opt-ins and encrypted credentials | Owner-Only | Owner-Only |
+| `sparkygym_streams` | Durable per-source entity revisions | Owner-Only | Owner-Only |
+| `sparkygym_outbox` | Immutable request bytes, hashes, global source cursors and retry state | Owner-Only | Owner-Only |
+| `sparkygym_inbox` | Exact-byte replay hashes and receipts | Owner-Only | Owner-Only |
+| `sparkygym_entities` | Peer-owned raw projections, local mappings and tombstones surviving rotation | Owner-Only | Owner-Only |
+| `sparkygym_source_heads` | Retained peer-wide accepted cursor independent of projections, rotation and receipt compaction | Owner-Only | Owner-Only |
+| `sparkygym_notifications` | Durable public-only owner notification cursor | Owner-Only | Owner-Only |
+| `sparkygym_media` | Owner hash-deduplicated media metadata and private archive paths | Owner-Only | Owner-Only |
+| `sparkygym_snapshots` | Source-approved snapshot cursor range, membership digest/count and completion state | Owner-Only | Owner-Only |
+| `sparkygym_snapshot_members` | Validated snapshot entity membership, including accepted stale/exact duplicate events | Owner-Only | Owner-Only |
 | `user_ignored_updates` | Records of skipped release updates | Owner-Only | Owner-Only |
 | `admin_activity_logs` | Admin action audits | Admin-Only | Admin-Only |
 | `ai_service_settings` | AI configurations and credentials, including optional reasoning effort (medium by default) and the per-model `supports_audio_input` opt-in | Owner-Only | Owner-Only (Public configs readable by all) |
@@ -60,6 +70,23 @@ These tables contain highly sensitive credentials, API keys, SSO tokens, 2FA rec
 | `openfoodfacts_product_read_rate_limit` | Singleton coordination lease and cooldown for Open Food Facts product reads, including manual previews; contains no user data or credentials | System services only | Deny all |
 | `openfoodfacts_sync_queue` | Dormant automatic Open Food Facts upload state and retained history; stores food/user identifiers and retry metadata, never provider credentials. The manual first release does not enqueue or process these rows. | System worker and owning user | Owner-Only |
 | `rate_limit` | Sign-in rate limit counters shared by every server instance, keyed by client address and route; holds no account data or credentials | Better Auth only | Deny all |
+
+Migration `20261030030000_sparkygym_preset_detail_guards.sql` checks both exercise
+and whole-session parent keys for source-owned activity details, including OLD
+and NEW during reparenting. Existing invoker rights, diary RLS and the account
+deletion exception remain unchanged; it adds no table, column or API field.
+
+Weekly `schedule_summary` metadata is produced by SparkyFitness from active native
+weekly training-focus templates. The entity ID is the template ID as a string;
+dates, bucket names and main flags are authoritative native values. Deferred
+triggers capture final transaction state atomically with source writes, including
+timezone/week-start refresh and inactivation/deletion tombstones. This adds no
+table or delegated permission. `sparkygym_schedule_snapshot()` takes no owner
+argument and reads only `authenticated_user_id` context; parameterized source and
+emit helpers remain in the revoked `sparkygym_private` schema. No-history initial
+snapshots still contain this metadata. Incoming OG snapshots cannot prune it,
+and OG events cannot create or edit native SF workout plans. Existing template
+RLS, meal targets and diary permissions are unchanged.
 
 ---
 
@@ -120,7 +147,7 @@ The `food_entries` insert policy permits detached nutrition snapshots when `food
 | `food_favorites` | Starred (favorite) foods/meals for quick re-logging | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
 | `exercise_entries` | Logged exercises/sets completed for the day. Snapshot-backed: carries its own `exercise_name`, `category`, `modality`, muscles, equipment, instructions and `images`, and `exercise_id` is nullable / `ON DELETE SET NULL` — see *Library deletes vs. diary history* below | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
 | `shoes` | Running-shoe inventory (name, brand, model, retirement mileage, default pair); entries link to a pair through `exercise_entries.shoe_id` (`ON DELETE SET NULL`) | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
-| `exercise_preset_entries` | Logged workout presets for the day | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
+| `exercise_preset_entries` | Logged workout presets for the day; nullable typed `source_summary` holds session seconds and kcal only, never body/target weight | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
 | `exercise_entry_sets` | Reps, weights, and sets completed for the logged exercises | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
 | `exercise_entry_activity_details` | Heart rate, distance, and activity details for workout logs | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
 | `water_intake` | Total water logged for the day | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
@@ -180,6 +207,17 @@ Symptoms are their own domain (they used to share the medications permission). P
 | `daily_health_metrics` | Daily automated wearable summary, scores, total calories, and the total-calorie source capture time | Delegate with `can_manage_checkin` | Delegate with `can_manage_checkin` or `can_view_reports` |
 
 ---
+
+### Tier 3 System/Internal Exception: Account Archive Cleanup
+
+`sparkygym_archive_cleanup_jobs` is a system/internal scheduler ledger, **not** a
+delegate-writable diary table. It has enabled RLS with an explicit deny-all policy
+for every normal app context (owner, delegate, switched API key and request admin).
+Only the private user DELETE trigger and background raw owner-pool worker access
+it. Its UUID owner key deliberately has no FK so deletion cannot cascade away the
+retry record. The trigger only enqueues/NOTIFYs; the worker takes the owner advisory
+lock after commit, verifies owner absence and retains failed filesystem jobs until
+durable removal succeeds. There is no management or enqueue API.
 
 ## System & Global Reference Tables (Public Read, Admin Write)
 These tables store global configuration settings, lookup values, and reference metadata. They do not contain user-specific data and do not have Row-Level Security enabled. All authenticated users can read them, but only administrators can update them.

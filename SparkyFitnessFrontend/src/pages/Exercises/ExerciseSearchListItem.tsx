@@ -30,6 +30,11 @@ interface ExerciseListItemProps {
 }
 
 const SOURCE_BADGES: Record<string, { label: string; className: string }> = {
+  opengym: {
+    label: 'openGym',
+    className:
+      'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  },
   wger: {
     get label() {
       return i18n.t('exercises.exerciseSearchListItem.wger', 'Wger');
@@ -101,7 +106,7 @@ export const ExerciseSearchListItem = ({
   if (exercise.force) metaPills.push(exercise.force);
   if (exercise.mechanic) metaPills.push(exercise.mechanic);
 
-  const hasImage = imageCount > 0;
+  const hasImage = exercise.source !== 'opengym' && imageCount > 0;
   const showFallback = !hasImage || imageError;
   const safeImageIndex = imageCount > 0 ? currentImageIndex % imageCount : 0;
 

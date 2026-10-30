@@ -62,6 +62,17 @@ BEGIN
     'food_assistant_preferences',
     'food_assistant_tasks',
     'food_assistant_operations',
+    'sparkygym_connections',
+    'sparkygym_streams',
+    'sparkygym_outbox',
+    'sparkygym_inbox',
+    'sparkygym_entities',
+    'sparkygym_source_heads',
+    'sparkygym_notifications',
+    'sparkygym_media',
+    'sparkygym_archive_cleanup_jobs',
+    'sparkygym_snapshots',
+    'sparkygym_snapshot_members',
     'admin_activity_logs',
     'api_key',
     'user_goals',
@@ -617,6 +628,9 @@ USING (
 );
 
 -- Owner-only access tables
+-- Weekly hint capture adds no tables or policies: native workout template/focus
+-- RLS stays unchanged. The actor-bound public.sparkygym_schedule_snapshot() has
+-- no owner parameter; parameterized helpers remain in revoked sparkygym_private.
 -- Tier 1: Strictly Private (no delegation allowed)
 SELECT create_owner_policy('api_key', 'reference_id');
 SELECT create_owner_policy('user_oidc_links');
@@ -624,6 +638,17 @@ SELECT create_owner_policy('sparky_chat_history');
 SELECT create_owner_policy('food_assistant_preferences');
 SELECT create_owner_policy('food_assistant_tasks');
 SELECT create_owner_policy('food_assistant_operations');
+-- SparkyGym pairing, delivery state and projections are never family-delegated.
+SELECT create_owner_policy('sparkygym_connections');
+SELECT create_owner_policy('sparkygym_streams');
+SELECT create_owner_policy('sparkygym_outbox');
+SELECT create_owner_policy('sparkygym_inbox');
+SELECT create_owner_policy('sparkygym_entities');
+SELECT create_owner_policy('sparkygym_source_heads');
+SELECT create_owner_policy('sparkygym_notifications');
+SELECT create_owner_policy('sparkygym_media');
+SELECT create_owner_policy('sparkygym_snapshots');
+SELECT create_owner_policy('sparkygym_snapshot_members');
 
 -- Profiles: delegates can read (with any meaningful permission) but only owner can write.
 -- Delegates do not need to modify another user's profile to manage their diary.
@@ -1042,6 +1067,10 @@ WITH CHECK (has_symptom_access(user_id) AND (source <> 'cycle' OR authenticated_
 -- Medications Display Preferences (Tier 2 - Owner-Only Write, Delegate Read)
 CREATE POLICY select_policy ON public.user_medication_display_preferences FOR SELECT TO PUBLIC USING (has_medication_read_access(user_id));
 CREATE POLICY modify_policy ON public.user_medication_display_preferences FOR ALL TO PUBLIC USING (authenticated_user_id() = user_id) WITH CHECK (authenticated_user_id() = user_id);
+
+-- Private account archive cleanup is Tier 3 system/internal, not delegatable.
+-- No owner, delegate, API-key or ordinary request may read or enqueue jobs.
+CREATE POLICY deny_all_policy ON public.sparkygym_archive_cleanup_jobs FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
 
 -- Passkey registration tickets (Tier 3 - system/internal). These short-lived,
 -- single-use rows are only ever read/written by getSystemClient (which bypasses

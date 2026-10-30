@@ -43,10 +43,10 @@ Upsert payload must be a finite, valid JSON object. Payload field schemas are va
 by negotiated resource handlers before any receipt is accepted; envelope acceptance
 alone never implies domain acceptance. Unknown capabilities fail explicitly.
 
-| Producer | Allowed resources | Authority |
-| --- | --- | --- |
-| sparkyfitness | body_measurement, body_goal | Body data only |
-| opengym | exercise, workout, schedule_summary, personal_media | Training and personal media only |
+| Producer      | Allowed resources                                              | Authority                                  |
+| ------------- | -------------------------------------------------------------- | ------------------------------------------ |
+| sparkyfitness | body_definition, body_measurement, body_goal, schedule_summary | Body values and dated daily training hints |
+| opengym       | exercise, workout, personal_media                              | Actual training and personal media only    |
 
 E-class statistical resources are intentionally absent until their separate design.
 Body-goal payloads support target weight, not weekly weight-rate goals. No user IDs,
@@ -80,7 +80,12 @@ must reject new deliveries even when the signature is valid.
 Successful durable processing returns HTTP 200:
 
 ```json
-{"version":1,"event_id":"11111111-1111-4111-8111-111111111111","status":"applied","revision":1}
+{
+  "version": 1,
+  "event_id": "11111111-1111-4111-8111-111111111111",
+  "status": "applied",
+  "revision": 1
+}
 ```
 
 `status` is applied, duplicate or stale. `revision` is the receiver's current applied
@@ -91,17 +96,17 @@ No 202 success acknowledgement before durable business persistence.
 
 Error shape: `{"error":{"code":"invalid_event","retryable":false}}`.
 
-| HTTP | Code | Sender action |
-| --- | --- | --- |
-| 400 | invalid_event | Visible terminal failure; correct payload |
-| 401 | authentication_failed | Pause connection and request repair |
-| 403 | scope_denied | Stop delivery; owner reviews negotiated scope |
-| 409 | event_conflict | Visible terminal conflict; never blind retry |
-| 413 | payload_too_large | Terminal; media belongs on separate transport |
-| 415 | unsupported_media_type | Terminal framing error |
-| 422 | invalid_payload, unsupported_resource | Terminal domain/capability error |
-| 429 | rate_limited | Retry using bounded Retry-After and backoff |
-| 500/503 | receiver_unavailable | Retry with backoff |
+| HTTP    | Code                                  | Sender action                                 |
+| ------- | ------------------------------------- | --------------------------------------------- |
+| 400     | invalid_event                         | Visible terminal failure; correct payload     |
+| 401     | authentication_failed                 | Pause connection and request repair           |
+| 403     | scope_denied                          | Stop delivery; owner reviews negotiated scope |
+| 409     | event_conflict                        | Visible terminal conflict; never blind retry  |
+| 413     | payload_too_large                     | Terminal; media belongs on separate transport |
+| 415     | unsupported_media_type                | Terminal framing error                        |
+| 422     | invalid_payload, unsupported_resource | Terminal domain/capability error              |
+| 429     | rate_limited                          | Retry using bounded Retry-After and backoff   |
+| 500/503 | receiver_unavailable                  | Retry with backoff                            |
 
 GET capabilities, pairing, media paths and resource payload schemas are subordinate
 milestones in the implementation plan; no consumer may assume arbitrary payloads are

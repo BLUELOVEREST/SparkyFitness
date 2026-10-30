@@ -192,6 +192,17 @@ describe.runIf(RUN)('RLS permission matrix', () => {
     food_assistant_preferences: 'owner',
     food_assistant_tasks: 'owner',
     food_assistant_operations: 'owner',
+    sparkygym_connections: 'owner',
+    sparkygym_streams: 'owner',
+    sparkygym_outbox: 'owner',
+    sparkygym_inbox: 'owner',
+    sparkygym_entities: 'owner',
+    sparkygym_source_heads: 'owner',
+    sparkygym_notifications: 'owner',
+    sparkygym_media: 'owner',
+    sparkygym_archive_cleanup_jobs: 'custom',
+    sparkygym_snapshots: 'owner',
+    sparkygym_snapshot_members: 'owner',
     // diary
     exercise_entries: 'diary',
     exercise_preset_entries: 'diary',
@@ -483,6 +494,18 @@ describe.runIf(RUN)('RLS permission matrix', () => {
       col: 'qual' | 'with_check';
       mustContain: string;
     }> = [
+      {
+        table: 'sparkygym_archive_cleanup_jobs',
+        policy: 'deny_all_policy',
+        col: 'qual',
+        mustContain: 'false',
+      },
+      {
+        table: 'sparkygym_archive_cleanup_jobs',
+        policy: 'deny_all_policy',
+        col: 'with_check',
+        mustContain: 'false',
+      },
       {
         table: 'food_entries',
         policy: 'select_policy',

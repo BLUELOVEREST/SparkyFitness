@@ -1,5 +1,6 @@
 import { getClient } from '../db/poolManager.js';
 import { DAILY_MOOD_VALUE_SQL } from './moodRepository.js';
+import { workoutTotalsRowsSql } from '../utils/workoutTotalsSql.js';
 
 // Aggregate queries backing the chatbot coach tools (sparky_get_health_summary,
 // sparky_analyze_trends, sparky_get_30day_trends, sparky_detect_patterns,
@@ -43,8 +44,8 @@ async function getExerciseAggregates(
     const result = await client.query(
       `SELECT
         COALESCE(SUM(calories_burned), 0)::numeric AS total_calories_burned,
-        COUNT(*)::int AS workout_count
-       FROM exercise_entries
+        SUM(entry_count_weight)::int AS workout_count
+       FROM (${workoutTotalsRowsSql}) AS observations
        WHERE user_id = $1 AND entry_date >= $2 AND entry_date <= $3`,
       [userId, startDate, endDate]
     );
@@ -161,10 +162,10 @@ async function get30DayExerciseAggregates(userId: string, endDate: string) {
   try {
     const result = await client.query(
       `SELECT
-        COUNT(*)::int AS total_workouts,
+        SUM(entry_count_weight)::int AS total_workouts,
         COUNT(DISTINCT entry_date)::int AS active_days,
         COALESCE(SUM(calories_burned), 0)::numeric AS total_calories_burned
-       FROM exercise_entries
+       FROM (${workoutTotalsRowsSql}) AS observations
        WHERE user_id = $1 AND entry_date > ($2::date - INTERVAL '30 days') AND entry_date <= $2::date`,
       [userId, endDate]
     );

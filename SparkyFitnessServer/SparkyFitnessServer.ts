@@ -1,5 +1,10 @@
 import path from 'path';
 import { emailLoginGuard } from './middleware/emailLoginGuard.js';
+import {
+  createSparkyGymPeerRouter,
+  createSparkyGymOwnerRouter,
+} from './integrations/opengym/routes.js';
+import { sparkyGymRuntime } from './integrations/opengym/runtime.js';
 import { passkeyLoginGuard } from './middleware/passkeyLoginGuard.js';
 
 import fs from 'fs';
@@ -287,6 +292,7 @@ app.use(
 // takes a much lower cap: the routes that need the headroom (image analysis,
 // uploads, FIT import) are blocked for the demo account anyway, and a 50mb
 // parse per request is a cheap way for an anonymous visitor to burn memory.
+app.use('/api/integrations/v1', createSparkyGymPeerRouter());
 app.use(express.json({ limit: isDemoMode() ? '1mb' : '50mb' }));
 app.use(cookieParser());
 // --- Better Auth Mounting Logic (Moved to after migrations) ---
@@ -494,6 +500,7 @@ const uploadsStaticOptions = {
 // them silently re-exposes every file. tests/uploadsStaticMount.test.ts guards
 // both the behavior and the source ordering.
 const SENSITIVE_UPLOAD_SUBTREES = new Set([
+  'sparkygym',
   'check-in',
   'pregnancy',
   'symptoms',
@@ -759,6 +766,7 @@ app.use('/api/health', healthRoutes);
 app.use('/api/external-providers', externalProviderRoutes);
 app.use('/api/synced-data', syncedDataRoutes);
 app.use('/api/integrations/garmin', garminRoutes);
+app.use('/api/integrations/sparkygym', createSparkyGymOwnerRouter());
 app.use('/api/withings', withingsRoutes);
 app.use('/api/version', versionRoutes);
 app.use('/api/announcement', announcementRoutes);
@@ -878,6 +886,7 @@ app.get('/api/api-docs', (_req, res) => res.redirect('/api/api-docs/swagger'));
   });
   console.log(`DEBUG: Server started and listening on port ${PORT}`);
   log('info', `SparkyFitnessServer listening on port ${PORT}`);
+  if (!isDemoMode()) await sparkyGymRuntime.start();
   console.log('View API documentation at: /api/api-docs/swagger');
   // Fix for reverse proxies using HTTP keepalive (e.g. Traefik, Caddy)
   server.keepAliveTimeout = 181000; // Must be > proxy's idle timeout (nginx=75s, traefik=default 180s)
@@ -889,6 +898,12 @@ app.get('/api/api-docs', (_req, res) => res.redirect('/api/api-docs/swagger'));
     if (shuttingDown) return;
     shuttingDown = true;
     log('info', `${signal} received, shutting down gracefully...`);
+    setTimeout(() => {
+      log('error', 'Graceful shutdown timed out after 15s, forcing exit.');
+      // eslint-disable-next-line n/no-process-exit
+      process.exit(1);
+    }, 15000).unref();
+    await sparkyGymRuntime.stop();
     server.close(async () => {
       log('info', 'HTTP server closed, draining database pools...');
       try {
@@ -900,12 +915,6 @@ app.get('/api/api-docs', (_req, res) => res.redirect('/api/api-docs/swagger'));
       // eslint-disable-next-line n/no-process-exit
       process.exit(0);
     });
-    // Force exit if graceful shutdown takes too long
-    setTimeout(() => {
-      log('error', 'Graceful shutdown timed out after 15s, forcing exit.');
-      // eslint-disable-next-line n/no-process-exit
-      process.exit(1);
-    }, 15000).unref();
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
@@ -915,6 +924,7 @@ app.get('/api/api-docs', (_req, res) => res.redirect('/api/api-docs/swagger'));
   // a live container that never listens, which Docker's restart policy will
   // not retry, so the deployment sits broken instead of restarting.
   try {
+    await sparkyGymRuntime.stop();
     await endPool();
   } catch {
     // Already failing; don't mask the original cause.

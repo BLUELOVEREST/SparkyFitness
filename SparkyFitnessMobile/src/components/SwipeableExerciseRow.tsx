@@ -93,7 +93,8 @@ const SwipeableExerciseRow: React.FC<SwipeableExerciseRowProps> = ({
 
   const { name, duration, calories } = getWorkoutSummary(session, t);
   const sourceLabel = getSourceLabel(session.source);
-  const canEdit = canEditGroupedWorkout(session.source);
+  const canEdit =
+    session.source !== 'opengym' && canEditGroupedWorkout(session.source);
   const iconName = getWorkoutIcon(session);
   const firstImage = getFirstImage(session);
   const imageSource =
@@ -108,6 +109,13 @@ const SwipeableExerciseRow: React.FC<SwipeableExerciseRowProps> = ({
   );
 
   const handleLongPress = () => {
+    if (session.source === 'opengym') {
+      Alert.alert(
+        t('sparkyGym.title', { defaultValue: 'openGym' }),
+        t('sparkyGym.edit', { defaultValue: 'Edit in openGym' })
+      );
+      return;
+    }
     Alert.alert(name, undefined, [
       {
         text: t('common.delete', { defaultValue: 'Delete' }),
@@ -122,7 +130,9 @@ const SwipeableExerciseRow: React.FC<SwipeableExerciseRowProps> = ({
     <Animated.View style={animatedStyle} onLayout={handleLayout}>
       <ReanimatedSwipeable
         ref={swipeableRef}
-        renderRightActions={renderRightActions}
+        renderRightActions={
+          session.source === 'opengym' ? undefined : renderRightActions
+        }
         overshootRight={false}
         rightThreshold={40}
       >

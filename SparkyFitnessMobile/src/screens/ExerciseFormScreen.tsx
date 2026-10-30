@@ -744,6 +744,7 @@ const EditExerciseMode: React.FC<EditExerciseModeProps> = ({
   const { updateExerciseAsync, isPending } = useUpdateExercise();
 
   const handleSave = async () => {
+    if (exercise.source === 'opengym') return;
     const trimmedName = state.name.trim();
     if (!trimmedName) {
       Toast.show({
@@ -784,6 +785,14 @@ const EditExerciseMode: React.FC<EditExerciseModeProps> = ({
     }
   };
 
+  if (exercise.source === 'opengym')
+    return (
+      <View className="flex-1 bg-background p-4">
+        <Text className="text-text-primary">
+          {t('sparkyGym.edit', { defaultValue: 'Edit in openGym' })}
+        </Text>
+      </View>
+    );
   return (
     <FormScreenChrome
       title={t('screens.editExercise', { defaultValue: 'Edit Exercise' })}

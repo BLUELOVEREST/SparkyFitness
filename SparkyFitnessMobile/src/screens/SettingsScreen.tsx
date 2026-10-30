@@ -15,6 +15,7 @@ import {
   queryClient,
 } from '../hooks';
 import DevTools from '../components/DevTools';
+import SparkyGymSettings from '../components/SparkyGymSettings';
 import PrivacyPolicyModal from '../components/PrivacyPolicyModal';
 import SettingsRow, { SettingsRowGroup } from '../components/SettingsRow';
 import { SectionErrorBoundary } from '../components/ScreenErrorBoundary';
@@ -245,6 +246,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation }) => {
             />
 
             <SettingsRowGroup>
+              {isConnected && <SparkyGymSettings />}
               <SettingsRow
                 icon="app-settings"
                 title={t('settings.rows.app', { defaultValue: 'App Settings' })}

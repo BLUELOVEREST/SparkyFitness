@@ -7,9 +7,16 @@ export const exercisePresetEntriesIdSchema = z.string().and(
   })
 );
 
-const userIdSchema = z.any();
+const userIdSchema = z.string();
 
-const workoutPresetsIdSchema = z.any();
+const workoutPresetsIdSchema = z.number().int();
+
+export const workoutSourceSummarySchema = z
+  .object({
+    duration_seconds: z.number().finite().nonnegative().nullable(),
+    calories_kcal: z.number().finite().nonnegative().nullable(),
+  })
+  .strict();
 
 export const exercisePresetEntriesSchema = z.object({
   id: exercisePresetEntriesIdSchema,
@@ -25,6 +32,7 @@ export const exercisePresetEntriesSchema = z.object({
   location: z.string().nullable().optional(),
   source: z.string(),
   workout_format: z.string(),
+  source_summary: workoutSourceSummarySchema.nullable(),
 });
 
 export const exercisePresetEntriesInitializerSchema = z.object({
@@ -41,6 +49,7 @@ export const exercisePresetEntriesInitializerSchema = z.object({
   location: z.string().optional().nullable(),
   source: z.string().optional(),
   workout_format: z.string().optional(),
+  source_summary: workoutSourceSummarySchema.nullable().optional(),
 });
 
 export const exercisePresetEntriesMutatorSchema = z.object({
@@ -57,6 +66,7 @@ export const exercisePresetEntriesMutatorSchema = z.object({
   location: z.string().optional().nullable(),
   source: z.string().optional(),
   workout_format: z.string().optional(),
+  source_summary: workoutSourceSummarySchema.nullable().optional(),
 });
 
 export type ExercisePresetEntries = z.infer<typeof exercisePresetEntriesSchema>;

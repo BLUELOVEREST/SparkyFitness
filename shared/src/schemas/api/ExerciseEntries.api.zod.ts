@@ -3,6 +3,7 @@ import { paginationSchema } from './Pagination.api.zod.ts';
 import { exerciseModalitySchema } from './Exercises.api.zod.ts';
 import { workoutFormatSchema } from './WorkoutPresets.api.zod.ts';
 import { gpsTrackPointSchema } from '../database/ExerciseEntryGpsPoints.zod.ts';
+import { workoutSourceSummarySchema } from '../database/ExercisePresetEntries.zod.ts';
 
 // --- Query contracts ---
 
@@ -540,6 +541,7 @@ export const individualSessionResponseSchema =
 
 /** Grouped workout session with nested exercise entries */
 export const presetSessionResponseSchema = z.object({
+  source_summary: workoutSourceSummarySchema.nullable().optional(),
   type: z.literal('preset'),
   id: z.string(),
   entry_date: z.string().nullable(),

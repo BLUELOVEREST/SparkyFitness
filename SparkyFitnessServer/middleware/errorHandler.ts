@@ -1,6 +1,32 @@
 import { log } from '../config/logging.js';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const errorHandler = (err: any, _req: any, res: any, _next: any) => {
+import type { Request, Response, NextFunction } from 'express';
+interface HandledError extends Error {
+  status?: number;
+  statusCode?: number;
+  code?: string;
+  type?: string;
+}
+function isSourceOwnedError(error: unknown): boolean {
+  const seen = new Set<object>();
+  let current = error;
+  while (
+    typeof current === 'object' &&
+    current !== null &&
+    !seen.has(current) &&
+    seen.size < 10
+  ) {
+    seen.add(current);
+    if ('code' in current && current.code === 'P7001') return true;
+    current = 'cause' in current ? current.cause : null;
+  }
+  return false;
+}
+const errorHandler = (
+  err: HandledError,
+  _req: Request,
+  res: Response,
+  _next: NextFunction
+) => {
   log(
     'error',
     `Error caught by centralized handler: ${err.message}`,
@@ -12,7 +38,11 @@ const errorHandler = (err: any, _req: any, res: any, _next: any) => {
   let code: string | undefined =
     typeof err.code === 'string' ? err.code : undefined;
 
-  if (
+  if (isSourceOwnedError(err)) {
+    statusCode = 409;
+    code = 'source_owned';
+    message = 'source_owned';
+  } else if (
     err.name === 'PayloadTooLargeError' ||
     err.type === 'entity.too.large' ||
     statusCode === 413

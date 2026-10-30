@@ -26,9 +26,15 @@ import {
   formatTimeOfDayString,
 } from '@/utils/timeFormatters';
 import { Exercise, ExerciseEntry, PresetSessionEntry } from '@/types/exercises';
-import { earliestEntryTime, setsDurationMinutes } from '@workspace/shared';
+import {
+  earliestEntryTime,
+  setsDurationMinutes,
+  workoutCalories,
+  workoutDurationMinutes,
+} from '@workspace/shared';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
 import WorkoutFeedbackPanel from './WorkoutFeedbackPanel';
+import { isOpenGymOwned } from '@/utils/openGymSource';
 
 interface ExercisePresetEntryDisplayProps {
   presetEntry: PresetSessionEntry;
@@ -63,6 +69,9 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
 }) => {
   const { t } = useTranslation();
   const { timeFormat } = usePreferences();
+  const readOnly =
+    isOpenGymOwned(presetEntry) ||
+    presetEntry.exercises?.some(isOpenGymOwned) === true;
   const [isExpanded, setIsExpanded] = useState(false);
   // The feedback panel autosaves, so only people who can write the diary
   // get it (#1560); report-only viewers can't save and don't see it here.
@@ -80,12 +89,16 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
     ) ?? 0;
 
   const totalMinutes =
-    presetEntry.exercises?.reduce((sum, ex) => {
-      const setsDuration = setsDurationMinutes(ex.sets);
-      // Fall back to the entry-level duration when the sets carry no per-set
-      // timers (e.g. rep-based sets synced from Hevy).
-      return sum + (setsDuration > 0 ? setsDuration : ex.duration_minutes || 0);
-    }, 0) ?? 0;
+    presetEntry.source_summary != null
+      ? workoutDurationMinutes(presetEntry)
+      : (presetEntry.exercises?.reduce((sum, ex) => {
+          const setsDuration = setsDurationMinutes(ex.sets);
+          // Fall back to the entry-level duration when the sets carry no per-set
+          // timers (e.g. rep-based sets synced from Hevy).
+          return (
+            sum + (setsDuration > 0 ? setsDuration : ex.duration_minutes || 0)
+          );
+        }, 0) ?? 0);
 
   const avgHR = (() => {
     const withHR =
@@ -100,16 +113,11 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
 
   const earliestTime = earliestEntryTime(presetEntry.exercises ?? []);
 
-  const totalCalories = Math.round(
-    convertEnergy(
-      presetEntry.exercises?.reduce(
-        (sum, ex) => sum + (ex.calories_burned || 0),
-        0
-      ) ?? 0,
-      'kcal',
-      energyUnit
-    )
-  );
+  const sourceCalories = workoutCalories(presetEntry);
+  const totalCalories =
+    sourceCalories === null
+      ? null
+      : Math.round(convertEnergy(sourceCalories, 'kcal', energyUnit));
 
   const hasExercises =
     presetEntry.exercises && presetEntry.exercises.length > 0;
@@ -237,25 +245,35 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
             </button>
 
             {/* Right: delete */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDelete(presetEntry.id)}
-                    className="flex-shrink-0 h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    {t('exerciseCard.deletePresetEntry', 'Delete Preset Entry')}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {readOnly && (
+              <span className="text-xs text-muted-foreground">
+                openGym · {t('sparkyGym.edit', 'Edit in openGym')}
+              </span>
+            )}
+            {!readOnly && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(presetEntry.id)}
+                      className="flex-shrink-0 h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      {t(
+                        'exerciseCard.deletePresetEntry',
+                        'Delete Preset Entry'
+                      )}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
 
           {/* Description / notes / gym */}
@@ -286,7 +304,7 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
           )}
 
           {/* Stats strip */}
-          {hasExercises && (
+          {(hasExercises || presetEntry.source_summary != null) && (
             <div className="mx-4 mb-4 mt-1 grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 bg-gray-50 dark:bg-gray-800/60 rounded-lg overflow-hidden">
               <StatCell
                 icon={<Layers className="w-3 h-3" />}
@@ -296,7 +314,11 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
               />
               <StatCell
                 icon={<Clock className="w-3 h-3" />}
-                value={formatMinutesToHHMM(totalMinutes)}
+                value={
+                  totalMinutes === null
+                    ? '—'
+                    : formatMinutesToHHMM(totalMinutes)
+                }
                 label={t('common.minutesUnit', 'Time')}
                 color="text-indigo-600 dark:text-indigo-400"
               />
@@ -308,7 +330,7 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
               />
               <StatCell
                 icon={<Flame className="w-3 h-3" />}
-                value={String(totalCalories)}
+                value={totalCalories === null ? '—' : String(totalCalories)}
                 label={getEnergyUnitString(energyUnit)}
                 color="text-orange-500 dark:text-orange-400"
               />
@@ -345,7 +367,7 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
                 )}
               </p>
             )}
-            {hasExercises && canGiveFeedback && (
+            {hasExercises && canGiveFeedback && !readOnly && (
               <WorkoutFeedbackPanel
                 presetEntryId={presetEntry.id}
                 exercises={presetEntry.exercises!.map((exerciseEntry) => ({

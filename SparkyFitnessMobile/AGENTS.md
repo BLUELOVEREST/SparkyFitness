@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-27_
+_Last updated: 2026-10-29_
 
 SparkyFitness Mobile is a React Native 0.86 + Expo SDK 57 app for syncing Apple Health / Health Connect data with the SparkyFitness backend, tracking nutrition, hydration, fasting, measurements, exercise, saved foods, meal templates, custom exercises, workout presets, iOS / Android widgets, the active workout HUD, and the Sparky AI chat.
 
@@ -361,6 +361,8 @@ npx expo prebuild --clean
 - **Snapshot Preservation & Preset Seeding:** `mode: 'delete'` preserves logged workouts/meals using snapshots (`exercise_id` / `food_id` set to `null`). When creating/saving a preset from a logged session (`useWorkoutPresetForm.ts`), entries with null `exercise_id` are automatically dropped while valid exercises carry over. Empty presets are guarded against starting or logging.
 
 ## Server API Orientation
+
+- openGym integration: `components/SparkyGymSettings.tsx` is the session-owner Settings panel, `services/api/sparkyGymApi.ts` uses shared strict management schemas, and `components/SparkyGymNotifications.tsx` owns foreground authenticated SSE replay/cache invalidation. Invitation responses remain component-local and are cleared on background/expiry. Imported exercises/workouts use source `opengym` and are read-only.
 
 All endpoints require auth headers, and proxy headers are injected before auth headers when configured. Key mobile clients:
 

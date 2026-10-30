@@ -1,10 +1,32 @@
 # Family & Friends Sharing
 
+Shared workout diaries show source-reported session duration and calories once per workout, not as calories assigned to an individual exercise. Unknown source totals remain unavailable. Native workout summaries contain only seconds and kcal, never body weight or target weight; integration raw records remain owner-only. Existing diary/report permissions and row-level policies are unchanged.
+
+Imported openGym workout details remain read-only for owners and delegates,
+whether attached to an individual exercise or to the whole session. Change the
+original result in openGym; its next synchronized revision updates the copy.
+
 Family & Friends Sharing in SparkyFitness allows you to connect with family members, friends, personal trainers, or coaches. By granting specific access permissions, you can allow others to log meals, track workouts, record check-ins, manage medications, track symptoms, or view progress reports on your behalf.
 
 The system is built with **least-privilege boundary isolation** using PostgreSQL Row-Level Security (RLS), ensuring that your private credentials and account settings are never shared.
 
 AI service model and reasoning settings remain private to their owner. An administrator can publish a shared configuration; family diary access does not grant access to personal AI credentials or settings.
+
+OpenGym private media archives are never shared with family delegates. When an
+account is deleted, its private archive directory is queued for durable background
+removal, including interrupted uploads; failures are retried without granting
+owners, delegates or request administrators access to the internal cleanup ledger.
+This does not enable self-service account deletion or change daily demo-reset
+retention; deleting the demo account itself uses the same archive cleanup.
+
+When explicitly paired and scoped, SparkyFitness sends your active weekly
+training-focus intent to openGym as dated hints, including your chosen main
+session and morning/noon/afternoon/evening buckets. These hints remain private
+integration metadata: family permissions are unchanged, openGym cannot edit your
+SF plans, and hints do not change meal quantities, nutrition targets or completed
+workout records. Inactivation or deletion removes the hint; your timezone and
+first-day-of-week preferences refresh it. Initial sync includes current intent
+even when historical measurements are not shared.
 
 ---
 
@@ -93,3 +115,17 @@ If someone else still uses the item — they have logged it, or it sits in their
 
 ### 7. Meal-to-Meal Composition
 A meal's ingredient list can link another reusable meal (e.g. a sauce or side) instead of a plain food. Linking a sub-meal into a parent meal requires the same library access to the sub-meal that reading it directly would require — you cannot link a sub-meal you cannot otherwise view. This check applies independently of, and in addition to, owning the parent meal.
+
+### SparkyGym Connections
+
+Only the signed-in account owner can manage a SparkyGym connection. Family members
+and delegates cannot read pairing credentials, delivery queues, incoming integration
+records, notification history or private media, even with diary/check-in permissions.
+Snapshot ledgers and their membership lists are also private to the owner.
+Source cursor ledgers are private and retained when imported projections are purged;
+re-pairing cannot silently replace peer history with an older restored source.
+Each owner approves the peer identity and selected resource scopes. BODY changes
+made through an authorized check-in path are captured for the source owner, not
+the delegate's account. Pausing or revoking stops new BODY delivery; ordinary
+disconnection retains imported history. Purging a revoked source is a separate
+explicit owner action. Re-pairing does not transfer another peer owner's history.

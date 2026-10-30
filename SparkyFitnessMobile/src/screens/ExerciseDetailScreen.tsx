@@ -193,6 +193,7 @@ const ExerciseDetailScreen: React.FC<ExerciseDetailScreenProps> = ({
   const lastSet = stats?.lastSet ?? null;
 
   const canManageExercise = !!(
+    exercise.source !== 'opengym' &&
     isConnected &&
     exercise.userId &&
     profile?.id === exercise.userId
@@ -301,13 +302,14 @@ const ExerciseDetailScreen: React.FC<ExerciseDetailScreenProps> = ({
   };
 
   const imageSources = useMemo(() => {
+    if (exercise.source === 'opengym') return [];
     return (exercise.images ?? [])
       .map((path) => (path ? getImageSource(path) : null))
       .filter(
         (source): source is { uri: string; headers: Record<string, string> } =>
           source !== null
       );
-  }, [exercise.images, getImageSource]);
+  }, [exercise.images, exercise.source, getImageSource]);
 
   const pairAspectMatch = useImagePairAspectMatch(imageSources);
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
@@ -340,7 +342,8 @@ const ExerciseDetailScreen: React.FC<ExerciseDetailScreenProps> = ({
     'mechanic',
     exercise.mechanic
   );
-  const sourceText = exercise.source ?? '';
+  const sourceText =
+    exercise.source === 'opengym' ? 'openGym' : (exercise.source ?? '');
   const hasDetails = Boolean(
     categoryText || levelText || forceText || mechanicText || sourceText
   );
@@ -549,6 +552,7 @@ const ExerciseDetailScreen: React.FC<ExerciseDetailScreenProps> = ({
   };
 
   const handleEdit = () => {
+    if (exercise.source === 'opengym') return;
     navigation.navigate('ExerciseForm', {
       mode: 'edit-exercise',
       exercise,
@@ -1034,6 +1038,11 @@ const ExerciseDetailScreen: React.FC<ExerciseDetailScreenProps> = ({
                 </>
               )}
 
+              {exercise.source === 'opengym' && (
+                <Text className="text-text-secondary">
+                  {t('sparkyGym.edit', { defaultValue: 'Edit in openGym' })}
+                </Text>
+              )}
               {canManageExercise && (
                 <Button
                   variant="destructive"

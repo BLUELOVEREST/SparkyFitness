@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-19_
+_Last updated: 2026-10-29_
 
 SparkyFitness Frontend is the React web app for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessFrontend/`.
 
@@ -47,6 +47,8 @@ Features are organized by domain, and the same domain folder name appears in `sr
 - Example: a Medications bug lives in `src/pages/Medications/` + `src/api/Medications/` + `src/hooks/` medication hooks. Start there, not with a repo-wide search.
 
 ## Source Map
+
+- openGym integration: owner-only Settings panel in `src/pages/Settings/SparkyGymSettings.tsx`, strict shared contracts through `src/api/Integrations/sparkyGym.ts`, and committed owner SSE cache refresh in `src/hooks/Integrations/useSparkyGymNotifications.ts`. Invitations stay in component memory, never Query caches. Imported source authority is checked by `src/utils/openGymSource.ts`; imported exercise/workout edits belong in openGym.
 
 - Food assistant state: owner-only preferences, recoverable tasks and operation history use `FoodAssistant.api.zod.ts` / `FoodAssistant.zod.ts` in shared. Server: `routes/v2/foodAssistantRoutes.ts`, `services/foodAssistantService.ts`, `models/foodAssistantRepository.ts`, `ai/tools/foodAssistantTools.ts`. Web: `src/components/ai/FoodAssistantState.tsx`, `src/api/Chatbot/foodAssistantService.ts`.
 

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { isOpenGymOwned } from '@/utils/openGymSource';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -689,6 +690,7 @@ const EditExerciseEntryDialog = ({
   };
 
   const handleSave = async () => {
+    if (isOpenGymOwned(entry)) return;
     info(loggingLevel, 'EditExerciseEntryDialog: saving entry:', entry.id);
     try {
       // An entry whose library exercise has been deleted keeps its snapshot but
@@ -854,6 +856,16 @@ const EditExerciseEntryDialog = ({
     }
   };
 
+  if (isOpenGymOwned(entry))
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('sparkyGym.edit', 'Edit in openGym')}</DialogTitle>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    );
   return (
     <Dialog
       open={open}

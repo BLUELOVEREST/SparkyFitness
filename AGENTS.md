@@ -1,10 +1,11 @@
 # AGENTS.md
 
-*Last updated: 2026-10-29*
+_Last updated: 2026-10-30_
 
 This is the repo-root monorepo guide for SparkyFitness. Use it to choose the right package, understand shared repo-level rules, and find the next guide to read.
 
 **For AI Tools & Developers:** Start with `agent-docs/README.md` (in this repo) for quick navigation to:
+
 - `file-and-domain-reference.md` — Find any code by feature in seconds
 - `testing-patterns.md` — Concrete test examples for each layer
 - `architecture-permissions.md` — Permission types and RLS patterns
@@ -55,9 +56,12 @@ These fork-specific rules supplement the upstream package guides.
 
 ### openGym Integration Work
 
+- C final scope (2026-10-30): SparkyFitness owns dated weekly focus/time-bucket/main/rest and carb-cycle/meals. Send note-style daily hints to openGym; actual freestyle/template workouts return independently, without plan-session references. Do not add a meal-source picker, rewrite native weekly assignments, put hints in personal day notes, or let hints suppress reminders. The old reverse-direction summary is superseded; release only after final-scope acceptance.
+- SparkyGym persistence lives in `SparkyFitnessServer/models/sparkyGymRepository.ts`, migration `20261029120000_sparkygym_core.sql`, and `shared/src/schemas/database/SparkyGym.zod.ts`. Ten tables, including snapshot ledgers/membership and retained peer source heads, are owner-only. The eleventh, `sparkygym_archive_cleanup_jobs` (`20261030010000_sparkygym_archive_account_cleanup.sql`, `SparkyGymArchiveCleanupJobs.zod.ts`), is Tier 3 system-only/default-deny and has no user FK: every committed account deletion enqueues durable private archive removal in the existing notification-driven worker. The authoritative completion contract is `docs/superpowers/specs/2026-10-29-sparkygym-completion-contract.md`; BODY triggers and snapshots share an owner advisory transaction boundary and durable global source cursors.
+
 - Companion repository: `/home/zhangzhicheng/workspace/own/eric-openGym`; Gitea origin and official upstream remain separate, with upstream pushes disabled.
 - Integration decisions and architecture: `docs/superpowers/specs/2026-10-29-opengym-integration-decisions.md` and `2026-10-29-sparkygym-architecture.md` in the same directory. Wire contract: `2026-10-29-sparkygym-contract-v1.md`.
-- Work is isolated in `/tmp/sparky-opengym-integration-20261029` and `/tmp/opengym-sparky-integration-20261029`. Protocol foundation does not enable synchronization or register API routes. E-class analytics remain deferred.
+- Work is isolated in `/tmp/sparky-opengym-integration-20261029` and `/tmp/opengym-sparky-integration-20261029`. Owner management routes use `/api/integrations/sparkygym`; authenticated peer transport uses `/api/integrations/v1`. Synchronization requires explicit bilateral pairing and scoped consent; installing the code alone does not pair accounts. E-class analytics remain deferred.
 - Share protocol specifications and synthetic vectors, not application source across the repositories' different licenses. Do not copy official openGym exercise media.
 
 ### Development and Upstream Merges
@@ -138,7 +142,7 @@ Cheap ways to learn things:
 - Auth or API contract changes usually need a quick check in both web and mobile because they share the same backend.
 - Frontend local dev proxies `/api`, `/health-data`, and `/uploads` to the server on `3010`. The `/health-data` proxy is rewritten to `/api/health-data`, while server APIs remain rooted at `/api`.
 - Server runtime secrets are usually sourced from repo-root `.env`, commonly created from `docker/.env.example`. The server can also load secret files via `SparkyFitnessServer/utils/secretLoader.ts`.
-- Extract shared logic on the **second** duplication ("rule of two"), not the third - duplicated logic drifts as different sessions edit each copy. Extract *behavior*, not coincidental shape. See `agent-docs/anti-patterns.md`.
+- Extract shared logic on the **second** duplication ("rule of two"), not the third - duplicated logic drifts as different sessions edit each copy. Extract _behavior_, not coincidental shape. See `agent-docs/anti-patterns.md`.
 - **Strict TypeScript Typing:** Never use `any` or `// eslint-disable-next-line @typescript-eslint/no-explicit-any` when creating new functions or editing existing code. When modifying existing files, proactively update legacy `any` declarations in the touched code to reflect their proper TypeScript data types, interfaces, or schemas from `@workspace/shared`. Do NOT copy legacy `any` parameter signatures forward when refactoring or extending service/repository files.
 - **Library Deletes vs Diary Snapshots:** `exercise_entries` and `food_entries` are self-contained snapshots, not pointers (`exercise_id` and `food_id` are `ON DELETE SET NULL`). Deleting an exercise or food from the library (`mode: 'delete'`) preserves past and current diary history, cascades from presets and plan templates, cleans up future scheduled workout plan entries (`entry_date >= today`), and cleans up empty parent preset entries. Only explicit `delete_with_history` (force delete) purges diary logs for that user. If an item is referenced by other users (`otherUserReferences > 0`), the backend falls back to hiding (`is_quick_exercise` / `is_quick_food`).
 - **Comprehensive Cache Invalidation:** When mutating library items (foods, exercises, presets, meals, plans), always invalidate the entire family of dependent query keys across library search, counts, templates, and daily diary summaries (`dailySummary` / `dailyProgress` / `exerciseEntries`) in both web and mobile.
@@ -148,7 +152,6 @@ Cheap ways to learn things:
   3. `docs/src/install/environment-variables.md` (the comprehensive documentation reference).
   4. `docs/components/EnvGenerator.vue` (the interactive web `.env` generator component).
   5. `helm/chart/templates/` and `helm/chart/values.yaml` (if passed through Helm charts).
-
 
 ## Commit & PR Conventions
 
@@ -212,4 +215,3 @@ npx expo prebuild --clean
 pnpm dev
 pnpm run build
 ```
-

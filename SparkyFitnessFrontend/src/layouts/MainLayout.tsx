@@ -1,4 +1,5 @@
 import type React from 'react';
+import { useSparkyGymNotifications } from '@/hooks/Integrations/useSparkyGymNotifications';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, Outlet, useNavigate } from 'react-router-dom';
@@ -76,6 +77,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 }) => {
   const { t } = useTranslation();
   const { user, signOut } = useAuth();
+  useSparkyGymNotifications();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const {

@@ -1,6 +1,6 @@
 # Database Schema & Migrations
 
-*Last updated: 2026-10-20*
+*Last updated: 2026-10-30*
 
 This document covers the database structure, schema design, and migration process for SparkyFitness.
 
@@ -11,6 +11,69 @@ This document covers the database structure, schema design, and migration proces
 ---
 
 ## Database Overview
+
+### SparkyGym Integration
+
+There are eleven integration tables: ten Tier 1 owner-only tables (no family permission), plus a Tier 3 system/internal cleanup ledger:
+
+| Table | Purpose |
+| --- | --- |
+| `sparkygym_connections` | Peer binding, resource scopes, network opt-ins, encrypted credentials and pairing state |
+| `sparkygym_streams` | Durable incoming/outgoing entity revisions keyed by owner and connection namespace; reset on re-pair |
+| `sparkygym_outbox` | Immutable exact request bytes/hash/UUID, durable global source cursor, delivery receipts and retry deadline |
+| `sparkygym_inbox` | Atomic incoming exact-hash deduplication and receipt replay |
+| `sparkygym_entities` | Peer resource/entity mappings, raw payloads, tombstones and last source cursor; independent of connection rotation |
+| `sparkygym_source_heads` | Monotonic peer-wide accepted source cursor, retained across projection purge, inbox compaction and connection rotation |
+| `sparkygym_notifications` | Durable owner SSE replay cursor containing public change metadata only |
+| `sparkygym_media` | Owner/hash deduplication, metadata, private path and archival state |
+| `sparkygym_snapshots` | Durable connection-scoped snapshot range, count/hash, pruning resources and completion state |
+| `sparkygym_snapshot_members` | Unique resource/entity membership with a composite owner/connection/snapshot FK |
+| `sparkygym_archive_cleanup_jobs` | Tier 3 system-only account archive deletion jobs; no user FK, default-deny RLS, persisted bounded retry deadlines |
+
+Migration: `20261029120000_sparkygym_core.sql`. DB schema mirror:
+`shared/src/schemas/database/SparkyGym.zod.ts`. RLS uses `create_owner_policy`.
+Normal requests use the app pool; delivery and account archive cleanup run through background owner-pool clients.
+The narrowly scoped peer-key lookup returns encrypted connection metadata for one key.
+Privileged capture helpers live in `sparkygym_private`, outside startup's blanket
+public-function grants, with public schema/function access revoked.
+
+Triggers capture `check_in_measurements`, `custom_categories`, `custom_measurements`
+and `onboarding_data.target_weight` in the source transaction. Built-in storage and
+the known convertible custom UnitInput fields are already kg/cm; capture must not
+convert them a second time. Unknown units/non-finite values retain explicit text.
+Capture and snapshot share an owner advisory transaction boundary. Snapshot source
+reads use plain MVCC SELECTs, not row locks. Source cursors come from a persistent
+sequence, never MAX of compactable outbox rows. NOTIFY is only a commit wake-up;
+durable rows remain authoritative.
+
+Migration `20261030010000_sparkygym_archive_account_cleanup.sql` adds the cleanup
+ledger, mirrored by `SparkyGymArchiveCleanupJobs.zod.ts`. A private SECURITY DEFINER
+user DELETE trigger enqueues and NOTIFYs in the deletion transaction, without
+acquiring an advisory lock after the user tuple lock. The post-commit worker takes
+the same owner advisory lock as incoming media, then checks that the owner is gone.
+It removes the entire UUID owner archive directory, including interrupted uploads,
+and acknowledges only after parent directory fsync (repeated on ENOENT retries).
+Failures retain their job and a bounded backoff deadline. Startup, LISTEN reconnect
+and committed NOTIFY recover work through the existing DeliveryWorker; no periodic
+business polling or new public endpoints are introduced. Self-deletion remains
+disabled. Daily demo reset retains integration state as before; actual demo account
+deletion uses the same trigger as every other account deletion.
+
+Custom measurement entity IDs preserve each native row UUID, including multiple
+hourly samples on the same day and their original timestamps. Built-in measurement
+IDs remain calendar day plus metric. Snapshot capture enumerates every custom row;
+a daily read model may choose the latest without discarding raw history.
+Outbox packet identity/body/hash may be finalized in its creation transaction
+(`created_xid`); once committed these fields are immutable. Main snapshot controls
+use that boundary to finalize begin metadata after all item cursors are known.
+
+Every applied or valid stale event advances `sparkygym_source_heads` in its inbox
+transaction. Exact-hash duplicates replay without advancing it. Rotation and purge
+must retain this ledger, so restored lower source cursors remain a visible conflict.
+Snapshot begin never advances the head to its advertised watermark. Only successful
+membership validation and snapshot completion may advance it, using a monotonic
+maximum so later live deltas cannot be rewound. Per-entity cursors remain separate
+for watermark-limited pruning.
 
 SparkyFitness uses PostgreSQL 15+ with Row Level Security (RLS) to ensure data isolation between users. The database follows a normalized design with clear relationships between entities.
 
