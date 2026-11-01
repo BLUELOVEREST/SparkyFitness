@@ -2,7 +2,10 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { sparkyGymDomainEventSchema } from '@workspace/shared';
+import {
+  BODY_CIRCUMFERENCE_PARTS,
+  sparkyGymDomainEventSchema,
+} from '@workspace/shared';
 import { endPool, getClient, getSystemClient } from '../db/poolManager.js';
 import * as repo from '../models/sparkyGymRepository.js';
 
@@ -134,6 +137,64 @@ describe.runIf(enabled)(
         expect(
           events.find((event) => event.entity_id.endsWith(':neck'))?.payload
         ).toMatchObject({ value: 38, unit: 'cm' });
+      });
+    });
+    it('captures all 18 circumference fields and does not resurrect cleared values in snapshots', async () => {
+      await repo.withOwnerTransaction(owner, async (client) => {
+        const keys = BODY_CIRCUMFERENCE_PARTS.map((part) => part.key);
+        const values = keys.map((_, index) => index + 20);
+        await client.query(
+          `INSERT INTO check_in_measurements(user_id,entry_date,weight,${keys.join(',')}) VALUES($1,'2026-10-31',75,${keys.map((_, i) => `$${i + 2}`).join(',')})`,
+          [owner, ...values]
+        );
+        const captured = await client.query<{ entity_id: string }>(
+          `SELECT entity_id FROM sparkygym_outbox
+           WHERE user_id=$1 AND resource='body_measurement' AND entity_id LIKE '2026-10-31:%'`,
+          [owner]
+        );
+        expect(captured.rows.map((row) => row.entity_id)).toEqual(
+          expect.arrayContaining(keys.map((key) => `2026-10-31:${key}`))
+        );
+        await client.query(
+          `UPDATE check_in_measurements SET left_ankle=NULL,right_wrist=18
+           WHERE user_id=$1 AND entry_date='2026-10-31'`,
+          [owner]
+        );
+        const day = await client.query<{
+          weight: string;
+          left_ankle: null;
+          right_ankle: string;
+        }>(
+          `SELECT weight,left_ankle,right_ankle FROM check_in_measurements
+           WHERE user_id=$1 AND entry_date='2026-10-31'`,
+          [owner]
+        );
+        expect(Number(day.rows[0].weight)).toBe(75);
+        expect(day.rows[0].left_ankle).toBeNull();
+        expect(Number(day.rows[0].right_ankle)).toBe(
+          values[keys.indexOf('right_ankle')]
+        );
+        const deleted = await client.query<{ operation: string }>(
+          `SELECT body::jsonb->>'operation' AS operation FROM sparkygym_outbox
+           WHERE user_id=$1 AND resource='body_measurement' AND entity_id='2026-10-31:left_ankle'
+           ORDER BY source_cursor DESC LIMIT 1`,
+          [owner]
+        );
+        expect(deleted.rows[0].operation).toBe('delete');
+        const snapshot = await client.query<{
+          entity_id: string;
+          payload: { unit: string; value: number };
+        }>(
+          `SELECT entity_id,payload FROM public.sparkygym_body_snapshot()
+           WHERE resource='body_measurement' AND entity_id LIKE '2026-10-31:%'`
+        );
+        expect(
+          snapshot.rows.some((row) => row.entity_id.endsWith(':left_ankle'))
+        ).toBe(false);
+        expect(
+          snapshot.rows.find((row) => row.entity_id.endsWith(':right_wrist'))
+            ?.payload
+        ).toMatchObject({ value: 18, unit: 'cm' });
       });
     });
     it('rolls back source writes and queued events together', async () => {

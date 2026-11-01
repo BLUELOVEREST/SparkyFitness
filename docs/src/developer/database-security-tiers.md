@@ -185,7 +185,7 @@ Symptoms are their own domain (they used to share the medications permission). P
 
 | Table Name | Description | Write (insert/update/delete) | Read (select) |
 | :--- | :--- | :--- | :--- |
-| `check_in_measurements` | Weight, body composition, BMR, and circumference measurements | Delegate with `can_manage_checkin` | Delegate with `can_manage_checkin` or `can_view_reports` |
+| `check_in_measurements` | Weight, body composition, BMR, and all 18 built-in circumferences (including bilateral forearm, wrist and ankle) | Delegate with `can_manage_checkin` | Delegate with `can_manage_checkin` or `can_view_reports` |
 | `check_in_photos` | Progress photos (image bytes served only via the authenticated `GET /api/measurements/check-in-photos/file/{id}`; excluded from the public `/uploads` static mount) | Delegate with `can_manage_checkin` | Delegate with `can_manage_checkin` or `can_view_reports` |
 | `sleep_entries` | Sleep logs (bedtime, wake time) | Delegate with `can_manage_checkin` | Delegate with `can_manage_checkin` or `can_view_reports` |
 | `sleep_entry_stages` | Sleep stage breakdowns (REM, Deep, Light) | Delegate with `can_manage_checkin` | Delegate with `can_manage_checkin` or `can_view_reports` |

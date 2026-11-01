@@ -127,6 +127,12 @@ describe('ReportsTables body measurements', () => {
         right_thigh: 59,
         left_calf: 38,
         right_calf: 39,
+        left_forearm: 25.4,
+        right_forearm: 27,
+        left_wrist: 16,
+        right_wrist: 17,
+        left_ankle: 22,
+        right_ankle: 23,
         muscle_mass_kg: null,
         bone_mass_kg: null,
         body_water_percentage: null,
@@ -136,6 +142,16 @@ describe('ReportsTables body measurements', () => {
     expect(screen.getByText('Shoulders (inches)')).toBeInTheDocument();
     expect(screen.getByText('Chest (inches)')).toBeInTheDocument();
     expect(screen.getByText('Left Calf (inches)')).toBeInTheDocument();
+    for (const label of [
+      'Left Forearm',
+      'Right Forearm',
+      'Left Wrist',
+      'Right Wrist',
+      'Left Ankle',
+      'Right Ankle',
+    ]) {
+      expect(screen.getByText(`${label} (inches)`)).toBeInTheDocument();
+    }
     expect(screen.getByText('44.1 in')).toBeInTheDocument();
     expect(screen.getByText('15 in')).toBeInTheDocument();
   });

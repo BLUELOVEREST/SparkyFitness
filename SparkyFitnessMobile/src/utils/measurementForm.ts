@@ -26,6 +26,21 @@ export type FieldKey =
   | 'neck'
   | 'waist'
   | 'hips'
+  | 'shoulders'
+  | 'chest'
+  | 'abdomen'
+  | 'left_biceps'
+  | 'right_biceps'
+  | 'left_thigh'
+  | 'right_thigh'
+  | 'left_calf'
+  | 'right_calf'
+  | 'left_forearm'
+  | 'right_forearm'
+  | 'left_wrist'
+  | 'right_wrist'
+  | 'left_ankle'
+  | 'right_ankle'
   | 'steps'
   | 'height'
   | 'bodyFatPercentage'
@@ -44,6 +59,21 @@ export const EMPTY_FORM: FormState = {
   neck: '',
   waist: '',
   hips: '',
+  shoulders: '',
+  chest: '',
+  abdomen: '',
+  left_biceps: '',
+  right_biceps: '',
+  left_thigh: '',
+  right_thigh: '',
+  left_calf: '',
+  right_calf: '',
+  left_forearm: '',
+  right_forearm: '',
+  left_wrist: '',
+  right_wrist: '',
+  left_ankle: '',
+  right_ankle: '',
   steps: '',
   height: '',
   heightFeet: '',
@@ -65,6 +95,21 @@ export const FIELD_FORM_KEYS: Record<FieldKey, (keyof FormState)[]> = {
   neck: ['neck'],
   waist: ['waist'],
   hips: ['hips'],
+  shoulders: ['shoulders'],
+  chest: ['chest'],
+  abdomen: ['abdomen'],
+  left_biceps: ['left_biceps'],
+  right_biceps: ['right_biceps'],
+  left_thigh: ['left_thigh'],
+  right_thigh: ['right_thigh'],
+  left_calf: ['left_calf'],
+  right_calf: ['right_calf'],
+  left_forearm: ['left_forearm'],
+  right_forearm: ['right_forearm'],
+  left_wrist: ['left_wrist'],
+  right_wrist: ['right_wrist'],
+  left_ankle: ['left_ankle'],
+  right_ankle: ['right_ankle'],
   steps: ['steps'],
   height: ['height', 'heightFeet'],
   bodyFatPercentage: ['bodyFatPercentage'],
@@ -80,6 +125,21 @@ export const FORM_FIELD_KEYS: Record<keyof FormState, FieldKey> = {
   neck: 'neck',
   waist: 'waist',
   hips: 'hips',
+  shoulders: 'shoulders',
+  chest: 'chest',
+  abdomen: 'abdomen',
+  left_biceps: 'left_biceps',
+  right_biceps: 'right_biceps',
+  left_thigh: 'left_thigh',
+  right_thigh: 'right_thigh',
+  left_calf: 'left_calf',
+  right_calf: 'right_calf',
+  left_forearm: 'left_forearm',
+  right_forearm: 'right_forearm',
+  left_wrist: 'left_wrist',
+  right_wrist: 'right_wrist',
+  left_ankle: 'left_ankle',
+  right_ankle: 'right_ankle',
   steps: 'steps',
   height: 'height',
   heightFeet: 'height',
@@ -153,6 +213,96 @@ export function buildStandardFormFromMeasurement(
       lengthFromCm(measurement.hips, bodyUnit)
     );
     prefilled.add('hips');
+  }
+  if (measurement.shoulders != null) {
+    values.shoulders = formatNumberForInput(
+      lengthFromCm(measurement.shoulders, bodyUnit)
+    );
+    prefilled.add('shoulders');
+  }
+  if (measurement.chest != null) {
+    values.chest = formatNumberForInput(
+      lengthFromCm(measurement.chest, bodyUnit)
+    );
+    prefilled.add('chest');
+  }
+  if (measurement.abdomen != null) {
+    values.abdomen = formatNumberForInput(
+      lengthFromCm(measurement.abdomen, bodyUnit)
+    );
+    prefilled.add('abdomen');
+  }
+  if (measurement.left_biceps != null) {
+    values.left_biceps = formatNumberForInput(
+      lengthFromCm(measurement.left_biceps, bodyUnit)
+    );
+    prefilled.add('left_biceps');
+  }
+  if (measurement.right_biceps != null) {
+    values.right_biceps = formatNumberForInput(
+      lengthFromCm(measurement.right_biceps, bodyUnit)
+    );
+    prefilled.add('right_biceps');
+  }
+  if (measurement.left_thigh != null) {
+    values.left_thigh = formatNumberForInput(
+      lengthFromCm(measurement.left_thigh, bodyUnit)
+    );
+    prefilled.add('left_thigh');
+  }
+  if (measurement.right_thigh != null) {
+    values.right_thigh = formatNumberForInput(
+      lengthFromCm(measurement.right_thigh, bodyUnit)
+    );
+    prefilled.add('right_thigh');
+  }
+  if (measurement.left_calf != null) {
+    values.left_calf = formatNumberForInput(
+      lengthFromCm(measurement.left_calf, bodyUnit)
+    );
+    prefilled.add('left_calf');
+  }
+  if (measurement.right_calf != null) {
+    values.right_calf = formatNumberForInput(
+      lengthFromCm(measurement.right_calf, bodyUnit)
+    );
+    prefilled.add('right_calf');
+  }
+  if (measurement.left_forearm != null) {
+    values.left_forearm = formatNumberForInput(
+      lengthFromCm(measurement.left_forearm, bodyUnit)
+    );
+    prefilled.add('left_forearm');
+  }
+  if (measurement.right_forearm != null) {
+    values.right_forearm = formatNumberForInput(
+      lengthFromCm(measurement.right_forearm, bodyUnit)
+    );
+    prefilled.add('right_forearm');
+  }
+  if (measurement.left_wrist != null) {
+    values.left_wrist = formatNumberForInput(
+      lengthFromCm(measurement.left_wrist, bodyUnit)
+    );
+    prefilled.add('left_wrist');
+  }
+  if (measurement.right_wrist != null) {
+    values.right_wrist = formatNumberForInput(
+      lengthFromCm(measurement.right_wrist, bodyUnit)
+    );
+    prefilled.add('right_wrist');
+  }
+  if (measurement.left_ankle != null) {
+    values.left_ankle = formatNumberForInput(
+      lengthFromCm(measurement.left_ankle, bodyUnit)
+    );
+    prefilled.add('left_ankle');
+  }
+  if (measurement.right_ankle != null) {
+    values.right_ankle = formatNumberForInput(
+      lengthFromCm(measurement.right_ankle, bodyUnit)
+    );
+    prefilled.add('right_ankle');
   }
   if (measurement.height != null) {
     if (heightMode === 'ft_in') {
@@ -248,6 +398,21 @@ export function standardFieldMetricValue(
     }
     case 'neck':
     case 'waist':
+    case 'shoulders':
+    case 'chest':
+    case 'abdomen':
+    case 'left_biceps':
+    case 'right_biceps':
+    case 'left_thigh':
+    case 'right_thigh':
+    case 'left_calf':
+    case 'right_calf':
+    case 'left_forearm':
+    case 'right_forearm':
+    case 'left_wrist':
+    case 'right_wrist':
+    case 'left_ankle':
+    case 'right_ankle':
     case 'hips': {
       const parsed = parseOptional(form[field]);
       return parsed == null ? null : lengthToCm(parsed, bodyUnit);

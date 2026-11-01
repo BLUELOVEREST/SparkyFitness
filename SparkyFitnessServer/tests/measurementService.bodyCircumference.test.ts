@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import measurementRepository from '../models/measurementRepository.js';
 import measurementService from '../services/measurementService.js';
 import { loadUserTimezone } from '../utils/timezoneLoader.js';
+import { BODY_CIRCUMFERENCE_PARTS } from '@workspace/shared';
 
 vi.mock('../utils/timezoneLoader.js', () => ({
   loadUserTimezone: vi.fn(),
@@ -32,6 +33,43 @@ describe('processHealthData body_circumference smart tape ingestion', () => {
       .fn()
       .mockResolvedValue([{ id: 'checkin-1' }]);
   });
+
+  it.each(BODY_CIRCUMFERENCE_PARTS)(
+    'stores $key as a native cm field via smart tape and direct health imports',
+    async ({ key }) => {
+      for (const type of ['body_circumference', key]) {
+        vi.mocked(
+          measurementRepository.bulkUpsertCheckInMeasurements
+        ).mockClear();
+        const result = await measurementService.processHealthData(
+          [
+            {
+              type,
+              part: key,
+              value: 10,
+              unit: 'in',
+              date: '2026-10-31',
+              source: 'smart_tape',
+            },
+          ],
+          userId,
+          actingUserId
+        );
+        expect(result.errors).toEqual([]);
+        expect(
+          measurementRepository.bulkUpsertCheckInMeasurements
+        ).toHaveBeenCalledWith(userId, actingUserId, [
+          { entryDate: '2026-10-31', measurements: { [key]: 25.4 } },
+        ]);
+        expect(
+          measurementRepository.createCustomCategory
+        ).not.toHaveBeenCalled();
+        expect(
+          measurementRepository.bulkUpsertCustomMeasurements
+        ).not.toHaveBeenCalled();
+      }
+    }
+  );
 
   it('routes built-in circumference parts to check-in measurements', async () => {
     const result = await measurementService.processHealthData(

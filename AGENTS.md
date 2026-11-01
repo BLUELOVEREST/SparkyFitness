@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-30_
+_Last updated: 2026-10-31_
 
 This is the repo-root monorepo guide for SparkyFitness. Use it to choose the right package, understand shared repo-level rules, and find the next guide to read.
 
@@ -56,6 +56,9 @@ These fork-specific rules supplement the upstream package guides.
 
 ### openGym Integration Work
 
+- LAN pairing uses explicit `self_origin` / `peer_origin` service URLs, independent of public browser/auth origins. Seven resource scopes/directions and HTTP/private-network policy are fixed for this integration. Binding `include_history` authorizes manual history imports, not automatic full-history initialization; the confirmed history button requests a two-way snapshot, with source identity/cursor deduplication and pending-snapshot guards. No existing-connection migration is required for this pre-production feature.
+
+- Current ownership, sync directions and edit/delete rules: `docs/superpowers/specs/2026-10-31-sparkygym-sync-rules.md`. Read before changing synchronization behavior; it distinguishes agreed rules, tested functionality and pending gaps. Local acceptance: `docs/superpowers/plans/2026-10-31-sparkygym-test-and-followups.md`.
 - C final scope (2026-10-30): SparkyFitness owns dated weekly focus/time-bucket/main/rest and carb-cycle/meals. Send note-style daily hints to openGym; actual freestyle/template workouts return independently, without plan-session references. Do not add a meal-source picker, rewrite native weekly assignments, put hints in personal day notes, or let hints suppress reminders. The old reverse-direction summary is superseded; release only after final-scope acceptance.
 - SparkyGym persistence lives in `SparkyFitnessServer/models/sparkyGymRepository.ts`, migration `20261029120000_sparkygym_core.sql`, and `shared/src/schemas/database/SparkyGym.zod.ts`. Ten tables, including snapshot ledgers/membership and retained peer source heads, are owner-only. The eleventh, `sparkygym_archive_cleanup_jobs` (`20261030010000_sparkygym_archive_account_cleanup.sql`, `SparkyGymArchiveCleanupJobs.zod.ts`), is Tier 3 system-only/default-deny and has no user FK: every committed account deletion enqueues durable private archive removal in the existing notification-driven worker. The authoritative completion contract is `docs/superpowers/specs/2026-10-29-sparkygym-completion-contract.md`; BODY triggers and snapshots share an owner advisory transaction boundary and durable global source cursors.
 
@@ -89,6 +92,8 @@ These fork-specific rules supplement the upstream package guides.
 
 ### Local Test Environment
 
+- Temporary source-preview mode (2026-10-31): both test stacks also use `compose.source-preview.yml`; web pages are served through internal Vite containers and backend changes are read-only file mounts over the accepted images. Preserve this override when restarting the current preview. See each test directory's `README.source-preview.md` for exact restart/rollback commands. Base Compose alone returns to the previously built image code, not the current uncommitted source. No image build is needed for this preview.
+
 - Deployment directory: `/home/zhangzhicheng/workspace/own/eric-sparkyfitness-test`.
 - Compose project name: `eric-sparkyfitness-test`. Its `docker-compose.yml`, `.env`, and persistent `data/` live in that directory, outside this source repository.
 - Wired LAN address: `192.168.200.118`. Web UI: `http://192.168.200.118:3006/`; direct server API: `http://192.168.200.118:3016/api`.
@@ -97,6 +102,7 @@ These fork-specific rules supplement the upstream package guides.
 - From the test directory, use `docker compose -p eric-sparkyfitness-test --env-file .env -f docker-compose.yml pull` and then `docker compose -p eric-sparkyfitness-test --env-file .env -f docker-compose.yml up -d`.
 - Verify container image tags, health, the web page, and the frontend-proxied `/api/health`. Preserve test database and uploads when updating images.
 - The previous deployment directory was `eric-body-tracker-test` (later moved under `own/archived/`). It is no longer the active deployment directory.
+- Temporary source-preview mode (2026-10-31): both test stacks additionally use `compose.source-preview.yml` and `compose.acceptance-optimizations.yml`; follow each deployment directory's `README.source-preview.md` and keep both overrides when restarting. Existing image tags are unchanged. SF startup applied the six-field circumference migration after verified backups; changing images alone is not a database rollback. Do not mistake mounted, uncommitted source for a published release.
 
 ### Production Environment
 

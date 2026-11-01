@@ -62,10 +62,7 @@ describe('owner management query boundary', () => {
       expect(
         await result.current.createInvitation({
           peer_origin: 'https://gym.example',
-          scopes: ['workout'],
-          include_history: false,
-          allow_http: false,
-          allow_private_network: false,
+          self_origin: 'http://192.168.200.118:3006',
         })
       ).toEqual(response);
     });

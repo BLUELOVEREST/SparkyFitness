@@ -7,7 +7,10 @@ import {
   sparkyGymPurgeRequestSchema,
   sparkyGymSnapshotRequestSchema,
   sparkyGymMediaSchema,
+  importedProgressPhotoListSchema,
 } from '@workspace/shared';
+import { requireSelfActor } from '../../middleware/requireSelfMiddleware.js';
+import { listImportedProgressPhotos } from '../../models/importedProgressPhotoRepository.js';
 import * as repository from '../../models/sparkyGymRepository.js';
 import { isDemoMode } from '../../middleware/demoGuardMiddleware.js';
 import {
@@ -204,14 +207,62 @@ export function createSparkyGymOwnerRouter(
       }
     });
   }
-  router.get('/media/:id', async (req, res) => {
+  /**
+   * @swagger
+   * /integrations/sparkygym/progress-photos:
+   *   get:
+   *     summary: List imported openGym progress photos (owner only)
+   *     description: Reads existing private archives without creating check-ins. Only ready, live progress images are returned; image bytes require the owner-authenticated media route. Not available in switched or delegated context.
+   *     tags: [Wellness & Metrics]
+   *     security:
+   *       - cookieAuth: []
+   *     responses:
+   *       200:
+   *         description: Newest-first photo metadata; never includes filesystem paths.
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: array
+   *               items:
+   *                 type: object
+   *                 required: [id, entry_date, source]
+   *                 properties:
+   *                   id:
+   *                     type: string
+   *                     format: uuid
+   *                   entry_date:
+   *                     type: string
+   *                     format: date
+   *                   source:
+   *                     type: string
+   *                     enum: [opengym]
+   *       401:
+   *         description: Authentication required.
+   *       403:
+   *         description: Switched or delegated context is forbidden.
+   */
+  router.get('/progress-photos', requireSelfActor, async (req, res) => {
+    try {
+      res.json(
+        importedProgressPhotoListSchema.parse(
+          await listImportedProgressPhotos(req.authenticatedUserId)
+        )
+      );
+    } catch (error) {
+      errorReply(error, res);
+    }
+  });
+  router.get('/media/:id', requireSelfActor, async (req, res) => {
     try {
       const id = z.uuid().parse(req.params.id);
       const media = await repository.withOwnerTransaction(
         req.authenticatedUserId,
         async (client) => {
           const rows = await client.query(
-            "SELECT * FROM sparkygym_media WHERE user_id=$1 AND id=$2 AND status='ready'",
+            `SELECT m.* FROM sparkygym_media m WHERE m.user_id=$1 AND m.id=$2 AND m.status='ready'
+             AND EXISTS (SELECT 1 FROM sparkygym_entities e
+               WHERE e.user_id=m.user_id AND e.local_id=m.id::text
+                 AND e.resource='personal_media' AND NOT e.tombstone)`,
             [req.authenticatedUserId, id]
           );
           return rows.rows[0] ? sparkyGymMediaSchema.parse(rows.rows[0]) : null;

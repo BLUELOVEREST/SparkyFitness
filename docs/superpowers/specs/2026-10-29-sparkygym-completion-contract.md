@@ -18,7 +18,7 @@ or a body-supplied user ID. Peer operations use only the paired identity binding
 
 - GET `/api/integrations/sparkygym`: public connection/status/capability records.
 - POST `/api/integrations/sparkygym/invitations`: SparkyFitness creates a ten-minute
-  invitation for an explicitly configured peer origin and selected resource scopes.
+  invitation for explicit local/peer LAN origins and all seven fixed resource scopes.
 - POST `/api/integrations/sparkygym/claim`: openGym's authenticated owner imports it.
 - POST `/api/integrations/sparkygym/:id/approve`: SparkyFitness's original owner
   approves the claimed peer identity. No automatic activation on claim alone.
@@ -87,12 +87,20 @@ as a control job; retries after restart must finish activation without polling.
 Rotation uses explicit re-pairing, atomic retirement and a confirmed snapshot; mappings
 use source identity plus entity ID, not a connection ID that changes on rotation.
 Keep unacknowledged old work until the replacement snapshot has durably superseded it.
-History requests require the binding's explicit history consent. Re-pairing that
-requests historical import must obtain that consent before retiring the old binding.
+New pairing fixes all seven resources and authorizes later manual history imports
+(`include_history: true` in the signed binding). This is permission, not an
+instruction to import full history at activation: initialize current state only.
+The owner explicitly requests a two-way full snapshot through the history button.
+Re-pairing also initializes current state only; old unacknowledged work is retained
+until a manually requested full snapshot satisfies the retirement safety boundary.
 
 Outgoing requests pin validated DNS results, reject redirects, credentials, non-HTTP
 schemes, unspecified/multicast/link-local/metadata destinations. HTTP and private
-networks each require explicit per-connection opt-in, never a global exemption.
+networks are permitted by this integration's fixed LAN policy, not a global
+exemption for other providers. Owner invitation requests are strict
+`{self_origin, peer_origin}` objects; both are explicit backend-reachable service
+origins, independent of public browser/auth origins. Claim requests contain only
+`{invitation}`. Scope and network-policy fields are not owner-configurable.
 Use isolated private-IP fixture servers for real-network acceptance.
 
 ## Event Resources

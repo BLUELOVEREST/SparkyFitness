@@ -291,22 +291,15 @@ const renderScreen = () => {
   );
 };
 
-// Render order of the single-input fields when weight is kg and lengths are cm —
-// every one of these inputs uses placeholder "0".
-const FIELD_INDEX = {
-  weight: 0,
-  bodyFat: 1,
-  height: 2,
-  neck: 3,
-  waist: 4,
-  hips: 5,
-  steps: 6,
-} as const;
-
 type Screen = ReturnType<typeof renderScreen>;
 
-const getInput = (screen: Screen, field: keyof typeof FIELD_INDEX) =>
-  screen.getAllByPlaceholderText('0')[FIELD_INDEX[field]];
+const getInput = (
+  screen: Screen,
+  field: keyof typeof FIELD_TEST_ID | 'bodyFat'
+) =>
+  screen.getByTestId(
+    `field-${field === 'bodyFat' ? 'bodyFatPercentage' : field}`
+  );
 
 /**
  * Test-ID lookup for a standard field. Used by tests that involve a previous
@@ -432,6 +425,27 @@ describe('MeasurementsAddScreen — omitted vs null save semantics', () => {
     const payload = savedPayload();
     expect(Object.keys(payload).sort()).toEqual(['entryDate', 'weight']);
     expect(payload).toEqual({ entryDate: ENTRY_DATE, weight: 82.5 });
+  });
+
+  test('saves a built-in ankle without custom categories or unrelated daily values', async () => {
+    const screen = renderScreen();
+    fireEvent.changeText(screen.getByTestId('field-left_ankle'), '22.5');
+    await pressSave(screen);
+    expect(savedPayload()).toEqual({ entryDate: ENTRY_DATE, left_ankle: 22.5 });
+  });
+
+  test('clears a built-in ankle after confirmation while keeping the other limb', async () => {
+    setMeasurements({ left_ankle: 22, right_ankle: 23 });
+    const screen = renderScreen();
+    fireEvent.changeText(screen.getByTestId('field-left_ankle'), '');
+    await pressSave(screen);
+    expect(mutateAsync).not.toHaveBeenCalled();
+    await confirmClearAlert();
+    expect(savedPayload()).toEqual({
+      entryDate: ENTRY_DATE,
+      left_ankle: null,
+      right_ankle: 23,
+    });
   });
 
   test('a prefilled field the user cleared sends null, after a confirmation alert', async () => {

@@ -74,6 +74,11 @@ describe('openGym session owner panel', () => {
     );
     expect(screen.getByText('openGym origin')).toBeTruthy();
     expect(screen.getByText('No openGym connections')).toBeTruthy();
+    expect(screen.getByLabelText('SparkyFitness LAN URL')).toBeTruthy();
+    expect(screen.queryByText('Resource scopes')).toBeNull();
+    expect(screen.queryByText('Include full history')).toBeNull();
+    expect(screen.queryByText('Allow HTTP')).toBeNull();
+    expect(screen.queryByText('Allow private network')).toBeNull();
   });
   it('keeps active connection status visible alongside delivery failures', () => {
     mockConnections = [
@@ -102,5 +107,44 @@ describe('openGym session owner panel', () => {
     expect(screen.getByText('Failed: 2')).toBeTruthy();
     expect(screen.getByText('Pending media: 3')).toBeTruthy();
     expect(screen.getByText('INVALID_PAYLOAD')).toBeTruthy();
+  });
+  it('hides paired URL fields until explicit edit and discards canceled drafts', () => {
+    mockConnections = [
+      {
+        connection_id: '00000000-0000-4000-8000-000000000001',
+        status: 'active',
+        self_origin: 'http://192.168.200.118:3006',
+        peer_origin: 'http://192.168.200.118:3085',
+        peer_owner_ref: 'peer',
+        scopes: ['workout'],
+        include_history: true,
+        affected_record_counts: {},
+        capabilities: null,
+        delivery: {
+          pending: 0,
+          failed: 0,
+          pending_media: 0,
+          last_success_at: null,
+          last_error_code: null,
+        },
+      },
+    ];
+    const screen = render(<SparkyGymSettings />);
+    fireEvent.press(screen.getByText('openGym'));
+    expect(screen.queryByLabelText('SparkyFitness LAN URL')).toBeNull();
+    fireEvent.press(screen.getByText('Edit connection'));
+    expect(screen.getByLabelText('SparkyFitness LAN URL').props.value).toBe(
+      'http://192.168.200.118:3006'
+    );
+    fireEvent.changeText(
+      screen.getByLabelText('SparkyFitness LAN URL'),
+      'http://192.168.200.118:3007'
+    );
+    fireEvent.press(screen.getByText('Cancel'));
+    expect(screen.queryByLabelText('SparkyFitness LAN URL')).toBeNull();
+    fireEvent.press(screen.getByText('Edit connection'));
+    expect(screen.getByLabelText('SparkyFitness LAN URL').props.value).toBe(
+      'http://192.168.200.118:3006'
+    );
   });
 });

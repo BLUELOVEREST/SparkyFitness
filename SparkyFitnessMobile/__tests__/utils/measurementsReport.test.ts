@@ -13,6 +13,25 @@ const row = (
 });
 
 describe('buildMeasurementsReport', () => {
+  it('keeps a cleared circumference cleared when an older daily revision is also returned', () => {
+    const report = buildMeasurementsReport(
+      [
+        row('2026-10-01', {
+          left_ankle: 22,
+          updated_at: '2026-10-01T08:00:00Z',
+        }),
+        row('2026-10-01', {
+          left_ankle: null,
+          right_ankle: 23,
+          updated_at: '2026-10-01T20:00:00Z',
+        }),
+      ],
+      '2026-10-01',
+      1
+    );
+    expect(report.metrics.left_ankle.latest).toBeNull();
+    expect(report.metrics.right_ankle.latest).toBe(23);
+  });
   it('tracks first, latest, change and range per reading, skipping empty days', () => {
     const report = buildMeasurementsReport(
       [

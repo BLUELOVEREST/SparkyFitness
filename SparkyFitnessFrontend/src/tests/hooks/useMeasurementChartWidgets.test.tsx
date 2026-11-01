@@ -58,7 +58,18 @@ describe('useMeasurementChartWidgets', () => {
     );
 
     expect(result.current.map((widget) => widget.key)).toEqual(
-      expect.arrayContaining(['shoulders', 'chest', 'left_calf', 'right_calf'])
+      expect.arrayContaining([
+        'shoulders',
+        'chest',
+        'left_calf',
+        'right_calf',
+        'left_forearm',
+        'right_forearm',
+        'left_wrist',
+        'right_wrist',
+        'left_ankle',
+        'right_ankle',
+      ])
     );
     const keys = result.current.map((widget) => widget.key);
     expect(new Set(keys).size).toBe(keys.length);

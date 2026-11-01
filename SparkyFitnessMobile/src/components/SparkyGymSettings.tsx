@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   Pressable,
-  Switch,
   Alert,
   AppState,
 } from 'react-native';
@@ -58,18 +57,42 @@ function OwnerPanel({ ownerId }: { ownerId: string }) {
   });
   useRefetchOnFocus(query.refetch, expanded);
   const [origin, setOrigin] = useState('');
-  const [scopes, setScopes] = useState<(typeof sparkyGymResources)[number][]>([
-    'exercise',
-    'workout',
-  ]);
-  const [history, setHistory] = useState(false);
-  const [http, setHttp] = useState(false);
-  const [privateNetwork, setPrivateNetwork] = useState(false);
+  const [selfOrigin, setSelfOrigin] = useState('');
   const [invitation, setInvitation] = useState<SparkyGymInvitationOffer | null>(
     null
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [peerMismatch, setPeerMismatch] = useState(false);
+  const connections = query.data?.connections ?? [];
+  const editing = connections.find((c) => c.connection_id === editingId);
+  const hasConnection = connections.some((c) =>
+    ['active', 'paused'].includes(c.status)
+  );
+  const showSetup = !!query.data && (!hasConnection || !!editing);
+  const showInvitation =
+    invitation &&
+    !connections.some(
+      (c) =>
+        c.connection_id === invitation.connection_id &&
+        ['active', 'paused'].includes(c.status)
+    );
+  const edit = (connection: SparkyGymConnectionStatus) => {
+    setEditingId(connection.connection_id);
+    setSelfOrigin(connection.self_origin ?? '');
+    setOrigin(connection.peer_origin);
+    setInvitation(null);
+    setError(false);
+    setPeerMismatch(false);
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setSelfOrigin('');
+    setOrigin('');
+    setInvitation(null);
+    setPeerMismatch(false);
+  };
   useEffect(() => {
     const listener = AppState.addEventListener('change', (state) => {
       if (state !== 'active') setInvitation(null);
@@ -112,16 +135,34 @@ function OwnerPanel({ ownerId }: { ownerId: string }) {
       setInvitation(null);
       const response = await createSparkyGymInvitation(
         {
-          peer_origin: replacing?.peer_origin ?? origin,
-          scopes: replacing?.scopes ?? scopes,
-          include_history: history,
-          allow_http: http,
-          allow_private_network: privateNetwork,
+          peer_origin: origin,
+          self_origin: selfOrigin,
         },
         replacing?.connection_id
       );
       setInvitation(response.invitation);
+      setEditingId(null);
     });
+  const submit = () => {
+    if (editing) {
+      try {
+        if (new URL(origin).origin !== editing.peer_origin) {
+          setPeerMismatch(true);
+          return;
+        }
+      } catch {
+        setError(true);
+        return;
+      }
+      confirm(
+        t('sparkyGym.rotateConfirm', {
+          defaultValue:
+            'Create a replacement invitation? Both owners must approve the new pairing.',
+        }),
+        () => void create(editing)
+      );
+    } else void create();
+  };
   const action = (
     connection: SparkyGymConnectionStatus,
     command: SparkyGymAction
@@ -136,7 +177,7 @@ function OwnerPanel({ ownerId }: { ownerId: string }) {
           connection.connection_id,
           command,
           command === 'snapshot'
-            ? { include_history: history }
+            ? { include_history: true }
             : command === 'purge'
               ? { confirm: true }
               : {}
@@ -170,7 +211,7 @@ function OwnerPanel({ ownerId }: { ownerId: string }) {
         }),
         operation
       );
-    else if (command === 'snapshot' && history)
+    else if (command === 'snapshot')
       confirm(
         t('sparkyGym.historyConfirm', {
           defaultValue:
@@ -207,92 +248,76 @@ function OwnerPanel({ ownerId }: { ownerId: string }) {
         () => {
           setExpanded(!expanded);
           setInvitation(null);
+          cancelEdit();
         },
         false
       )}
       {expanded && (
         <View className="gap-3 py-2">
-          <Text className="text-text-primary">
-            {t('sparkyGym.peerOrigin', { defaultValue: 'openGym origin' })}
-          </Text>
-          <TextInput
-            accessibilityLabel={t('sparkyGym.peerOrigin', {
-              defaultValue: 'openGym origin',
-            })}
-            value={origin}
-            onChangeText={setOrigin}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            placeholder="https://gym.example"
-            className="border border-border rounded-lg p-3 text-text-primary"
-          />
-          <Text className="text-text-primary">
-            {t('sparkyGym.scopes', { defaultValue: 'Resource scopes' })}
-          </Text>
-          {sparkyGymResources.map((scope) => (
-            <View
-              key={scope}
-              className="flex-row items-center justify-between gap-2"
-            >
-              <Text className="text-text-primary flex-1">{copy[scope]}</Text>
-              <Switch
-                accessibilityLabel={copy[scope]}
-                value={scopes.includes(scope)}
-                onValueChange={(checked) =>
-                  setScopes((current) =>
-                    checked
-                      ? [...current, scope]
-                      : current.filter((item) => item !== scope)
-                  )
-                }
+          {showSetup && (
+            <View className="gap-3">
+              <Text className="text-text-primary">
+                {t('sparkyGym.selfOrigin', {
+                  defaultValue: 'SparkyFitness LAN URL',
+                })}
+              </Text>
+              <TextInput
+                accessibilityLabel={t('sparkyGym.selfOrigin', {
+                  defaultValue: 'SparkyFitness LAN URL',
+                })}
+                value={selfOrigin}
+                onChangeText={setSelfOrigin}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="http://192.168.200.118:3006"
+                className="border border-border rounded-lg p-3 text-text-primary"
+                editable={!busy}
               />
+              <Text className="text-text-primary">
+                {t('sparkyGym.peerOrigin', { defaultValue: 'openGym origin' })}
+              </Text>
+              <TextInput
+                accessibilityLabel={t('sparkyGym.peerOrigin', {
+                  defaultValue: 'openGym origin',
+                })}
+                value={origin}
+                onChangeText={(value) => {
+                  setOrigin(value);
+                  setPeerMismatch(false);
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="http://192.168.200.118:3085"
+                className="border border-border rounded-lg p-3 text-text-primary"
+                editable={!busy}
+              />
+              {button(
+                editing
+                  ? t('sparkyGym.rotate', { defaultValue: 'Re-pair' })
+                  : t('sparkyGym.invite', {
+                      defaultValue: 'Create invitation',
+                    }),
+                submit,
+                busy || !origin || !selfOrigin
+              )}
+              {editing &&
+                button(
+                  t('sparkyGym.cancel', { defaultValue: 'Cancel' }),
+                  cancelEdit
+                )}
+              {peerMismatch && (
+                <Text accessibilityRole="alert" className="text-text-primary">
+                  {t('sparkyGym.peerChangeRequiresPairing', {
+                    defaultValue:
+                      'Disconnect before pairing a different openGym address.',
+                  })}
+                </Text>
+              )}
             </View>
-          ))}
-          <View className="flex-row items-center justify-between">
-            <Text className="text-text-primary flex-1">
-              {t('sparkyGym.history', { defaultValue: 'Include full history' })}
-            </Text>
-            <Switch
-              accessibilityLabel={t('sparkyGym.history', {
-                defaultValue: 'Include full history',
-              })}
-              value={history}
-              onValueChange={setHistory}
-            />
-          </View>
-          <View className="flex-row items-center justify-between">
-            <Text className="text-text-primary flex-1">
-              {t('sparkyGym.allowHttp', { defaultValue: 'Allow HTTP' })}
-            </Text>
-            <Switch
-              accessibilityLabel={t('sparkyGym.allowHttp', {
-                defaultValue: 'Allow HTTP',
-              })}
-              value={http}
-              onValueChange={setHttp}
-            />
-          </View>
-          <View className="flex-row items-center justify-between">
-            <Text className="text-text-primary flex-1">
-              {t('sparkyGym.allowPrivate', {
-                defaultValue: 'Allow private network',
-              })}
-            </Text>
-            <Switch
-              accessibilityLabel={t('sparkyGym.allowPrivate', {
-                defaultValue: 'Allow private network',
-              })}
-              value={privateNetwork}
-              onValueChange={setPrivateNetwork}
-            />
-          </View>
-          {button(
-            t('sparkyGym.invite', { defaultValue: 'Create invitation' }),
-            () => void create(),
-            busy || !origin || !scopes.length
           )}
-          {invitation && (
+          {showInvitation && invitation && (
             <View>
               <Text className="text-text-secondary">
                 {t('sparkyGym.expires', {
@@ -351,36 +376,30 @@ function OwnerPanel({ ownerId }: { ownerId: string }) {
                   ? ` · ${connection.peer_owner_ref}`
                   : ''}
               </Text>
-              <Text className="text-text-secondary">
-                {connection.scopes.map((scope) => copy[scope]).join(', ')}
-              </Text>
+              {connection.self_origin && (
+                <View>
+                  <Text className="text-text-secondary">
+                    {t('sparkyGym.selfOrigin', {
+                      defaultValue: 'SparkyFitness LAN URL',
+                    })}
+                  </Text>
+                  <Text className="text-text-primary">
+                    {connection.self_origin}
+                  </Text>
+                </View>
+              )}
               <Text className="text-text-secondary">
                 {t('sparkyGym.counts', { defaultValue: 'Affected records' })}:{' '}
                 {Object.entries(connection.affected_record_counts)
                   .map(
                     ([key, value]) =>
-                      `${copy[key as (typeof sparkyGymResources)[number]]}: ${value}`
+                      `${
+                        copy[key as (typeof sparkyGymResources)[number]]
+                      }: ${value}`
                   )
                   .join(', ') || '0'}
               </Text>
-              <Text className="text-text-secondary">
-                {t('sparkyGym.history', {
-                  defaultValue: 'Include full history',
-                })}
-                : {String(connection.include_history)}
-              </Text>
               <SparkyGymDeliveryStatus delivery={connection.delivery} />
-              {connection.capabilities && (
-                <Text className="text-text-secondary">
-                  {t('sparkyGym.capabilities', {
-                    defaultValue: 'Supported resources',
-                  })}
-                  :{' '}
-                  {connection.capabilities.resources
-                    .map((resource) => copy[resource])
-                    .join(', ')}
-                </Text>
-              )}
               <View className="flex-row flex-wrap">
                 {(
                   [
@@ -401,7 +420,9 @@ function OwnerPanel({ ownerId }: { ownerId: string }) {
                       {button(
                         copy[command],
                         () => action(connection, command),
-                        busy,
+                        busy ||
+                          (command === 'snapshot' &&
+                            connection.delivery.pending > 0),
                         (
                           {
                             approve: 'shield-checkmark',
@@ -417,15 +438,12 @@ function OwnerPanel({ ownerId }: { ownerId: string }) {
                   ))}
                 {['active', 'paused'].includes(connection.status) &&
                   button(
-                    t('sparkyGym.rotate', { defaultValue: 'Re-pair' }),
-                    () =>
-                      confirm(
-                        t('sparkyGym.rotateConfirm', {
-                          defaultValue:
-                            'Create a replacement invitation? Both owners must approve the new pairing.',
-                        }),
-                        () => void create(connection)
-                      )
+                    t('sparkyGym.editConnection', {
+                      defaultValue: 'Edit connection',
+                    }),
+                    () => edit(connection),
+                    busy,
+                    'settings'
                   )}
               </View>
             </View>

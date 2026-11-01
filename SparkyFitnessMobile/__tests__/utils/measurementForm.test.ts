@@ -6,6 +6,7 @@ import {
   type FormState,
   type MeasurementUnitModes,
 } from '../../src/utils/measurementForm';
+import { BODY_CIRCUMFERENCE_PARTS } from '@workspace/shared';
 
 const METRIC: MeasurementUnitModes = {
   weightMode: 'kg',
@@ -20,6 +21,20 @@ const IMPERIAL: MeasurementUnitModes = {
 };
 
 describe('buildStandardFormFromMeasurement', () => {
+  test.each(BODY_CIRCUMFERENCE_PARTS)(
+    'converts and prefills $key without adding other daily values',
+    ({ key }) => {
+      const { values, prefilled } = buildStandardFormFromMeasurement(
+        { entry_date: '2026-10-31', [key]: 25.4 },
+        IMPERIAL
+      );
+      expect(values).toEqual({ [key]: '10' });
+      expect(prefilled).toEqual(new Set([key]));
+      expect(
+        standardFieldMetricValue(key, { ...EMPTY_FORM, [key]: '10' }, IMPERIAL)
+      ).toBeCloseTo(25.4);
+    }
+  );
   test('converts a stored metric row into display values', () => {
     const { values, prefilled } = buildStandardFormFromMeasurement(
       {

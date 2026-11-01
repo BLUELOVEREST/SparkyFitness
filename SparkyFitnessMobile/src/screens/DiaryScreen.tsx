@@ -3,6 +3,7 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
+  EXTRA_BODY_CIRCUMFERENCE_PARTS,
   hasSupplementNutrition,
   isCardioModality,
   resolveExerciseModality,
@@ -376,6 +377,9 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
       measurements.neck != null ||
       measurements.waist != null ||
       measurements.hips != null ||
+      EXTRA_BODY_CIRCUMFERENCE_PARTS.some(
+        (part) => measurements[part.key] != null
+      ) ||
       measurements.steps != null
     );
   }, [measurements, customMeasurements]);

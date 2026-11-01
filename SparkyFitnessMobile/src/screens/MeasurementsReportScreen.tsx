@@ -1,4 +1,6 @@
+import { circumferenceLabel } from '../utils/circumferenceLabels';
 import React from 'react';
+import { EXTRA_BODY_CIRCUMFERENCE_PARTS } from '@workspace/shared';
 import { useTranslation } from 'react-i18next';
 
 import { useScreenHeader } from '../hooks/useScreenHeader';
@@ -148,6 +150,15 @@ const MeasurementsReportScreen: React.FC<
     `${fmt(Math.abs(lengthFromCm(cm, lengthUnit)))} ${lengthUnit === 'cm' ? 'cm' : 'in'}`;
   const tapeChange = (cm: number) => withSign(cm, tapeAmount(cm));
   const tapeRows = [
+    ...EXTRA_BODY_CIRCUMFERENCE_PARTS.flatMap((part) =>
+      trendRows(
+        part.key,
+        m?.[part.key],
+        circumferenceLabel(part.key, t),
+        lengthText,
+        tapeChange
+      )
+    ),
     ...trendRows(
       'waist',
       m?.waist,

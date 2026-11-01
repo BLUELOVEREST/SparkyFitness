@@ -1,5 +1,17 @@
 {
+  "importedProgressPhotos": {
+    "title": "openGym photos (read-only)",
+    "loading": "Loading imported photos...",
+    "loadError": "Could not load imported photos.",
+    "retry": "Retry",
+    "openPhoto": "View openGym photo from {{date}}",
+    "photo": "openGym progress photo"
+  },
   "sparkyGym": {
+    "selfOrigin": "SparkyFitness LAN URL",
+    "editConnection": "Edit connection",
+    "peerChangeRequiresPairing": "Disconnect before pairing a different openGym address.",
+    "syncHistory": "Sync history",
     "deliveryPending": "Pending: {{value}}",
     "deliveryFailed": "Failed: {{value}}",
     "deliveryMedia": "Pending media: {{value}}",
@@ -4100,6 +4112,12 @@
     "editingTemporarilyUnavailable": "Editing food details is temporarily unavailable due to schema changes."
   },
   "checkIn": {
+    "left_forearm": "Left Forearm",
+    "right_forearm": "Right Forearm",
+    "left_wrist": "Left Wrist",
+    "right_wrist": "Right Wrist",
+    "left_ankle": "Left Ankle",
+    "right_ankle": "Right Ankle",
     "newCheckin": "New check-in",
     "editCheckin": "Edit check-in",
     "addCheckin": "Add check-in",
@@ -4901,6 +4919,12 @@
     "sessionNamePlaceholder": "Custom name (e.g., Push Day, Legs)"
   },
   "reports": {
+    "left_forearm": "Left Forearm",
+    "right_forearm": "Right Forearm",
+    "left_wrist": "Left Wrist",
+    "right_wrist": "Right Wrist",
+    "left_ankle": "Left Ankle",
+    "right_ankle": "Right Ankle",
     "weightTrend": "Trend",
     "weightTrendSummary": "Trend {{weight}}",
     "weightTrendRate": "{{rate}} per week",
@@ -5447,6 +5471,12 @@
     "weightOnDate": "({{weight}} on {{date}})"
   },
   "reportsTables": {
+    "left_forearm": "Left Forearm",
+    "right_forearm": "Right Forearm",
+    "left_wrist": "Left Wrist",
+    "right_wrist": "Right Wrist",
+    "left_ankle": "Left Ankle",
+    "right_ankle": "Right Ankle",
     "foodDiaryTable": "Food Diary Table",
     "exerciseEntriesTable": "Exercise Entries Table",
     "filterByExerciseName": "Filter by exercise name...",

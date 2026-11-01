@@ -231,6 +231,7 @@ export class SparkyGymService {
       status: publicConnectionState(c.status, c.expires_at),
       peer_origin: c.peer_origin,
       peer_owner_ref: c.peer_user_id,
+      ...(!forPeer ? { self_origin: c.self_origin } : {}),
       scopes: c.scopes,
       include_history: c.invitation_public.include_history === true,
       affected_record_counts: forPeer ? {} : affected,
@@ -263,9 +264,12 @@ export class SparkyGymService {
 
   async invite(owner: string, value: unknown, replaces?: string) {
     const input = sparkyGymCreateInvitationRequestSchema.parse(value);
-    const destination = validatePeerOrigin(input.peer_origin, input);
-    await resolvePeerAddress(destination, input);
-    const self = new URL(process.env.SPARKY_FITNESS_FRONTEND_URL || '').origin;
+    const policy = { allow_http: true, allow_private_network: true };
+    const destination = validatePeerOrigin(input.peer_origin, policy);
+    await resolvePeerAddress(destination, policy);
+    const selfUrl = validatePeerOrigin(input.self_origin, policy);
+    await resolvePeerAddress(selfUrl, policy);
+    const self = selfUrl.origin;
     const invitation = sparkyGymInvitationOfferSchema.parse({
       version: 1,
       connection_id: randomUUID(),
@@ -275,16 +279,15 @@ export class SparkyGymService {
       secret: token(),
       expires_at: new Date(Date.now() + 600000).toISOString(),
       peer_origin: destination.origin,
-      scopes: input.scopes,
-      include_history: input.include_history,
+      scopes: [...sparkyGymResources],
+      // Consent permits a later explicit import, not automatic full history.
+      include_history: true,
     });
     return repository.withOwnerTransaction(owner, async (client) => {
       if (replaces) {
         const old = await this.owned(client, owner, replaces);
         if (!old.peer_user_id || old.peer_origin !== destination.origin)
           throw new IntegrationError(409, 'rotation_peer_mismatch');
-        if (!input.include_history)
-          throw new IntegrationError(409, 'rotation_requires_history_approval');
       }
       const all = await repository.listConnections(owner, client);
       if (
@@ -304,8 +307,8 @@ export class SparkyGymService {
           peer_origin: destination.origin,
           scopes: invitation.scopes,
           status: 'pending',
-          allow_http: input.allow_http,
-          allow_private: input.allow_private_network,
+          allow_http: true,
+          allow_private: true,
           expires_at: new Date(invitation.expires_at),
           credentials_encrypted: sealSecrets(invitation.connection_id, {
             version: 1,
@@ -402,11 +405,7 @@ export class SparkyGymService {
             client
           ))!;
           if (snapshotPending && c.status === 'active')
-            await this.queueSnapshots(
-              client,
-              c,
-              c.invitation_public.include_history === true
-            );
+            await this.queueSnapshots(client, c, false);
           await client.query(
             `UPDATE sparkygym_outbox SET next_due_at=now() WHERE user_id=$1 AND connection_id=$2 AND status='pending' AND lease_token IS NULL
 `,
@@ -448,6 +447,16 @@ export class SparkyGymService {
             c.invitation_public.include_history !== true
           )
             throw new IntegrationError(409, 'history_not_authorized');
+          const pending = await client.query(
+            `SELECT 1 AS busy FROM sparkygym_outbox
+             WHERE user_id=$1 AND connection_id=$2 AND status='pending'
+             AND path='/api/integrations/v1/snapshot'
+             UNION ALL SELECT 1 AS busy FROM sparkygym_snapshots
+             WHERE user_id=$1 AND connection_id=$2 AND status='open' LIMIT 1`,
+            [owner, id]
+          );
+          if (pending.rows.length)
+            throw new IntegrationError(409, 'snapshot_in_progress');
           await this.queueSnapshots(client, c, input.include_history === true);
         } else {
           if (c.status !== 'revoked' || !c.peer_user_id)
@@ -1201,11 +1210,7 @@ export class SparkyGymService {
             client
           );
           if (activated.status === 'active')
-            await this.queueSnapshots(
-              client,
-              activated,
-              activated.invitation_public.include_history === true
-            );
+            await this.queueSnapshots(client, activated, false);
           else
             await repository.updateConnection(
               job.user_id,
@@ -1314,10 +1319,24 @@ export class SparkyGymService {
       c.invitation_public.include_history !== true
     )
       return;
+    const outgoing = c.scopes.filter((scope) =>
+      [
+        'body_definition',
+        'body_measurement',
+        'body_goal',
+        'schedule_summary',
+      ].includes(scope)
+    );
     const sent = await client.query(
-      `SELECT id FROM sparkygym_outbox WHERE user_id=$1 AND connection_id=$2 AND status='delivered' AND path=$3 AND body::jsonb->>'action'='complete' LIMIT 1
-`,
-      [c.user_id, c.id, `${prefix}/snapshot`]
+      `SELECT id FROM sparkygym_outbox WHERE user_id=$1 AND connection_id=$2
+       AND status='delivered' AND path=$3 AND body::jsonb->>'action'='complete'
+       AND EXISTS (
+         SELECT 1 FROM sparkygym_outbox b WHERE b.user_id=$1 AND b.connection_id=$2
+         AND b.status='delivered' AND b.path=$3 AND b.body::jsonb->>'action'='begin'
+         AND b.body::jsonb->>'snapshot_id'=sparkygym_outbox.body::jsonb->>'snapshot_id'
+         AND (b.body::jsonb->'prune_resources') @> $4::jsonb
+       ) LIMIT 1`,
+      [c.user_id, c.id, `${prefix}/snapshot`, JSON.stringify(outgoing)]
     );
     if (!sent.rowCount) return;
     const incoming = c.scopes.filter((scope) =>

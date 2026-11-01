@@ -62,6 +62,27 @@ const dayRecord = (
 });
 
 describe('buildCheckInMeasurementsPayload', () => {
+  it.each(EXTRA_BODY_CIRCUMFERENCE_PARTS)(
+    'preserves partial-day and clear semantics for $key',
+    ({ key }) => {
+      const payload = buildCheckInMeasurementsPayload(
+        '2026-07-14',
+        {
+          ...emptyForm,
+          bodyCircumferences: { ...emptyBodyCircumferences, [key]: '25.4' },
+        },
+        null
+      );
+      expect(payload).toEqual({ entry_date: '2026-07-14', [key]: 25.4 });
+      expect(
+        buildCheckInMeasurementsPayload(
+          '2026-07-14',
+          emptyForm,
+          dayRecord({ [key]: 25.4 })
+        )
+      ).toEqual({ entry_date: '2026-07-14', [key]: null });
+    }
+  );
   it('omits fields with no input and nothing recorded on the day', () => {
     const payload = buildCheckInMeasurementsPayload(
       '2026-07-14',

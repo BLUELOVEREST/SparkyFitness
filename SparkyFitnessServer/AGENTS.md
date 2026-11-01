@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-30_
+_Last updated: 2026-10-31_
 
 SparkyFitness Server is the backend API package for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessServer/`.
 
@@ -55,6 +55,11 @@ pnpm exec eslint routes/v2/foodRoutes.ts services/foodCoreService.ts
 - For targeted test runs, prefer `pnpm exec vitest run tests/<name>.test.ts`
 
 ## Source Map
+
+- Imported daily progress photos: owner-only `GET /api/integrations/sparkygym/progress-photos` uses `models/importedProgressPhotoRepository.ts`; it returns dated image metadata only. `/media/:id` requires a live owned entity and private archive access. No synthetic check-in rows, native angle assignments, public paths, or copied files.
+- Built-in circumferences: `20261031120000_align_builtin_circumferences.sql` adds forearm/wrist/ankle pairs and extends BODY capture/snapshots to all 18 measurements. Canonical field names and body-fat formulas stay unchanged; follow `shared/src/constants/measurements.ts` rather than adding custom categories.
+
+- openGym owner invitation API accepts only `{self_origin, peer_origin}`. It validates both origins and derives all seven scopes plus HTTP/private policy. Signed binding history permission remains true, but activation sends current state only; full reconciliation is manually requested, including after re-pairing. Owner history requests are serialized by connection locks and reject pending outgoing/open incoming snapshots. Public browser/auth URL settings are unchanged.
 
 - Source-owned activity details: `20261030030000_sparkygym_preset_detail_guards.sql` checks both individual exercise and whole-session parent keys, on OLD and NEW, without changing invoker rights or existing native RLS. Regression: `tests/workoutSourceSummaryPg.test.ts`. No API or Zod shape changes.
 

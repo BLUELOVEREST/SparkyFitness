@@ -1,5 +1,17 @@
 {
+  "importedProgressPhotos": {
+    "title": "openGym photos (read-only)",
+    "loading": "Loading imported photos...",
+    "loadError": "Could not load imported photos.",
+    "retry": "Retry",
+    "openPhoto": "View openGym photo from {{date}}",
+    "photo": "openGym progress photo"
+  },
   "sparkyGym": {
+    "selfOrigin": "SparkyFitness LAN URL",
+    "editConnection": "Edit connection",
+    "peerChangeRequiresPairing": "Disconnect before pairing a different openGym address.",
+    "syncHistory": "Sync history",
     "deliveryPending": "Pending: {{value}}",
     "deliveryFailed": "Failed: {{value}}",
     "deliveryMedia": "Pending media: {{value}}",
@@ -2681,6 +2693,21 @@
   },
   "measurements": {
     "fields": {
+      "shoulders": "Shoulders",
+      "chest": "Chest",
+      "abdomen": "Abdomen",
+      "left_biceps": "Left Biceps",
+      "right_biceps": "Right Biceps",
+      "left_thigh": "Left Thigh",
+      "right_thigh": "Right Thigh",
+      "left_calf": "Left Calf",
+      "right_calf": "Right Calf",
+      "left_forearm": "Left Forearm",
+      "right_forearm": "Right Forearm",
+      "left_wrist": "Left Wrist",
+      "right_wrist": "Right Wrist",
+      "left_ankle": "Left Ankle",
+      "right_ankle": "Right Ankle",
       "weight": "Weight",
       "bodyFatPercentage": "Body fat %",
       "height": "Height",

@@ -52,6 +52,12 @@ export const EXTRA_BODY_CIRCUMFERENCE_PARTS = [
   { key: 'right_thigh', label: 'Right Thigh' }, // i18n-ignore: canonical measurement identifier
   { key: 'left_calf', label: 'Left Calf' }, // i18n-ignore: canonical measurement identifier
   { key: 'right_calf', label: 'Right Calf' }, // i18n-ignore: canonical measurement identifier
+  { key: 'left_forearm', label: 'Left Forearm' }, // i18n-ignore: canonical measurement identifier
+  { key: 'right_forearm', label: 'Right Forearm' }, // i18n-ignore: canonical measurement identifier
+  { key: 'left_wrist', label: 'Left Wrist' }, // i18n-ignore: canonical measurement identifier
+  { key: 'right_wrist', label: 'Right Wrist' }, // i18n-ignore: canonical measurement identifier
+  { key: 'left_ankle', label: 'Left Ankle' }, // i18n-ignore: canonical measurement identifier
+  { key: 'right_ankle', label: 'Right Ankle' }, // i18n-ignore: canonical measurement identifier
 ] as const;
 
 export const BODY_CIRCUMFERENCE_PARTS = [

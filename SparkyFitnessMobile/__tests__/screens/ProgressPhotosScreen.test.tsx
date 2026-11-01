@@ -1,4 +1,5 @@
 import React from 'react';
+import { FlatList, ScrollView } from 'react-native';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import ProgressPhotosScreen from '../../src/screens/ProgressPhotosScreen';
 import {
@@ -11,6 +12,15 @@ import { useCheckInPhotoSource } from '../../src/hooks/useCheckInPhotoSource';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useScreenHeader } from '../../src/hooks/useScreenHeader';
 import type { ProgressPhotoDay } from '../../src/types/checkInPhotos';
+const mockInvalidateQueries = jest.fn(async () => undefined);
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ invalidateQueries: mockInvalidateQueries }),
+}));
+
+jest.mock('../../src/components/ImportedProgressPhotos', () => ({
+  __esModule: true,
+  default: () => null,
+}));
 
 jest.mock('../../src/hooks/useCheckInPhotos', () => ({
   useCheckInPhotoGallery: jest.fn(),
@@ -157,6 +167,27 @@ const renderScreen = () =>
   );
 
 describe('ProgressPhotosScreen', () => {
+  it('pull refresh invalidates imported photos even when native history is empty', async () => {
+    setGallery([]);
+    const { UNSAFE_getByType } = renderScreen();
+    const refresh = UNSAFE_getByType(ScrollView).props.refreshControl;
+    await act(async () => {
+      await refresh.props.onRefresh();
+    });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['imported-progress-photos'],
+    });
+  });
+  it('pull refresh invalidates imported photos alongside native history', async () => {
+    setGallery([dayWith('2026-03-20', 70)]);
+    const { UNSAFE_getByType } = renderScreen();
+    await act(async () => {
+      await UNSAFE_getByType(FlatList).props.onRefresh();
+    });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['imported-progress-photos'],
+    });
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseSource.mockReturnValue({

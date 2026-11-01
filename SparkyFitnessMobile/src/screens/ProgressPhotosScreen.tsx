@@ -5,6 +5,8 @@ import {
   Alert,
   FlatList,
   Platform,
+  RefreshControl,
+  ScrollView,
   Text,
   TouchableOpacity,
   View,
@@ -52,6 +54,10 @@ import {
   type ProgressPhotoDay,
 } from '../types/checkInPhotos';
 import type { RootStackScreenProps } from '../types/navigation';
+import ImportedProgressPhotos from '../components/ImportedProgressPhotos';
+import { useQueryClient } from '@tanstack/react-query';
+import { importedProgressPhotosRootKey } from '../services/api/importedProgressPhotosApi';
+import { checkInPhotosRootQueryKey } from '../hooks/queryKeys';
 
 type Props = RootStackScreenProps<'ProgressPhotos'>;
 
@@ -144,6 +150,22 @@ const ProgressPhotosScreen: React.FC<Props> = ({ navigation, route }) => {
   const pickerLock = useRef(false);
 
   const { days, isLoading, isError, refetch } = useCheckInPhotoGallery();
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshPhotos = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refetch(),
+        queryClient.invalidateQueries({ queryKey: checkInPhotosRootQueryKey }),
+        queryClient.invalidateQueries({
+          queryKey: importedProgressPhotosRootKey,
+        }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [queryClient, refetch]);
   const { photos: dayPhotos } = useCheckInPhotosByDate(selectedDate);
   const { dates: photoDates } = useCheckInPhotoDates();
   const { uploadAsync, uploadingType, deleteAsync } =
@@ -389,42 +411,66 @@ const ProgressPhotosScreen: React.FC<Props> = ({ navigation, route }) => {
 
     if (isError) {
       return (
-        <StatusView
-          icon="warning"
-          iconTone="danger"
-          title={t('progressPhotos.loadError', {
-            defaultValue: "Couldn't load your progress photos.",
-          })}
-          action={{
-            label: t('common.tryAgain', { defaultValue: 'Please try again.' }),
-            onPress: () => void refetch(),
-          }}
-        />
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void refreshPhotos()}
+            />
+          }
+        >
+          <StatusView
+            icon="warning"
+            iconTone="danger"
+            title={t('progressPhotos.loadError', {
+              defaultValue: "Couldn't load your progress photos.",
+            })}
+            action={{
+              label: t('common.tryAgain', {
+                defaultValue: 'Please try again.',
+              }),
+              onPress: () => void refreshPhotos(),
+            }}
+          />
+        </ScrollView>
       );
     }
 
     if (rows.length === 0) {
       return (
-        <View className="py-12 items-center px-6">
-          <Icon name="camera" size={40} color={mutedColor} />
-          <Text className="text-text-primary text-base font-semibold mt-3 text-center">
-            {t('progressPhotos.emptyTitle', {
-              defaultValue: 'No {{angle}} photos yet',
-              angle: angleLabel(angle).toLowerCase(),
-            })}
-          </Text>
-          <Text className="text-text-secondary text-sm mt-1 text-center">
-            {t('progressPhotos.emptyBody', {
-              defaultValue:
-                'Add one above and it will show up here with that day’s weight.',
-            })}
-          </Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void refreshPhotos()}
+            />
+          }
+        >
+          <View className="py-12 items-center px-6">
+            <Icon name="camera" size={40} color={mutedColor} />
+            <Text className="text-text-primary text-base font-semibold mt-3 text-center">
+              {t('progressPhotos.emptyTitle', {
+                defaultValue: 'No {{angle}} photos yet',
+                angle: angleLabel(angle).toLowerCase(),
+              })}
+            </Text>
+            <Text className="text-text-secondary text-sm mt-1 text-center">
+              {t('progressPhotos.emptyBody', {
+                defaultValue:
+                  'Add one above and it will show up here with that day’s weight.',
+              })}
+            </Text>
+          </View>
+        </ScrollView>
       );
     }
 
     return (
       <FlatList
+        refreshing={refreshing}
+        onRefresh={refreshPhotos}
         data={rows}
         keyExtractor={(row) => row.photoId}
         renderItem={renderRow}
@@ -486,6 +532,8 @@ const ProgressPhotosScreen: React.FC<Props> = ({ navigation, route }) => {
           onManage={openSheetFor}
         />
       </View>
+
+      <ImportedProgressPhotos />
 
       <View className="px-4 pt-4 pb-3">
         <Text className="text-text-secondary text-xs font-semibold mb-1 uppercase">

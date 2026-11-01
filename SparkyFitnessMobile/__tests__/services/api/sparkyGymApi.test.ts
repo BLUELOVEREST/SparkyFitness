@@ -36,10 +36,7 @@ describe('SparkyGym owner API', () => {
     await expect(
       createSparkyGymInvitation({
         peer_origin: 'file:///tmp',
-        scopes: ['workout'],
-        include_history: false,
-        allow_http: false,
-        allow_private_network: false,
+        self_origin: 'http://192.168.200.118:3006',
       })
     ).rejects.toThrow();
     expect(apiFetch).not.toHaveBeenCalled();

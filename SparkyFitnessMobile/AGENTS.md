@@ -1,12 +1,14 @@
 # AGENTS.md
 
-_Last updated: 2026-10-29_
+_Last updated: 2026-10-31_
 
 SparkyFitness Mobile is a React Native 0.86 + Expo SDK 57 app for syncing Apple Health / Health Connect data with the SparkyFitness backend, tracking nutrition, hydration, fasting, measurements, exercise, saved foods, meal templates, custom exercises, workout presets, iOS / Android widgets, the active workout HUD, and the Sparky AI chat.
 
 This is the package guide for `SparkyFitnessMobile/`. Work from this directory for mobile implementation and validation. If a task crosses into the backend, frontend, or `shared/`, read that package guide too before editing outside mobile.
 
 ## Scope And Style
+
+- openGym pairing accepts explicit local/peer LAN URLs. Seven resource scopes and HTTP/private-network policy are fixed server-side. History is an explicit confirmed one-shot action; activation initializes current state only. Keep this owner-session panel aligned with the shared management schemas and web settings.
 
 - TypeScript is strict. Keep changes type-safe and compiling cleanly.
 - Prefer small, direct changes that fit the existing screen, hook, and service boundaries.
@@ -362,7 +364,7 @@ npx expo prebuild --clean
 
 ## Server API Orientation
 
-- openGym integration: `components/SparkyGymSettings.tsx` is the session-owner Settings panel, `services/api/sparkyGymApi.ts` uses shared strict management schemas, and `components/SparkyGymNotifications.tsx` owns foreground authenticated SSE replay/cache invalidation. Invitation responses remain component-local and are cleared on background/expiry. Imported exercises/workouts use source `opengym` and are read-only.
+- openGym integration: `components/SparkyGymSettings.tsx` is the session-owner Settings panel, `services/api/sparkyGymApi.ts` uses shared strict management schemas, and `components/SparkyGymNotifications.tsx` owns foreground authenticated SSE replay/cache invalidation. Invitation responses remain component-local and are cleared on background/expiry. Imported exercises/workouts use source `opengym` and are read-only. `components/ImportedProgressPhotos.tsx` adds the separate read-only gallery to `ProgressPhotosScreen`; queries are keyed by server and owner and refreshed on focus/manual refresh, never a polling timer. Private image requests use normal authenticated image headers and no disk cache. Imported photos have no native comparison angle.
 
 All endpoints require auth headers, and proxy headers are injected before auth headers when configured. Key mobile clients:
 

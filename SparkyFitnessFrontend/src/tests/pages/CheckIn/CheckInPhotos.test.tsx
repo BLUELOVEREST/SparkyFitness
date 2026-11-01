@@ -4,6 +4,10 @@ import { CheckInPhotos } from '@/pages/CheckIn/CheckInPhotos';
 
 const deletePhoto = jest.fn();
 
+jest.mock('@/pages/CheckIn/ImportedProgressPhotos', () => ({
+  ImportedProgressPhotos: () => null,
+}));
+
 jest.mock('@/hooks/CheckIn/useCheckInPhotos', () => ({
   checkInPhotoFileUrl: (id: string) =>
     `/api/measurements/check-in-photos/file/${id}`,

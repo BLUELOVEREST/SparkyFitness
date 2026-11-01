@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-29_
+_Last updated: 2026-10-31_
 
 SparkyFitness Frontend is the React web app for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessFrontend/`.
 
@@ -47,6 +47,8 @@ Features are organized by domain, and the same domain folder name appears in `sr
 - Example: a Medications bug lives in `src/pages/Medications/` + `src/api/Medications/` + `src/hooks/` medication hooks. Start there, not with a repo-wide search.
 
 ## Source Map
+
+- openGym pairing form accepts explicit local and peer LAN URLs, not browser origins. Resource/network scopes are fixed server-side. Full history is a confirmed one-shot action, not a persistent checkbox; pending delivery disables the action.
 
 - openGym integration: owner-only Settings panel in `src/pages/Settings/SparkyGymSettings.tsx`, strict shared contracts through `src/api/Integrations/sparkyGym.ts`, and committed owner SSE cache refresh in `src/hooks/Integrations/useSparkyGymNotifications.ts`. Invitations stay in component memory, never Query caches. Imported source authority is checked by `src/utils/openGymSource.ts`; imported exercise/workout edits belong in openGym.
 
@@ -97,6 +99,7 @@ When searching, ignore `node_modules/`, `dist/`, and every locale except `public
 
 ## Quick Routing
 
+- Imported openGym progress photos: `src/hooks/CheckIn/useImportedProgressPhotos.ts` owns the owner-scoped metadata query; `src/pages/CheckIn/ImportedProgressPhotos.tsx` is the read-only gallery inside Check-in Photos. Existing integration SSE invalidates the query; do not add polling or assign missing front/back/side angles.
 - Routing/navigation/permission issue: `src/App.tsx` (router, `PrivateRoute`, `PermissionRoute`) and `src/layouts/MainLayout.tsx`.
 - API/error-toast issue: `src/api/api.ts`, then the domain client in `src/api/<Domain>/`, then the query/mutation `meta` in the calling hook.
 - Auth/session issue: `src/lib/auth-client.ts`, `src/hooks/useAuth.tsx`, `src/pages/Auth/`, and the server's `auth.ts` if it crosses packages.

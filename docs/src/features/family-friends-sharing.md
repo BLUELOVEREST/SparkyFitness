@@ -1,5 +1,10 @@
 # Family & Friends Sharing
 
+All 18 built-in circumference fields, including left/right forearm, wrist and
+ankle, use the existing check-in sharing permissions. They are stored together in
+`check_in_measurements`, not custom categories. Adding these fields grants no
+additional access to integration metadata or private archives.
+
 Shared workout diaries show source-reported session duration and calories once per workout, not as calories assigned to an individual exercise. Unknown source totals remain unavailable. Native workout summaries contain only seconds and kcal, never body weight or target weight; integration raw records remain owner-only. Existing diary/report permissions and row-level policies are unchanged.
 
 Imported openGym workout details remain read-only for owners and delegates,

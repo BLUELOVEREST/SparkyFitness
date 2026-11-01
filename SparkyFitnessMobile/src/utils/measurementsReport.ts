@@ -10,6 +10,21 @@ export const MEASUREMENT_METRICS = [
   'waist',
   'hips',
   'neck',
+  'shoulders',
+  'chest',
+  'abdomen',
+  'left_biceps',
+  'right_biceps',
+  'left_thigh',
+  'right_thigh',
+  'left_calf',
+  'right_calf',
+  'left_forearm',
+  'right_forearm',
+  'left_wrist',
+  'right_wrist',
+  'left_ankle',
+  'right_ankle',
 ] as const;
 
 export type MeasurementMetric = (typeof MEASUREMENT_METRICS)[number];
@@ -69,7 +84,7 @@ export function buildMeasurementsReport(
   startDate: string,
   days: number
 ): MeasurementsReport {
-  const seen = new Map<MeasurementMetric, Map<string, number>>(
+  const seen = new Map<MeasurementMetric, Map<string, number | null>>(
     MEASUREMENT_METRICS.map((metric) => [metric, new Map()])
   );
   const stepsByDay = new Map<string, number>();
@@ -83,6 +98,11 @@ export function buildMeasurementsReport(
     for (const metric of MEASUREMENT_METRICS) {
       const value = row[metric];
       const bucket = seen.get(metric);
+      // A supplied null is a cleared value, not a reason to revive an older edit.
+      if (value === null && !bucket?.has(row.entry_date)) {
+        bucket?.set(row.entry_date, null);
+        continue;
+      }
       if (value != null && Number(value) > 0 && !bucket?.has(row.entry_date)) {
         bucket?.set(row.entry_date, Number(value));
         daysWithData.add(row.entry_date);
@@ -100,7 +120,7 @@ export function buildMeasurementsReport(
     for (let i = 0; i < days; i += 1) {
       const day = addDays(startDate, i);
       const value = bucket.get(day);
-      if (value !== undefined) points.push({ day, value });
+      if (value != null) points.push({ day, value });
     }
     metrics[metric] = trendOf(points);
   }

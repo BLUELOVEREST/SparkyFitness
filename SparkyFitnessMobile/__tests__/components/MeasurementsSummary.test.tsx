@@ -13,6 +13,15 @@ jest.mock('uniwind', () => ({
 }));
 
 describe('MeasurementsSummary', () => {
+  test('renders a day containing only a new built-in circumference', () => {
+    const { getByText } = render(
+      <MeasurementsSummary
+        measurements={{ entry_date: '2026-10-31', left_ankle: 22 }}
+      />
+    );
+    expect(getByText('Left Ankle')).toBeTruthy();
+    expect(getByText('22 cm')).toBeTruthy();
+  });
   test('renders null when no measurements or custom measurements', () => {
     const { toJSON } = render(<MeasurementsSummary measurements={undefined} />);
     expect(toJSON()).toBeNull();

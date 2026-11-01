@@ -26,6 +26,7 @@ import {
 import { hasComparableAngle, PHOTO_ANGLES } from '@/utils/progressPhotos';
 import { ProgressPhotoCompareDialog } from './ProgressPhotoCompareDialog';
 import { ProgressPhotoTimelapseDialog } from './ProgressPhotoTimelapseDialog';
+import { ImportedProgressPhotos } from './ImportedProgressPhotos';
 
 interface PhotoSlotProps {
   type: PhotoType;
@@ -287,6 +288,7 @@ export const CheckInPhotos = ({
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
+      <ImportedProgressPhotos />
       <ProgressPhotoCompareDialog
         open={compareOpen}
         onOpenChange={setCompareOpen}

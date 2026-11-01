@@ -29,7 +29,7 @@ export function sparkyGymCopy(t: TFunction) {
     pause: t('sparkyGym.pause', { defaultValue: 'Pause' }),
     resume: t('sparkyGym.resume', { defaultValue: 'Resume' }),
     revoke: t('sparkyGym.revoke', { defaultValue: 'Revoke' }),
-    snapshot: t('sparkyGym.snapshot', { defaultValue: 'Import snapshot' }),
+    snapshot: t('sparkyGym.syncHistory', { defaultValue: 'Sync history' }),
     purge: t('sparkyGym.purge', { defaultValue: 'Purge imported records' }),
   };
 }

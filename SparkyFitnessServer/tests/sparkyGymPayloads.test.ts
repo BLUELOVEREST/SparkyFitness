@@ -690,26 +690,23 @@ describe('SparkyGym management wire contracts', () => {
   });
   it('accepts only explicit owner control bodies without owner IDs', () => {
     const invitation = {
+      self_origin: 'http://192.168.200.118:3006',
       peer_origin: offer.peer_origin,
-      scopes: offer.scopes,
-      include_history: false,
-      allow_http: false,
-      allow_private_network: false,
     };
     expect(
       shared.sparkyGymCreateInvitationRequestSchema.parse(invitation)
     ).toEqual(invitation);
     const claimRequest = {
       invitation: offer,
-      allow_http: false,
-      allow_private_network: false,
     };
     expect(shared.sparkyGymClaimRequestSchema.parse(claimRequest)).toEqual(
       claimRequest
     );
     expect(
-      shared.sparkyGymClaimRequestSchema.safeParse({ invitation: offer })
-        .success
+      shared.sparkyGymClaimRequestSchema.safeParse({
+        invitation: offer,
+        allow_http: true,
+      }).success
     ).toBe(false);
     expect(
       shared.sparkyGymCreateInvitationRequestSchema.safeParse({
@@ -717,18 +714,24 @@ describe('SparkyGym management wire contracts', () => {
         user_id: id,
       }).success
     ).toBe(false);
+    for (const patch of [
+      { scopes: ['workout'] },
+      { include_history: true },
+      { allow_http: false },
+      { allow_private_network: false },
+      { self_origin: 'http://user:password@192.168.200.118:3006' },
+      { self_origin: 'http://192.168.200.118:3006/api' },
+    ])
+      expect(
+        shared.sparkyGymCreateInvitationRequestSchema.safeParse({
+          ...invitation,
+          ...patch,
+        }).success
+      ).toBe(false);
     expect(
       shared.sparkyGymCreateInvitationRequestSchema.safeParse({
         ...invitation,
         peer_origin: 'http://192.168.1.2',
-      }).success
-    ).toBe(false);
-    expect(
-      shared.sparkyGymCreateInvitationRequestSchema.safeParse({
-        ...invitation,
-        peer_origin: 'http://192.168.1.2',
-        allow_http: true,
-        allow_private_network: true,
       }).success
     ).toBe(true);
     expect(

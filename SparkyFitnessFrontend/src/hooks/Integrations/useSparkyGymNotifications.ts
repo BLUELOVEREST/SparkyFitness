@@ -15,6 +15,7 @@ const roots = new Set([
   'reports',
   'diaryReports',
   'checkIn',
+  'imported-progress-photos',
   'goals',
   'onboarding',
 ]);

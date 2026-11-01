@@ -45,3 +45,14 @@ export type CheckInPhotoGalleryResponse = z.infer<
   typeof checkInPhotoGalleryResponseSchema
 >;
 export type CheckInPhotoResponse = z.infer<typeof checkInPhotoResponseSchema>;
+
+/** Owner-only imported gallery. No native angle, measurement or disk path. */
+export const importedProgressPhotoSchema = z.object({
+  id: z.uuid(),
+  entry_date: z.iso.date(),
+  source: z.literal('opengym'),
+});
+export const importedProgressPhotoListSchema = z.array(
+  importedProgressPhotoSchema
+);
+export type ImportedProgressPhoto = z.infer<typeof importedProgressPhotoSchema>;

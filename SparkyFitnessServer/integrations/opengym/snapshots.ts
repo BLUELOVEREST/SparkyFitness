@@ -69,11 +69,36 @@ export function selectCurrentBodyItems(
 export async function enqueueBodySnapshot(
   client: PoolClient,
   connection: SparkyGymConnection,
-  includeHistory: boolean
+  includeHistory: boolean,
+  coalesce = false
 ): Promise<string> {
   if (connection.status !== 'active' || !connection.peer_user_id)
     return conflict('connection_not_active');
   await repository.lockOwnerSource(connection.user_id, client);
+  const prune = connection.scopes.filter(
+    (resource) =>
+      bodyResources.has(resource) &&
+      (includeHistory || !historicalResources.has(resource))
+  );
+  if (coalesce) {
+    const pending = await client.query<{ packet: unknown }>(
+      `WITH packets AS MATERIALIZED (
+         SELECT status,source_cursor,body::jsonb AS packet FROM sparkygym_outbox
+         WHERE user_id=$1 AND connection_id=$2 AND path='/api/integrations/v1/snapshot'
+       ) SELECT b.packet FROM packets b
+       WHERE b.packet->>'action'='begin' AND b.status IN ('pending','delivered') AND EXISTS (
+         SELECT 1 FROM packets p WHERE p.status='pending'
+         AND p.packet->>'snapshot_id'=b.packet->>'snapshot_id'
+         AND p.packet->>'action' IN ('begin','complete')
+       ) ORDER BY b.source_cursor`,
+      [connection.user_id, connection.id]
+    );
+    for (const { packet } of pending.rows) {
+      const begin = sparkyGymPeerSnapshotBeginSchema.parse(packet);
+      if (prune.every((resource) => begin.prune_resources.includes(resource)))
+        return begin.snapshot_id;
+    }
+  }
   const captured = (await repository.captureBodySnapshot(client)).filter(
     (item) =>
       bodyResources.has(item.resource) &&
@@ -132,11 +157,6 @@ export async function enqueueBodySnapshot(
       client
     );
   }
-  const prune = connection.scopes.filter(
-    (resource) =>
-      bodyResources.has(resource) &&
-      (includeHistory || !historicalResources.has(resource))
-  );
   const begin = sparkyGymPeerSnapshotBeginSchema.parse({
     version: 1,
     action: 'begin',
@@ -249,7 +269,8 @@ export async function handleSnapshot(
     const id = await enqueueBodySnapshot(
       client,
       connection,
-      packet.include_history
+      packet.include_history,
+      true
     );
     return {
       version: 1 as const,

@@ -1,4 +1,6 @@
+import { circumferenceLabel } from '../utils/circumferenceLabels';
 import { useTranslation } from 'react-i18next';
+import { EXTRA_BODY_CIRCUMFERENCE_PARTS } from '@workspace/shared';
 import { View, Text, Pressable } from 'react-native';
 import { useCSSVariable } from 'uniwind';
 import Icon from './Icon';
@@ -165,6 +167,16 @@ const MeasurementsSummary: React.FC<MeasurementsSummaryProps> = ({
         value: `${formatCustomValue(entry.value, cat?.data_type)}${suffix}`,
       });
     }
+  }
+
+  for (const part of EXTRA_BODY_CIRCUMFERENCE_PARTS) {
+    const value = measurements?.[part.key];
+    if (value != null)
+      rows.push({
+        kind: 'custom',
+        label: circumferenceLabel(part.key, t),
+        value: formatBodyLength(value, bodyUnit),
+      });
   }
 
   if (rows.length === 0) return null;

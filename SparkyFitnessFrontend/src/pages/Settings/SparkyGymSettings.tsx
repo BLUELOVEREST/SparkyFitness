@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Copy,
+  Pencil,
   Link,
   Pause,
   Play,
@@ -11,7 +12,6 @@ import {
   Unplug,
 } from 'lucide-react';
 import {
-  sparkyGymResources,
   type SparkyGymInvitationOffer,
   type SparkyGymConnectionStatus,
 } from '@workspace/shared';
@@ -42,18 +42,44 @@ function OwnerPanel() {
   const { user } = useAuth();
   const { query, createInvitation, controlConnection } = useSparkyGym(user?.id);
   const [origin, setOrigin] = useState('');
-  const [scopes, setScopes] = useState<(typeof sparkyGymResources)[number][]>([
-    'exercise',
-    'workout',
-  ]);
-  const [history, setHistory] = useState(false);
-  const [http, setHttp] = useState(false);
-  const [privateNetwork, setPrivateNetwork] = useState(false);
+  const [selfOrigin, setSelfOrigin] = useState('');
   const [invitation, setInvitation] = useState<SparkyGymInvitationOffer | null>(
     null
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [peerMismatch, setPeerMismatch] = useState(false);
+  const connections = query.data?.connections ?? [];
+  const editing = connections.find(
+    (connection) => connection.connection_id === editingId
+  );
+  const hasConnection = connections.some((connection) =>
+    ['active', 'paused'].includes(connection.status)
+  );
+  const showSetup = !!query.data && (!hasConnection || !!editing);
+  const showInvitation =
+    invitation &&
+    !connections.some(
+      (connection) =>
+        connection.connection_id === invitation.connection_id &&
+        ['active', 'paused'].includes(connection.status)
+    );
+  const edit = (connection: SparkyGymConnectionStatus) => {
+    setEditingId(connection.connection_id);
+    setSelfOrigin(connection.self_origin ?? '');
+    setOrigin(connection.peer_origin);
+    setInvitation(null);
+    setError(false);
+    setPeerMismatch(false);
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setOrigin('');
+    setSelfOrigin('');
+    setInvitation(null);
+    setPeerMismatch(false);
+  };
   useEffect(() => {
     if (!invitation) return;
     const timer = setTimeout(
@@ -79,16 +105,29 @@ function OwnerPanel() {
       setInvitation(null);
       const response = await createInvitation(
         {
-          peer_origin: replacing?.peer_origin ?? origin,
-          scopes: replacing?.scopes ?? scopes,
-          include_history: history,
-          allow_http: http,
-          allow_private_network: privateNetwork,
+          peer_origin: origin,
+          self_origin: selfOrigin,
         },
         replacing?.connection_id
       );
       setInvitation(response.invitation);
+      setEditingId(null);
     });
+  const submit = () => {
+    if (editing) {
+      try {
+        if (new URL(origin).origin !== editing.peer_origin) {
+          setPeerMismatch(true);
+          return;
+        }
+      } catch {
+        setError(true);
+        return;
+      }
+      if (!window.confirm(t('sparkyGym.rotateConfirm'))) return;
+    }
+    void create(editing);
+  };
   const action = (
     connection: SparkyGymConnectionStatus,
     command: SparkyGymAction
@@ -108,7 +147,7 @@ function OwnerPanel() {
           ? t('sparkyGym.purgeConfirm', { counts })
           : command === 'revoke'
             ? t('sparkyGym.revokeConfirm')
-            : command === 'snapshot' && history
+            : command === 'snapshot'
               ? t('sparkyGym.historyConfirm', {
                   origin: connection.peer_origin,
                   counts,
@@ -120,7 +159,7 @@ function OwnerPanel() {
         connection.connection_id,
         command,
         command === 'snapshot'
-          ? { include_history: history }
+          ? { include_history: true }
           : command === 'purge'
             ? { confirm: true }
             : {}
@@ -136,60 +175,46 @@ function OwnerPanel() {
         </span>
       </AccordionTrigger>
       <AccordionContent className="p-4 pt-0 space-y-4">
-        <label className="block space-y-2">
-          <span>{t('sparkyGym.peerOrigin')}</span>
-          <Input
-            value={origin}
-            onChange={(e) => setOrigin(e.target.value)}
-            placeholder="https://gym.example"
-            autoComplete="off"
-          />
-        </label>
-        <fieldset className="flex flex-wrap gap-3">
-          <legend>{t('sparkyGym.scopes')}</legend>
-          {sparkyGymResources.map((scope) => (
-            <label key={scope} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={scopes.includes(scope)}
-                onChange={(e) =>
-                  setScopes((current) =>
-                    e.target.checked
-                      ? [...current, scope]
-                      : current.filter((item) => item !== scope)
-                  )
-                }
+        {showSetup && (
+          <div className="space-y-4">
+            <label className="block space-y-2">
+              <span>{t('sparkyGym.selfOrigin', 'SparkyFitness LAN URL')}</span>
+              <Input
+                value={selfOrigin}
+                onChange={(e) => setSelfOrigin(e.target.value)}
+                placeholder="http://192.168.200.118:3006"
+                autoComplete="off"
+                disabled={busy}
               />
-              {t(`sparkyGym.${scope}`)}
             </label>
-          ))}
-        </fieldset>
-        <div className="flex flex-wrap gap-4">
-          {(
-            [
-              [history, setHistory, 'history'],
-              [http, setHttp, 'allowHttp'],
-              [privateNetwork, setPrivateNetwork, 'allowPrivate'],
-            ] as const
-          ).map(([checked, update, key]) => (
-            <label key={key} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={(e) => update(e.target.checked)}
+            <label className="block space-y-2">
+              <span>{t('sparkyGym.peerOrigin')}</span>
+              <Input
+                value={origin}
+                onChange={(e) => {
+                  setOrigin(e.target.value);
+                  setPeerMismatch(false);
+                }}
+                placeholder="http://192.168.200.118:3085"
+                autoComplete="off"
+                disabled={busy}
               />
-              {t(`sparkyGym.${key}`)}
             </label>
-          ))}
-        </div>
-        <Button
-          disabled={busy || !origin || !scopes.length}
-          onClick={() => void create()}
-        >
-          <Link className="mr-2 h-4 w-4" />
-          {t('sparkyGym.invite')}
-        </Button>
-        {invitation && (
+            <Button disabled={busy || !origin || !selfOrigin} onClick={submit}>
+              <Link className="mr-2 h-4 w-4" />
+              {editing ? t('sparkyGym.rotate') : t('sparkyGym.invite')}
+            </Button>
+            {editing && (
+              <Button variant="ghost" disabled={busy} onClick={cancelEdit}>
+                {t('sparkyGym.cancel')}
+              </Button>
+            )}
+            {peerMismatch && (
+              <p role="alert">{t('sparkyGym.peerChangeRequiresPairing')}</p>
+            )}
+          </div>
+        )}
+        {showInvitation && invitation && (
           <div className="space-y-2" role="status">
             <p>
               {t('sparkyGym.expires', {
@@ -201,10 +226,28 @@ function OwnerPanel() {
               disabled={busy}
               onClick={() =>
                 void run(async () => {
-                  if (Date.parse(invitation.expires_at) > Date.now())
-                    await navigator.clipboard.writeText(
-                      JSON.stringify(invitation)
-                    );
+                  if (Date.parse(invitation.expires_at) <= Date.now()) return;
+                  const text = JSON.stringify(invitation);
+                  if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(text);
+                    return;
+                  }
+                  // LAN HTTP has no secure-context Clipboard API.
+                  const previous = document.activeElement;
+                  const field = document.createElement('textarea');
+                  field.value = text;
+                  field.readOnly = true;
+                  field.style.position = 'fixed';
+                  field.style.opacity = '0';
+                  document.body.append(field);
+                  try {
+                    field.select();
+                    if (!document.execCommand('copy'))
+                      throw new Error('copy_failed');
+                  } finally {
+                    field.remove();
+                    if (previous instanceof HTMLElement) previous.focus();
+                  }
                 })
               }
             >
@@ -230,20 +273,17 @@ function OwnerPanel() {
             className="border-t pt-4 space-y-2"
           >
             <p className="font-medium break-all">{connection.peer_origin}</p>
+            {connection.self_origin && (
+              <dl className="text-sm text-muted-foreground">
+                <dt>{t('sparkyGym.selfOrigin')}</dt>
+                <dd className="break-all">{connection.self_origin}</dd>
+              </dl>
+            )}
             <p>
               {t(`sparkyGym.${connection.status}`)}
               {connection.peer_owner_ref
                 ? ` · ${connection.peer_owner_ref}`
                 : ''}
-            </p>
-            <p>
-              {t('sparkyGym.scopes')}:{' '}
-              {connection.scopes
-                .map((scope) => t(`sparkyGym.${scope}`))
-                .join(', ')}
-            </p>
-            <p>
-              {t('sparkyGym.history')}: {String(connection.include_history)}
             </p>
             <p>
               {t('sparkyGym.counts')}:{' '}
@@ -252,14 +292,6 @@ function OwnerPanel() {
                 .join(', ') || '0'}
             </p>
             <SparkyGymDeliveryStatus delivery={connection.delivery} />
-            {connection.capabilities && (
-              <p>
-                {t('sparkyGym.capabilities')}:{' '}
-                {connection.capabilities.resources
-                  .map((resource) => t(`sparkyGym.${resource}`))
-                  .join(', ')}
-              </p>
-            )}
             <div className="flex flex-wrap gap-2">
               {(
                 [
@@ -284,24 +316,27 @@ function OwnerPanel() {
                   <Button
                     key={command}
                     variant="outline"
-                    disabled={busy}
+                    disabled={
+                      busy ||
+                      (command === 'snapshot' &&
+                        connection.delivery.pending > 0)
+                    }
                     onClick={() => action(connection, command)}
                   >
                     <Icon className="mr-2 h-4 w-4" />
-                    {t(`sparkyGym.${command}`)}
+                    {command === 'snapshot'
+                      ? t('sparkyGym.syncHistory', 'Sync history')
+                      : t(`sparkyGym.${command}`)}
                   </Button>
                 ))}
               {['active', 'paused'].includes(connection.status) && (
                 <Button
                   variant="outline"
                   disabled={busy}
-                  onClick={() => {
-                    if (window.confirm(t('sparkyGym.rotateConfirm')))
-                      void create(connection);
-                  }}
+                  onClick={() => edit(connection)}
                 >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  {t('sparkyGym.rotate')}
+                  <Pencil className="mr-2 h-4 w-4" />
+                  {t('sparkyGym.editConnection')}
                 </Button>
               )}
             </div>

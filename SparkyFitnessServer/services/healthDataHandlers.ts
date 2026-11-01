@@ -115,6 +115,12 @@ const DEFAULT_UNITS_BY_HEALTH_TYPE = {
   right_thigh: 'cm',
   left_calf: 'cm',
   right_calf: 'cm',
+  left_forearm: 'cm',
+  right_forearm: 'cm',
+  left_wrist: 'cm',
+  right_wrist: 'cm',
+  left_ankle: 'cm',
+  right_ankle: 'cm',
   hydration: 'L',
   Hydration: 'L',
   lean_body_mass: 'kg',
@@ -607,22 +613,20 @@ export function createCategoryResolver(): HealthBatchContext['resolveCategory'] 
 // to its check_in_measurements column. One source of truth for both the
 // per-entry and batched paths.
 function prepareCheckInMeasurement(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  entry: any
-):
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  { measurements: Record<string, any> } | { error: string } {
-  const canonical = TYPE_ALIASES[entry.type] ?? entry.type;
+  entry: Record<string, unknown>
+): { measurements: Record<string, number> } | { error: string } {
+  const type = typeof entry.type === 'string' ? entry.type : '';
+  const canonical = TYPE_ALIASES[type] ?? type;
   switch (canonical) {
     case 'steps': {
-      const stepValue = parseInt(entry.value, 10);
+      const stepValue = parseInt(String(entry.value), 10);
       if (isNaN(stepValue) || !Number.isInteger(stepValue)) {
         return { error: 'Invalid value for step. Must be an integer.' };
       }
       return { measurements: { steps: stepValue } };
     }
     case 'weight': {
-      const numericValue = parseFloat(entry.value);
+      const numericValue = parseFloat(String(entry.value));
       if (isNaN(numericValue) || numericValue <= 0) {
         return {
           error: `Invalid value for ${entry.type}. Must be a positive number.`,
@@ -631,7 +635,7 @@ function prepareCheckInMeasurement(
       return { measurements: { weight: numericValue } };
     }
     case 'body_fat': {
-      const numericValue = parseFloat(entry.value);
+      const numericValue = parseFloat(String(entry.value));
       if (isNaN(numericValue) || numericValue <= 0 || numericValue > 100) {
         return {
           error: `Invalid value for ${entry.type}. Must be greater than 0 and at most 100.`,
@@ -663,12 +667,35 @@ function prepareCheckInMeasurement(
     case 'right_thigh':
     case 'left_calf':
     case 'right_calf':
+    case 'left_forearm':
+    case 'right_forearm':
+    case 'left_wrist':
+    case 'right_wrist':
+    case 'left_ankle':
+    case 'right_ankle': {
+      const numericValue = parseFloat(String(entry.value));
+      const unit = entry.unit ?? entry.measurementType;
+      const valueCm = lengthToCm(
+        numericValue,
+        typeof unit === 'string' ? unit : undefined
+      );
+      if (
+        !Number.isFinite(numericValue) ||
+        numericValue <= 0 ||
+        valueCm === undefined
+      ) {
+        return {
+          error: `Invalid body circumference ${type}. Use a positive number in cm, in, or m.`,
+        };
+      }
+      return { measurements: { [canonical]: round(valueCm, 2) } };
+    }
     case 'muscle_mass_kg':
     case 'bone_mass_kg': {
       // The smart-scale masses (muscle/bone) are stored in check_in_measurements;
       // providers normalize before dispatch — Garmin via grams_to_kg in the
       // Python service, Withings via its kg-denominated measure types.
-      const numericValue = parseFloat(entry.value);
+      const numericValue = parseFloat(String(entry.value));
       if (isNaN(numericValue) || numericValue <= 0) {
         return {
           error: `Invalid value for ${entry.type}. Must be a positive number.`,
@@ -692,7 +719,7 @@ function prepareCheckInMeasurement(
       return { measurements: { [canonical]: numericValue } };
     }
     case 'body_water_percentage': {
-      const numericValue = parseFloat(entry.value);
+      const numericValue = parseFloat(String(entry.value));
       if (isNaN(numericValue) || numericValue <= 0 || numericValue > 100) {
         return {
           error: `Invalid value for ${entry.type}. Must be greater than 0 and at most 100.`,
@@ -2543,6 +2570,12 @@ export const HEALTH_TYPE_HANDLERS: Record<string, HealthTypeHandler> = {
   right_thigh: bodyCircumferenceHandler,
   left_calf: bodyCircumferenceHandler,
   right_calf: bodyCircumferenceHandler,
+  left_forearm: bodyCircumferenceHandler,
+  right_forearm: bodyCircumferenceHandler,
+  left_wrist: bodyCircumferenceHandler,
+  right_wrist: bodyCircumferenceHandler,
+  left_ankle: bodyCircumferenceHandler,
+  right_ankle: bodyCircumferenceHandler,
   body_circumference: bodyCircumferenceHandler,
   muscle_mass_kg: muscleMassHandler,
   bone_mass_kg: boneMassHandler,

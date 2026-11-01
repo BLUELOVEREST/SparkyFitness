@@ -11,6 +11,7 @@ import {
 import { proxyHeadersToRecord } from '../services/storage';
 import { normalizeUrl } from '../utils/serverUrl';
 import { createNotificationDecoder } from '../utils/sparkyGymNotifications';
+import { importedProgressPhotosRootKey } from '../services/api/importedProgressPhotosApi';
 
 const roots = new Set([
   'exercises',
@@ -49,6 +50,7 @@ const roots = new Set([
   'goals',
   'userProfile',
   'checkInPhotos',
+  importedProgressPhotosRootKey[0],
 ]);
 
 export default function SparkyGymNotifications() {

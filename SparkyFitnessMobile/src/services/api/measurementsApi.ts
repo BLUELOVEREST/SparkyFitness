@@ -348,6 +348,21 @@ export const upsertCheckIn = async (params: {
   neck?: number | null;
   waist?: number | null;
   hips?: number | null;
+  shoulders?: number | null;
+  chest?: number | null;
+  abdomen?: number | null;
+  left_biceps?: number | null;
+  right_biceps?: number | null;
+  left_thigh?: number | null;
+  right_thigh?: number | null;
+  left_calf?: number | null;
+  right_calf?: number | null;
+  left_forearm?: number | null;
+  right_forearm?: number | null;
+  left_wrist?: number | null;
+  right_wrist?: number | null;
+  left_ankle?: number | null;
+  right_ankle?: number | null;
   steps?: number | null;
   height?: number | null;
   bodyFatPercentage?: number | null;
@@ -367,6 +382,21 @@ export const upsertCheckIn = async (params: {
       neck: params.neck,
       waist: params.waist,
       hips: params.hips,
+      shoulders: params.shoulders,
+      chest: params.chest,
+      abdomen: params.abdomen,
+      left_biceps: params.left_biceps,
+      right_biceps: params.right_biceps,
+      left_thigh: params.left_thigh,
+      right_thigh: params.right_thigh,
+      left_calf: params.left_calf,
+      right_calf: params.right_calf,
+      left_forearm: params.left_forearm,
+      right_forearm: params.right_forearm,
+      left_wrist: params.left_wrist,
+      right_wrist: params.right_wrist,
+      left_ankle: params.left_ankle,
+      right_ankle: params.right_ankle,
       steps: params.steps,
       height: params.height,
       body_fat_percentage: params.bodyFatPercentage,

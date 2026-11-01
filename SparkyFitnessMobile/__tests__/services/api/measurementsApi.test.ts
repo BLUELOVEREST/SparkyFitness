@@ -9,6 +9,7 @@ import {
 import { apiFetch } from '../../../src/services/api/apiClient';
 import { ApiError } from '../../../src/services/api/errors';
 import type { CheckInMeasurementRange } from '../../../src/types/measurements';
+import { BODY_CIRCUMFERENCE_PARTS } from '@workspace/shared';
 
 jest.mock('../../../src/services/api/apiClient', () => ({
   apiFetch: jest.fn(),
@@ -28,6 +29,22 @@ describe('upsertCheckIn', () => {
     jest.clearAllMocks();
     mockApiFetch.mockResolvedValue({});
   });
+
+  test.each(BODY_CIRCUMFERENCE_PARTS)(
+    'serializes $key as a built-in nullable partial-day field',
+    async ({ key }) => {
+      await upsertCheckIn({ entryDate: '2026-10-31', [key]: 25.4 });
+      expect(JSON.parse(JSON.stringify(lastBody()))).toEqual({
+        entry_date: '2026-10-31',
+        [key]: 25.4,
+      });
+      await upsertCheckIn({ entryDate: '2026-10-31', [key]: null });
+      expect(JSON.parse(JSON.stringify(lastBody()))).toEqual({
+        entry_date: '2026-10-31',
+        [key]: null,
+      });
+    }
+  );
 
   test('posts to the check-in endpoint with snake_case fields', async () => {
     await upsertCheckIn({

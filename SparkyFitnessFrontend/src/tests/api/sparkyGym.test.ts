@@ -8,10 +8,7 @@ import {
 jest.mock('@/api/api', () => ({ apiCall: jest.fn() }));
 const request = {
   peer_origin: 'https://gym.example',
-  scopes: ['workout' as const],
-  include_history: false,
-  allow_http: false,
-  allow_private_network: false,
+  self_origin: 'http://192.168.200.118:3006',
 };
 describe('SparkyGym owner API', () => {
   it('rejects missing delivery diagnostics instead of manufacturing healthy counts', async () => {

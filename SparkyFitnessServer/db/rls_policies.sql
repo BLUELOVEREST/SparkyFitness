@@ -704,6 +704,7 @@ CREATE POLICY admin_only_insert ON public.admin_activity_logs FOR INSERT TO PUBL
 WITH CHECK (admin_user_id = current_user_id() AND is_admin());
 
 -- Diary access tables
+-- Includes all 18 built-in circumference columns; no separate custom-category access.
 SELECT create_checkin_policy('check_in_measurements');
 SELECT create_checkin_policy('check_in_photos');
 -- Custom categories/measurements are surfaced through the check-in feature and

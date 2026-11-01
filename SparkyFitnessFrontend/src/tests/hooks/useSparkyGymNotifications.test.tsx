@@ -49,6 +49,7 @@ describe('owner notification replay', () => {
       'exercises',
       'reports',
       'checkIn',
+      'imported-progress-photos',
     ])
       expect(predicate({ queryKey: [root] })).toBe(true);
     unmount();
@@ -58,5 +59,18 @@ describe('owner notification replay', () => {
     delegate = true;
     renderHook(() => useSparkyGymNotifications());
     expect(Source).not.toHaveBeenCalled();
+  });
+  it('invalidates imported photos on snapshot recovery', () => {
+    renderHook(() => useSparkyGymNotifications());
+    act(() =>
+      listeners.get('snapshot-required')?.({ type: 'snapshot-required' })
+    );
+    const predicate = invalidateQueries.mock.calls[0][0].predicate as (query: {
+      queryKey: string[];
+    }) => boolean;
+    expect(predicate({ queryKey: ['imported-progress-photos', 'owner'] })).toBe(
+      true
+    );
+    expect(predicate({ queryKey: ['unrelated'] })).toBe(false);
   });
 });

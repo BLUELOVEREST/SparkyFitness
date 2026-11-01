@@ -71,6 +71,12 @@ const ALLOWED_CHECK_IN_COLUMNS = [
   'right_thigh',
   'left_calf',
   'right_calf',
+  'left_forearm',
+  'right_forearm',
+  'left_wrist',
+  'right_wrist',
+  'left_ankle',
+  'right_ankle',
   'steps',
   'height',
   'body_fat_percentage',
@@ -94,6 +100,12 @@ const CHECK_IN_COLUMN_TYPES: Record<string, string> = {
   right_thigh: 'numeric',
   left_calf: 'numeric',
   right_calf: 'numeric',
+  left_forearm: 'numeric',
+  right_forearm: 'numeric',
+  left_wrist: 'numeric',
+  right_wrist: 'numeric',
+  left_ankle: 'numeric',
+  right_ankle: 'numeric',
   steps: 'integer',
   height: 'numeric',
   body_fat_percentage: 'numeric',
@@ -622,10 +634,8 @@ async function getCheckInMeasurementsByDate(userId: any, date: any) {
 }
 
 async function getLatestCheckInMeasurementsOnOrBeforeDate(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  userId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  date: any
+  userId: string,
+  date: string
 ) {
   const client = await getClient(userId); // User-specific operation
   try {
@@ -654,6 +664,12 @@ async function getLatestCheckInMeasurementsOnOrBeforeDate(
          (SELECT right_thigh FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND right_thigh IS NOT NULL AND right_thigh > 0 ORDER BY entry_date DESC LIMIT 1) as right_thigh,
          (SELECT left_calf FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND left_calf IS NOT NULL AND left_calf > 0 ORDER BY entry_date DESC LIMIT 1) as left_calf,
          (SELECT right_calf FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND right_calf IS NOT NULL AND right_calf > 0 ORDER BY entry_date DESC LIMIT 1) as right_calf,
+         (SELECT left_forearm FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND left_forearm IS NOT NULL AND left_forearm > 0 ORDER BY entry_date DESC LIMIT 1) as left_forearm,
+         (SELECT right_forearm FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND right_forearm IS NOT NULL AND right_forearm > 0 ORDER BY entry_date DESC LIMIT 1) as right_forearm,
+         (SELECT left_wrist FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND left_wrist IS NOT NULL AND left_wrist > 0 ORDER BY entry_date DESC LIMIT 1) as left_wrist,
+         (SELECT right_wrist FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND right_wrist IS NOT NULL AND right_wrist > 0 ORDER BY entry_date DESC LIMIT 1) as right_wrist,
+         (SELECT left_ankle FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND left_ankle IS NOT NULL AND left_ankle > 0 ORDER BY entry_date DESC LIMIT 1) as left_ankle,
+         (SELECT right_ankle FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND right_ankle IS NOT NULL AND right_ankle > 0 ORDER BY entry_date DESC LIMIT 1) as right_ankle,
          (SELECT steps FROM check_in_measurements WHERE user_id = $1 AND entry_date = $2 AND steps IS NOT NULL LIMIT 1) as steps,
          (SELECT height FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND height IS NOT NULL AND height > 0 ORDER BY entry_date DESC LIMIT 1) as height,
          (SELECT body_fat_percentage FROM check_in_measurements WHERE user_id = $1 AND entry_date <= $2 AND body_fat_percentage IS NOT NULL AND body_fat_percentage > 0 ORDER BY entry_date DESC LIMIT 1) as body_fat_percentage,
@@ -1641,8 +1657,7 @@ async function getExternalBmrByDateRange(
  * instead (see AdaptiveTdeeService). Reading it from here applied a value recorded
  * today to dates weeks earlier (issue #2395).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getLatestMeasurement(userId: any) {
+async function getLatestMeasurement(userId: string) {
   const client = await getClient(userId); // User-specific operation
   try {
     const result = await client.query(
@@ -1663,6 +1678,12 @@ async function getLatestMeasurement(userId: any) {
          (SELECT right_thigh FROM check_in_measurements WHERE user_id = $1 AND right_thigh IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as right_thigh,
          (SELECT left_calf FROM check_in_measurements WHERE user_id = $1 AND left_calf IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as left_calf,
          (SELECT right_calf FROM check_in_measurements WHERE user_id = $1 AND right_calf IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as right_calf,
+         (SELECT left_forearm FROM check_in_measurements WHERE user_id = $1 AND left_forearm IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as left_forearm,
+         (SELECT right_forearm FROM check_in_measurements WHERE user_id = $1 AND right_forearm IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as right_forearm,
+         (SELECT left_wrist FROM check_in_measurements WHERE user_id = $1 AND left_wrist IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as left_wrist,
+         (SELECT right_wrist FROM check_in_measurements WHERE user_id = $1 AND right_wrist IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as right_wrist,
+         (SELECT left_ankle FROM check_in_measurements WHERE user_id = $1 AND left_ankle IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as left_ankle,
+         (SELECT right_ankle FROM check_in_measurements WHERE user_id = $1 AND right_ankle IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as right_ankle,
          (SELECT steps FROM check_in_measurements WHERE user_id = $1 AND steps IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as steps,
          (SELECT height FROM check_in_measurements WHERE user_id = $1 AND height IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as height,
          (SELECT body_fat_percentage FROM check_in_measurements WHERE user_id = $1 AND body_fat_percentage IS NOT NULL ORDER BY entry_date DESC LIMIT 1) as body_fat_percentage,

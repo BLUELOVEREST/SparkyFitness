@@ -175,6 +175,98 @@ beforeEach(() => {
   vi.spyOn(snapshots, 'enqueueBodySnapshot').mockResolvedValue(randomUUID());
 });
 
+describe('LAN pairing and explicit history', () => {
+  it('does not retire old work after a current-only replacement snapshot', async () => {
+    const oldStatus = record.status;
+    const replacement: SparkyGymConnection = {
+      ...record,
+      id: randomUUID(),
+      status: 'active',
+      replaces_connection_id: id,
+      scopes: ['body_measurement', 'workout'],
+      invitation_public: { include_history: true },
+    };
+    query.mockImplementation(async (sql, values) => {
+      if (sql.startsWith('SELECT id FROM sparkygym_outbox'))
+        return values?.[3] === JSON.stringify(['body_measurement'])
+          ? { rows: [], rowCount: 0 }
+          : { rows: [{ id }], rowCount: 1 };
+      if (sql.startsWith('SELECT snapshot_id FROM sparkygym_snapshots'))
+        return { rows: [{ snapshot_id: id }], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
+    await new SparkyGymService()['finishRotation'](client, replacement);
+    expect(record.status).toBe(oldStatus);
+    expect(repository.updateConnection).not.toHaveBeenCalled();
+  });
+
+  it('binds explicit LAN origins and fixes all seven scopes without browser origin settings', async () => {
+    vi.stubEnv('SPARKY_FITNESS_FRONTEND_URL', 'https://public.example');
+    vi.spyOn(transport, 'resolvePeerAddress').mockResolvedValue({
+      address: '192.168.200.118',
+      family: 4,
+    });
+    vi.spyOn(repository, 'listConnections').mockResolvedValue([]);
+    const create = vi
+      .spyOn(repository, 'createConnection')
+      .mockImplementation(async (_owner, input) => ({ ...record, ...input }));
+    const response = await new SparkyGymService().invite(owner, {
+      self_origin: 'http://192.168.200.118:3006',
+      peer_origin: 'http://192.168.200.118:3085',
+    });
+    expect(response.invitation.sf_origin).toBe('http://192.168.200.118:3006');
+    expect(response.connection.self_origin).toBe('http://192.168.200.118:3006');
+    expect(response.invitation.scopes).toHaveLength(7);
+    expect(response.invitation.include_history).toBe(true);
+    expect(create.mock.calls[0]?.[1]).toMatchObject({
+      allow_http: true,
+      allow_private: true,
+    });
+  });
+
+  it('refuses a second history job while snapshot delivery is outstanding', async () => {
+    record = {
+      ...record,
+      status: 'active',
+      peer_user_id: claim.og_owner_ref,
+      invitation_public: { ...record.invitation_public, include_history: true },
+    };
+    query.mockImplementation(async (sql) =>
+      sql.includes("status='pending'") && sql.includes('sparkygym_outbox')
+        ? { rows: [{ busy: true }], rowCount: 1 }
+        : { rows: [], rowCount: 0 }
+    );
+    await expect(
+      new SparkyGymService().action(owner, id, 'snapshot', {
+        include_history: true,
+      })
+    ).rejects.toMatchObject({ code: 'snapshot_in_progress' });
+    expect(snapshots.enqueueBodySnapshot).not.toHaveBeenCalled();
+  });
+
+  it('initializes only current state even when future full-history imports are authorized', async () => {
+    record = {
+      ...record,
+      status: 'paused',
+      peer_user_id: claim.og_owner_ref,
+      activated_at: new Date(),
+      last_error: 'initial_snapshot_pending',
+      invitation_public: { ...record.invitation_public, include_history: true },
+    };
+    await new SparkyGymService().action(owner, id, 'resume');
+    expect(snapshots.enqueueBodySnapshot).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({ status: 'active' }),
+      false
+    );
+    expect(
+      JSON.parse(
+        queued.find((packet) => packet.path.endsWith('/snapshot'))!.body
+      )
+    ).toMatchObject({ action: 'request', include_history: false });
+  });
+});
+
 describe('deleted-owner late media guard', () => {
   it('refetches the connection under the owner transaction instead of trusting the authenticated cached binding', async () => {
     const keys = derivePairKeys(offer, claim);

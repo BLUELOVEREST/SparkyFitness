@@ -61,27 +61,15 @@ export const sparkyGymPairClaimSchema = z
 export const sparkyGymPairAcceptSchema = sparkyGymPairClaimSchema;
 export const sparkyGymCreateInvitationRequestSchema = z
   .object({
+    self_origin: sparkyGymOriginSchema,
     peer_origin: sparkyGymOriginSchema,
-    scopes: sparkyGymScopesSchema,
-    include_history: z.boolean(),
-    allow_http: z.boolean(),
-    allow_private_network: z.boolean(),
   })
-  .strict()
-  .refine(
-    (value) => value.allow_http || value.peer_origin.startsWith('https://')
-  );
+  .strict();
 export const sparkyGymClaimRequestSchema = z
   .object({
     invitation: sparkyGymInvitationOfferSchema,
-    allow_http: z.boolean(),
-    allow_private_network: z.boolean(),
   })
-  .strict()
-  .refine(
-    (value) =>
-      value.allow_http || value.invitation.sf_origin.startsWith('https://')
-  );
+  .strict();
 export const sparkyGymRotateRequestSchema =
   sparkyGymCreateInvitationRequestSchema;
 export const sparkyGymOwnerControlRequestSchema = z.object({}).strict();
@@ -190,6 +178,7 @@ export const sparkyGymConnectionStatusSchema = z
     ]),
     peer_origin: sparkyGymOriginSchema,
     peer_owner_ref: reference.nullable(),
+    self_origin: sparkyGymOriginSchema.optional(),
     scopes: sparkyGymScopesSchema,
     include_history: z.boolean(),
     affected_record_counts: z.partialRecord(z.enum(sparkyGymResources), count),

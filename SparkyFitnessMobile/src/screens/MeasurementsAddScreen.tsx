@@ -1,3 +1,4 @@
+import { circumferenceLabel } from '../utils/circumferenceLabels';
 import React, {
   useCallback,
   useEffect,
@@ -49,6 +50,7 @@ import {
 } from '../utils/unitConversions';
 import { parseDecimalInput } from '../utils/numericInput';
 import {
+  EXTRA_BODY_CIRCUMFERENCE_PARTS,
   MIN_MEASURED_BMR_KCAL,
   MAX_MEASURED_BMR_KCAL,
   calculateAge,
@@ -197,8 +199,12 @@ const MeasurementsAddScreen: React.FC<Props> = ({ navigation, route }) => {
           });
         case 'bmr':
           return t('measurements.fields.bmr', { defaultValue: 'BMR' });
-        default:
-          return fallback;
+        default: {
+          const part = EXTRA_BODY_CIRCUMFERENCE_PARTS.find(
+            (part) => part.key === key
+          );
+          return part ? circumferenceLabel(part.key, t) : fallback;
+        }
       }
     },
     [t]
@@ -821,6 +827,16 @@ const MeasurementsAddScreen: React.FC<Props> = ({ navigation, route }) => {
       )
     )
       return;
+    for (const part of EXTRA_BODY_CIRCUMFERENCE_PARTS) {
+      if (
+        !apply(
+          part.key,
+          evaluateField(part.key, circumferenceLabel(part.key, t)),
+          (value) => lengthToCm(value, bodyUnit)
+        )
+      )
+        return;
+    }
     if (heightMode === 'ft_in') {
       const feetRaw = form.heightFeet.trim();
       const inchesRaw = form.height.trim();
@@ -948,6 +964,7 @@ const MeasurementsAddScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
 
     const fieldKeys: FieldKey[] = [
+      ...EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => part.key),
       'weight',
       'neck',
       'waist',
@@ -1677,6 +1694,25 @@ const MeasurementsAddScreen: React.FC<Props> = ({ navigation, route }) => {
               />
               {renderClearHint('hips')}
             </View>
+
+            {EXTRA_BODY_CIRCUMFERENCE_PARTS.map((part) => (
+              <View key={part.key} className="mb-4">
+                {renderFieldLabel(
+                  part.key,
+                  `${circumferenceLabel(part.key, t)} (${bodySuffix})`
+                )}
+                <FormInput
+                  value={form[part.key]}
+                  onChangeText={(value) => updateField(part.key, value)}
+                  keyboardType="decimal-pad"
+                  placeholder={standardPlaceholder(part.key, '0')}
+                  accessibilityLabel={circumferenceLabel(part.key, t)}
+                  testID={`field-${part.key}`}
+                  returnKeyType="done"
+                />
+                {renderClearHint(part.key)}
+              </View>
+            ))}
 
             <View className="mb-4">
               {renderFieldLabel(
