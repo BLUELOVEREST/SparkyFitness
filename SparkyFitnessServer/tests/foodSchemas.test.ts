@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  NormalizedFoodSchema,
+  barcodeLookupResponseSchema,
+  barcodeAlternativesResponseSchema,
+} from '@workspace/shared';
+import {
   BarcodeResponseSchema,
   FoodVariantSchema,
   PaginationSchema,
@@ -40,6 +45,52 @@ const validFood = {
   default_variant: validVariant,
   variants: [validVariant, packageVariant, metricPackageVariant],
 };
+
+describe('shared food macro role', () => {
+  it.each(['carb', 'protein', 'fat', null, undefined] as const)(
+    'preserves %s through food and barcode schemas',
+    (macro_role) => {
+      const food = { ...validFood, macro_role };
+      expect(NormalizedFoodSchema.parse(food).macro_role).toBe(macro_role);
+      expect(
+        barcodeLookupResponseSchema.parse({ source: 'local', food }).food
+          ?.macro_role
+      ).toBe(macro_role);
+      expect(
+        barcodeAlternativesResponseSchema.parse({
+          results: [
+            {
+              providerId: 'local',
+              providerName: 'Local',
+              source: 'local',
+              status: 'found',
+              food,
+            },
+          ],
+        }).results[0]?.food?.macro_role
+      ).toBe(macro_role);
+      expect(
+        BarcodeResponseSchema.parse({ source: 'local', food }).food?.macro_role
+      ).toBe(macro_role);
+      expect(
+        SearchResponseSchema.parse({
+          foods: [food],
+          pagination: { page: 1, pageSize: 20, totalCount: 1, hasMore: false },
+        }).foods[0]?.macro_role
+      ).toBe(macro_role);
+    }
+  );
+
+  it('rejects an unsupported role and accepts an omitted role', () => {
+    expect(
+      NormalizedFoodSchema.safeParse({ ...validFood, macro_role: 'mixed' })
+        .success
+    ).toBe(false);
+    expect(NormalizedFoodSchema.parse(validFood)).not.toHaveProperty(
+      'macro_role'
+    );
+  });
+});
 
 describe('FoodVariantSchema', () => {
   it('accepts an explicitly null provider serving description', () => {

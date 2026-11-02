@@ -12,6 +12,7 @@ import {
 import {
   createGuardedDispatcher,
   createGuardedFetch,
+  forNativeFetch,
   assertOutboundUrlShapeAndLiteralAllowed,
   getOutboundUrlBlockedError,
   OutboundUrlShapeError,
@@ -856,7 +857,8 @@ function buildOllamaRequest(
     // spend their context tokens generating reasoning traces before writing JSON.
     // Disabling thinking via `think: false` allows the model to produce valid
     // structured JSON within the token budget. Non-reasoning models safely ignore it.
-    body.think = false;
+    // Explicit profile settings take precedence over this JSON default.
+    if (body.think === undefined) body.think = false;
   }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -1296,7 +1298,7 @@ async function performOllama(
         body: JSON.stringify(built.body),
         redirect: 'manual',
         // @ts-expect-error undici dispatcher option is not in fetch DOM types
-        dispatcher: agent,
+        dispatcher: forNativeFetch(agent),
       });
     } catch (error) {
       const name = (error as { name?: string } | null)?.name;

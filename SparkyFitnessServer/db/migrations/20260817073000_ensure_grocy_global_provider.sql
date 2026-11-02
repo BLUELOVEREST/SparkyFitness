@@ -1,4 +1,3 @@
-BEGIN;
 
 INSERT INTO public.external_provider_types (
   id, display_name, description, categories, required_fields, field_labels, supports_barcode, is_strictly_private
@@ -46,5 +45,3 @@ BEGIN
     WHERE public.external_data_providers.provider_type = 'grocy';
   END IF;
 END $$;
-
-COMMIT;

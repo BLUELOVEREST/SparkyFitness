@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 const { getOidcProviders, getActiveOidcProviderIds } = vi.hoisted(() => ({
   getOidcProviders: vi.fn(),
@@ -58,6 +66,12 @@ async function readOrigins(
 
 describe('OIDC origins across server instances', () => {
   let providers: Provider[];
+
+  // Warm the dependency transforms outside the timed assertions. Each replica
+  // still resets module state, so the origin-cache isolation checks stay real.
+  beforeAll(async () => {
+    await import('../auth.js');
+  });
 
   beforeEach(() => {
     vi.stubEnv('SPARKY_FITNESS_FRONTEND_URL', 'https://sparky.example.test');

@@ -191,8 +191,12 @@ const WorkoutDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   // Linking works on the whole session, so any of its exercises will do. Only
   // a workout logged in the app can be linked to a synced one.
   const linkEntryId =
+    canEdit &&
+    session.source_summary == null &&
     session.exercises.length > 0 &&
-    isAppLoggedWorkoutSource(session.exercises[0].source)
+    session.exercises.every((exercise) =>
+      isAppLoggedWorkoutSource(exercise.source)
+    )
       ? session.exercises[0].id
       : null;
   const isLinked = session.exercises.some((ex) => !!ex.calorie_link_resolution);

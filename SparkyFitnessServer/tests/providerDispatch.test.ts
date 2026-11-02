@@ -44,7 +44,16 @@ vi.mock('undici', () => {
     return { destroy: vi.fn() };
   });
   const buildConnector = vi.fn(() => vi.fn());
-  return { default: { Agent, buildConnector }, Agent, buildConnector };
+  // Pass-through, so assertions on the dispatcher still see the Agent.
+  const Dispatcher1Wrapper = vi.fn(function (inner: unknown) {
+    return inner;
+  });
+  return {
+    default: { Agent, buildConnector, Dispatcher1Wrapper },
+    Agent,
+    buildConnector,
+    Dispatcher1Wrapper,
+  };
 });
 
 // Mock heic-convert so tests don't need real HEIC bytes. Default: succeed,
@@ -204,6 +213,12 @@ describe('dispatchAiRequest — preconditions', () => {
     );
     expect(result.ok).toBe(true);
     expect(m).toHaveBeenCalled();
+    // The Agent reaches Node's fetch through the handler-API bridge, not raw.
+    const init = m.mock.calls[0][1] as { dispatcher?: unknown };
+    const { default: undici } = await import('undici');
+    expect(vi.mocked(undici.Dispatcher1Wrapper)).toHaveBeenCalledWith(
+      init.dispatcher
+    );
   });
 
   it('blocks localhost custom URLs by default', async () => {
@@ -1005,6 +1020,39 @@ describe('dispatchAiRequest — text-only structured request shapes', () => {
     expect(body.format).toBe('json');
     expect(body.think).toBe(false);
   });
+
+  it.each([
+    { think: true, parseJson: false },
+    { think: false, parseJson: false },
+    { think: undefined, parseJson: false },
+    { think: true, parseJson: true },
+    { think: false, parseJson: true },
+    { think: undefined, parseJson: true },
+  ])(
+    'ollama preserves profile think=$think for JSON requests (parseJson=$parseJson)',
+    async ({ think, parseJson }) => {
+      const m = mockFetch(ollamaBody(JSON.stringify(SAMPLE)));
+      await dispatchAiRequest(
+        baseRequest({
+          provider: makeProvider({
+            service_type: 'ollama',
+            api_key: undefined,
+            custom_url: 'http://localhost:11434',
+            extra_body_json: think === undefined ? {} : { think },
+          }),
+          networkPolicy: PRIVATE_NETWORK_POLICY,
+          ...(parseJson && {
+            jsonSchema: undefined,
+            schemaName: undefined,
+            parseJson: true,
+          }),
+        })
+      );
+      const { body } = captured(m);
+      expect(body.format).toBe('json');
+      expect(body.think).toBe(think ?? false);
+    }
+  );
 
   it('ollama omits format and think for plain-text requests', async () => {
     const m = mockFetch(ollamaBody('plain text'));

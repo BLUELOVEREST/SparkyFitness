@@ -445,6 +445,39 @@ describe('WorkoutDetailScreen', () => {
     );
   });
 
+  it.each(['opengym', ' OpenGym '])(
+    'hides calorie linking for a %s parent even when its child looks native',
+    (source) => {
+      const screen = renderScreen(
+        buildSession({
+          source,
+          source_summary: { calories_kcal: 42, duration_seconds: 600 },
+          exercises: [buildExercise({ source: null, calories_burned: 999 })],
+        })
+      );
+      expect(screen.queryByTestId('link-synced-workout')).toBeNull();
+      expect(screen.getByText('42')).toBeTruthy();
+      expect(screen.queryByText('999')).toBeNull();
+    }
+  );
+
+  it('hides calorie linking when a later child is owned by openGym', () => {
+    const screen = renderScreen(
+      buildSession({
+        exercises: [
+          buildExercise(),
+          buildExercise({ id: 'imported-child', source: 'opengym' }),
+        ],
+      })
+    );
+    expect(screen.queryByTestId('link-synced-workout')).toBeNull();
+  });
+
+  it('keeps calorie linking available for a native workout', () => {
+    const screen = renderScreen(buildSession());
+    expect(screen.getByTestId('link-synced-workout')).toBeTruthy();
+  });
+
   it('hides the rest chip on imported (non-Sparky) workouts', () => {
     const sparky = renderScreen(buildSession());
     fireEvent.press(sparky.getByLabelText('Expand Bench Press'));

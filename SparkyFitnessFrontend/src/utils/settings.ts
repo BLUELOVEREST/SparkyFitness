@@ -7,6 +7,7 @@ export const providerRequirements: Record<string, string[]> = {
   norish: ['base_url', 'app_key'],
   grocy: ['base_url', 'app_key'],
   valhalla: ['base_url'],
+  open_meteo: ['base_url'],
   nutritionix: ['app_id', 'app_key'],
   fatsecret: ['app_id', 'app_key'],
   withings: ['app_id', 'app_key'],
@@ -57,6 +58,7 @@ const PROVIDERS_WITHOUT_APP_ID = [
   'china-food-composition',
   'boohee',
   'valhalla',
+  'open_meteo',
   'free-exercise-db',
   'wger',
   'liftosaur',
@@ -71,6 +73,7 @@ const OAUTH_TOKEN_PROVIDERS = [
 ];
 
 const PROVIDERS_WITH_BASE_URL = [
+  'open_meteo',
   'valhalla',
   'mealie',
   'tandoor',

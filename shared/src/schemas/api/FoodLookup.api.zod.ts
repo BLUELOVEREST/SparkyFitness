@@ -60,6 +60,7 @@ export const NormalizedFoodSchema = z.object({
   provider_external_id: z.string().optional(),
   provider_type: z.string().optional(),
   provider_verified: z.boolean().optional(),
+  macro_role: z.enum(['carb', 'protein', 'fat']).nullable().optional(),
   is_custom: z.boolean(),
   // Upstream provider photo on a not-yet-imported result. Hotlinked by the
   // search UI; localized into `images` on import (see models/food.ts). Without

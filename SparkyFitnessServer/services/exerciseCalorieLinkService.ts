@@ -65,6 +65,28 @@ const ENTRY_COLUMNS = `
   source,
   exercise_name`;
 
+async function assertCalorieLinkParticipantsWritable(
+  client: PoolClient,
+  userId: string,
+  entryIds: readonly string[]
+): Promise<void> {
+  const ids = await allocateEntryIds(client, userId, entryIds);
+  const protectedRows = await client.query<{ id: string }>(
+    `SELECT ee.id
+     FROM exercise_entries ee
+     LEFT JOIN exercise_preset_entries parent
+       ON parent.id = ee.exercise_preset_entry_id AND parent.user_id = ee.user_id
+     WHERE ee.user_id = $1 AND ee.id = ANY($2::uuid[])
+       AND (lower(btrim(ee.source)) = 'opengym'
+         OR lower(btrim(parent.source)) = 'opengym'
+         OR parent.source_summary IS NOT NULL)`,
+    [userId, ids]
+  );
+  if (protectedRows.rows.length > 0) {
+    throw new CalorieLinkError('source_owned', 409);
+  }
+}
+
 /** The anchor entry plus, for a strength session, the rest of its preset entry. */
 async function loadWorkoutEntries(
   client: PoolClient,
@@ -88,6 +110,11 @@ async function loadWorkoutEntries(
   if (result.rows.length === 0) {
     throw new CalorieLinkError('Exercise entry not found.', 404);
   }
+  await assertCalorieLinkParticipantsWritable(
+    client,
+    userId,
+    result.rows.map((row) => row.id)
+  );
   if (result.rows.some((row) => !isAppLoggedWorkoutSource(row.source))) {
     throw new CalorieLinkError(
       'Only workouts logged in SparkyFitness can be linked.',
@@ -169,6 +196,7 @@ async function getCalorieLinkSuggestions(
        WHERE user_id = $1
          AND entry_date = $2::date
          AND source IS NOT NULL AND lower(source) NOT IN ('manual', 'sparky')
+         AND lower(btrim(source)) <> 'opengym'
          AND source_id IS NOT NULL
          AND exercise_preset_entry_id IS NULL
          AND exercise_name IS DISTINCT FROM 'Active Calories'
@@ -521,6 +549,7 @@ async function setCalorieLink(
     if (!synced) {
       throw new CalorieLinkError('Synced workout not found.', 404);
     }
+    await assertCalorieLinkParticipantsWritable(client, userId, [synced.id]);
     if (
       isAppLoggedWorkoutSource(synced.source) ||
       !synced.source ||

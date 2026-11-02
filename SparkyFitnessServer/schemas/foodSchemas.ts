@@ -1,16 +1,10 @@
 import { z } from 'zod/v4';
 import {
-  NormalizedFoodSchema as SharedNormalizedFoodSchema,
+  NormalizedFoodSchema,
   barcodeLookupResponseSchema,
 } from '@workspace/shared';
-export { FoodVariantSchema } from '@workspace/shared';
-export type { FoodVariant } from '@workspace/shared';
-
-export const NormalizedFoodSchema = SharedNormalizedFoodSchema.extend({
-  macro_role: z.enum(['carb', 'protein', 'fat']).nullable().optional(),
-});
-
-export type NormalizedFood = z.infer<typeof NormalizedFoodSchema>;
+export { FoodVariantSchema, NormalizedFoodSchema } from '@workspace/shared';
+export type { FoodVariant, NormalizedFood } from '@workspace/shared';
 
 export const PaginationSchema = z.object({
   // Some providers (e.g. Open Food Facts' legacy cgi/search.pl endpoint) report
@@ -34,8 +28,6 @@ export const SearchResponseSchema = z.object({
 
 export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 
-export const BarcodeResponseSchema = barcodeLookupResponseSchema.extend({
-  food: NormalizedFoodSchema.nullable(),
-});
+export const BarcodeResponseSchema = barcodeLookupResponseSchema;
 
 export type BarcodeResponse = z.infer<typeof BarcodeResponseSchema>;

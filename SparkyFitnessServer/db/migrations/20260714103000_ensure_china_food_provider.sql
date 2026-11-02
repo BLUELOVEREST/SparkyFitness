@@ -1,4 +1,3 @@
-BEGIN;
 
 INSERT INTO public.external_provider_types (
   id, display_name, description, categories, required_fields, field_labels, supports_barcode, is_strictly_private
@@ -35,5 +34,3 @@ ON CONFLICT (user_id, provider_name) DO UPDATE SET
   is_active = TRUE,
   is_public = TRUE,
   updated_at = now();
-
-COMMIT;

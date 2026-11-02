@@ -249,4 +249,8 @@ describe('provider type UI helpers', () => {
   it('treats Grocy as a provider that stores a base URL', () => {
     expect(providerUsesBaseUrl('grocy')).toBe(true);
   });
+
+  it('treats Open-Meteo as a provider that stores a base URL', () => {
+    expect(providerUsesBaseUrl('open_meteo')).toBe(true);
+  });
 });

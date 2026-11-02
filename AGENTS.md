@@ -90,6 +90,7 @@ These fork-specific rules supplement the upstream package guides.
 - Push the release tag to Gitea for frontend/server images and to GitHub for APK builds when those builds are requested. Check the workflows and confirm the pushes actually succeeded.
 - Registry repositories are independent of the Git repository name: `192.168.200.101:54453/zhangzhicheng/sparkyfitness` (frontend) and `192.168.200.101:54453/zhangzhicheng/sparkyfitness-server` (server).
 - Gitea builds the container images; local and production machines pull and run those images. Do not start expensive local APK builds unless requested.
+- Android releases now produce separate arm64 phone and Wear OS APKs, signed with the same formal certificate and verified against the configured keystore before publication. Keep the signing identity stable across releases. GitHub Secrets and private recovery material are documented in `docs/superpowers/specs/2026-11-02-android-release-signing.md`; never commit signing material. The owner approved the one-time signing transition on 2026-11-02, including possible uninstall/reinstall of the older phone app after syncing local-only data.
 
 ### Local Test Environment
 
@@ -143,7 +144,7 @@ Cheap ways to learn things:
 
 - If you add or change a server migration (such as creating a new table), follow `agent-docs/new-migration-checklist.md`. In short, you MUST:
   1. Create the migration file in `SparkyFitnessServer/db/migrations/YYYYMMDDHHMMSS_description.sql`.
-  2. Update the Row-Level Security (RLS) policies in `SparkyFitnessServer/db/rls_policies.sql`.
+  2. Update the Row-Level Security (RLS) policies in `SparkyFitnessServer/db/rls_policies.sql`, and classify the new table in the `DOMAIN` map of `SparkyFitnessServer/tests/rlsPermissionMatrix.integration.test.ts` (CI fails when an RLS table is missing).
   3. **Restart the server** (`pnpm start` from `SparkyFitnessServer/`) to apply the migration. Agents ask the user to do this rather than starting it themselves. Keep one re-runnable migration file per PR, edited in place.
   4. Leave `db_schema_backup.sql` alone — after merge, CI regenerates it from the migrations and opens an automated sync PR (`.github/workflows/schema-backup.yml`). Never manually edit the backup file or commit a locally generated copy.
   5. Add or update the matching Zod schema in `shared/src/schemas/database/`.

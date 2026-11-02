@@ -635,7 +635,10 @@ describe('source ownership guards', () => {
     const status = vi.fn(() => ({ json }));
     errorHandler(
       Object.assign(new Error('source_owned'), { code: 'P7001' }),
-      {} as Request,
+      {
+        method: 'PATCH',
+        originalUrl: '/api/v2/exercise-entries/fixture',
+      } as Request,
       { status } as unknown as Response,
       vi.fn() as NextFunction
     );
@@ -651,7 +654,10 @@ describe('source ownership guards', () => {
       new Error('wrapped', {
         cause: Object.assign(new Error('source_owned'), { code: 'P7001' }),
       }),
-      {} as Request,
+      {
+        method: 'PATCH',
+        originalUrl: '/api/v2/exercise-entries/fixture',
+      } as Request,
       { status } as unknown as Response,
       vi.fn() as NextFunction
     );

@@ -11,6 +11,7 @@ import {
 } from '../services/calorieRuleHistoryService.js';
 import goalService from '../services/goalService.js';
 import goalRepository from '../models/goalRepository.js';
+import mealMacroTargetRepository from '../models/mealMacroTargetRepository.js';
 import weeklyGoalPlanRepository from '../models/weeklyGoalPlanRepository.js';
 import preferenceRepository from '../models/preferenceRepository.js';
 import calorieRuleHistoryRepository from '../models/calorieRuleHistoryRepository.js';
@@ -19,6 +20,7 @@ import measurementRepository from '../models/measurementRepository.js';
 import bmrService from '../services/bmrService.js';
 
 vi.mock('../models/goalRepository.js');
+vi.mock('../models/mealMacroTargetRepository.js');
 vi.mock('../models/weeklyGoalPlanRepository.js');
 vi.mock('../models/goalPresetRepository.js');
 vi.mock('../models/userRepository.js');
@@ -190,6 +192,9 @@ describe('goal for a day before a settings change', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(
+      mealMacroTargetRepository.getMealMacroTargetsForRange
+    ).mockResolvedValue([]);
     vi.mocked(
       weeklyGoalPlanRepository.getActiveWeeklyGoalPlansInRange
     ).mockResolvedValue([]);

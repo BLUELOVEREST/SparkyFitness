@@ -1,4 +1,3 @@
-BEGIN;
 
 INSERT INTO public.external_provider_types (
   id, display_name, description, categories, required_fields, field_labels, supports_barcode, is_strictly_private
@@ -109,5 +108,3 @@ BEGIN
     PERFORM public.create_global_default_providers(v_admin_id);
   END IF;
 END $$;
-
-COMMIT;

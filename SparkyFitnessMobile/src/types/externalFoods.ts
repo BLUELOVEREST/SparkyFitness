@@ -1,3 +1,5 @@
+import type { NormalizedFood } from '@workspace/shared';
+
 export interface ExternalFoodVariant {
   serving_size: number;
   serving_unit: string;
@@ -35,6 +37,7 @@ export interface PaginatedExternalFoodSearchResult {
 }
 
 export interface ExternalFoodItem {
+  macro_role?: NormalizedFood['macro_role'];
   id: string;
   name: string;
   brand: string | null;

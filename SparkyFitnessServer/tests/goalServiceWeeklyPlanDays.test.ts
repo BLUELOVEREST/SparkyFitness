@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { weeklyGoalPlanInForce } from '@workspace/shared';
 import goalService from '../services/goalService.js';
 import goalRepository from '../models/goalRepository.js';
+import mealMacroTargetRepository from '../models/mealMacroTargetRepository.js';
 import goalPresetRepository from '../models/goalPresetRepository.js';
 import weeklyGoalPlanRepository from '../models/weeklyGoalPlanRepository.js';
 
 vi.mock('../models/goalRepository.js');
+vi.mock('../models/mealMacroTargetRepository.js');
 vi.mock('../models/weeklyGoalPlanRepository.js');
 vi.mock('../models/goalPresetRepository.js');
 
@@ -36,6 +38,9 @@ const everyDay = (presetId: string) => ({
 describe('weekly goal plans across a range of days', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(
+      mealMacroTargetRepository.getMealMacroTargetsForRange
+    ).mockResolvedValue([]);
     vi.mocked(goalRepository.getGoalsInRange).mockResolvedValue([]);
     vi.mocked(goalRepository.getMostRecentGoalBeforeDate).mockResolvedValue({
       calories: 2000,
@@ -74,6 +79,53 @@ describe('weekly goal plans across a range of days', () => {
       ['2026-11-01', 2500],
       ['2026-11-02', 2500],
     ]);
+  });
+
+  it('attaches custom meal targets only to their day without changing plan calories', async () => {
+    vi.mocked(
+      weeklyGoalPlanRepository.getActiveWeeklyGoalPlansInRange
+    ).mockResolvedValue([plan('october', '2026-10-01', '2026-10-31')]);
+    vi.mocked(
+      mealMacroTargetRepository.getMealMacroTargetsForRange
+    ).mockResolvedValue([
+      {
+        goal_date: '2026-10-31',
+        slot_key: 'morning',
+        label: 'Breakfast',
+        calories: 450,
+        protein: 30,
+        carbs: 60,
+        fat: 10,
+      },
+    ]);
+
+    const goals = await goalService.getUserGoalsForRange(
+      'user-1',
+      '2026-10-31',
+      '2026-11-01',
+      false
+    );
+
+    expect(
+      mealMacroTargetRepository.getMealMacroTargetsForRange
+    ).toHaveBeenCalledWith('user-1', '2026-10-31', '2026-11-01');
+    expect(goals['2026-10-31']).toMatchObject({
+      calories: 1500,
+      meal_macro_targets: [
+        {
+          slotKey: 'morning',
+          label: 'Breakfast',
+          calories: 450,
+          protein: 30,
+          carbs: 60,
+          fat: 10,
+        },
+      ],
+    });
+    expect(goals['2026-11-01']).toMatchObject({
+      calories: 2000,
+      meal_macro_targets: [],
+    });
   });
 
   it('stops applying a plan after its end date', async () => {

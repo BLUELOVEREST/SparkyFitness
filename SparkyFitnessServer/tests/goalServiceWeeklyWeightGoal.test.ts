@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import goalService from '../services/goalService.js';
 import goalRepository from '../models/goalRepository.js';
+import mealMacroTargetRepository from '../models/mealMacroTargetRepository.js';
 import weeklyGoalPlanRepository from '../models/weeklyGoalPlanRepository.js';
 import preferenceRepository from '../models/preferenceRepository.js';
 import userRepository from '../models/userRepository.js';
@@ -12,6 +13,7 @@ vi.mock('../models/calorieRuleHistoryRepository.js', () => ({
   default: { getCalorieRuleHistory: async () => [] },
 }));
 vi.mock('../models/goalRepository.js');
+vi.mock('../models/mealMacroTargetRepository.js');
 vi.mock('../models/weeklyGoalPlanRepository.js');
 vi.mock('../models/goalPresetRepository.js');
 vi.mock('../models/userRepository.js');
@@ -25,6 +27,9 @@ const date = '2026-10-22';
 describe('weekly weight goal daily targets', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(
+      mealMacroTargetRepository.getMealMacroTargetsForRange
+    ).mockResolvedValue([]);
     vi.mocked(
       weeklyGoalPlanRepository.getActiveWeeklyGoalPlansInRange
     ).mockResolvedValue([]);

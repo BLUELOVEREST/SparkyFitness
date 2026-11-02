@@ -4,6 +4,7 @@ import type {
   FoodPhotoEstimateErrorCode,
   FoodPhotoEstimateResponse,
   BarcodeLookupResponse,
+  NormalizedFood as SharedNormalizedFood,
 } from '@workspace/shared';
 import { addLog } from '../LogService';
 import { getActiveServerConfig, proxyHeadersToRecord } from '../storage';
@@ -486,6 +487,7 @@ interface NormalizedFoodVariant {
 }
 
 interface NormalizedFood {
+  macro_role?: SharedNormalizedFood['macro_role'];
   id?: string;
   name: string;
   brand: string | null;
@@ -505,6 +507,7 @@ interface NormalizedFood {
 }
 
 export interface BarcodeFood {
+  macro_role?: SharedNormalizedFood['macro_role'];
   id?: string;
   name: string;
   brand: string | null;
@@ -576,6 +579,7 @@ export function _transformNormalizedFood(
 
   return {
     id: food.provider_external_id ?? food.id ?? '',
+    macro_role: food.macro_role,
     name: food.name,
     brand: food.brand,
     barcode: food.barcode,
@@ -676,6 +680,7 @@ export async function lookupBarcodeV2(
       ? food.variants
       : [food.default_variant];
   const barcodeFood: BarcodeFood = {
+    macro_role: food.macro_role,
     id: food.id,
     name: food.name,
     brand: food.brand,

@@ -95,6 +95,27 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe('barcode alternatives', () => {
+  it.each(['carb', 'protein', 'fat', null] as const)(
+    'preserves the custom macro role %s on local and provider candidates',
+    async (macro_role) => {
+      mocks.providers.mockResolvedValue([firstProvider]);
+      mocks.local.mockResolvedValue({
+        ...food('local'),
+        id: 'local-id',
+        macro_role,
+      });
+      mocks.lookup.mockResolvedValue({
+        source: 'usda',
+        food: { ...food(), macro_role },
+      });
+      const result = await getBarcodeAlternatives(barcode, 'target', 'actor');
+      expect(result.results).toHaveLength(2);
+      for (const candidate of result.results) {
+        expect(candidate.food).toHaveProperty('macro_role', macro_role);
+      }
+    }
+  );
+
   it.each([undefined, null, ''])(
     'does not offer a provider product without an import identity (%s)',
     async (externalId) => {

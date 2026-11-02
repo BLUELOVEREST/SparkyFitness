@@ -57,6 +57,7 @@ jest.mock('@/hooks/Settings/useExternalProviderSettings', () => ({
   useExternalProvidersQuery: () => ({ data: mockProviders }),
 }));
 jest.mock('@/hooks/Foods/useFoods', () => ({
+  useImportCsvMutation: () => ({ mutateAsync: jest.fn() }),
   useDatabaseFoodSearchQuery: () => ({
     data: mockSearchData,
     isFetching: false,
@@ -106,50 +107,68 @@ jest.mock('@/components/FoodSearch/BarcodeScannerDialog', () => ({
     ) : null,
 }));
 
-it('clears barcode loading when typed All Providers results replace a pending scan', async () => {
-  let finishBarcode!: (value: BarcodeLookupResponse) => void;
-  jest.mocked(searchBarcodeV2).mockReturnValue(
-    new Promise<BarcodeLookupResponse>((resolve) => {
-      finishBarcode = resolve;
-    })
-  );
-  jest.mocked(searchFoodsV2).mockResolvedValue({
-    foods: [],
-    pagination: { page: 1, pageSize: 10, totalCount: 0, hasMore: false },
-  });
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  const { container } = render(
-    <QueryClientProvider client={client}>
-      <FoodSearch onFoodSelect={jest.fn()} hideMealTab />
-    </QueryClientProvider>
-  );
-  try {
-    expect(screen.getByText('All Providers')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Scan Barcode' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Detect barcode' }));
-    await waitFor(() => expect(searchBarcodeV2).toHaveBeenCalledTimes(1));
-    expect(container.querySelector('svg.animate-spin')).not.toBeNull();
-
-    fireEvent.change(screen.getByPlaceholderText('Search for foods...'), {
-      target: { value: 'yogurt' },
-    });
-    expect(await screen.findByText('Top Matches')).toBeInTheDocument();
-    await waitFor(() => expect(searchFoodsV2).toHaveBeenCalledTimes(2));
-    await waitFor(() =>
-      expect(container.querySelector('svg.animate-spin')).toBeNull()
-    );
-
-    await act(async () => finishBarcode({ source: 'none', food: null }));
-    expect(
-      screen.queryByRole('region', { name: 'Barcode results' })
-    ).toBeNull();
-    expect(screen.getByPlaceholderText('Search for foods...')).toHaveValue(
-      'yogurt'
-    );
-    expect(container.querySelector('svg.animate-spin')).toBeNull();
-  } finally {
-    client.clear();
-  }
+beforeEach(() => {
+  jest.clearAllMocks();
 });
+
+it.each(['Enter', 'button'] as const)(
+  'only searches after %s submission and ignores a superseded barcode scan',
+  async (submission) => {
+    let finishBarcode!: (value: BarcodeLookupResponse) => void;
+    jest.mocked(searchBarcodeV2).mockReturnValue(
+      new Promise<BarcodeLookupResponse>((resolve) => {
+        finishBarcode = resolve;
+      })
+    );
+    jest.mocked(searchFoodsV2).mockResolvedValue({
+      foods: [],
+      pagination: { page: 1, pageSize: 10, totalCount: 0, hasMore: false },
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <FoodSearch onFoodSelect={jest.fn()} hideMealTab />
+      </QueryClientProvider>
+    );
+    try {
+      expect(screen.getByText('All Providers')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Scan Barcode' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Detect barcode' }));
+      await waitFor(() => expect(searchBarcodeV2).toHaveBeenCalledTimes(1));
+      expect(container.querySelector('svg.animate-spin')).not.toBeNull();
+
+      fireEvent.change(screen.getByPlaceholderText('Search for foods...'), {
+        target: { value: 'yogurt' },
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      });
+      expect(searchFoodsV2).not.toHaveBeenCalled();
+      if (submission === 'Enter') {
+        fireEvent.keyDown(screen.getByPlaceholderText('Search for foods...'), {
+          key: 'Enter',
+        });
+      } else {
+        fireEvent.click(screen.getByRole('button', { name: /^Search$/ }));
+      }
+      expect(await screen.findByText('Top Matches')).toBeInTheDocument();
+      await waitFor(() => expect(searchFoodsV2).toHaveBeenCalledTimes(2));
+      await waitFor(() =>
+        expect(container.querySelector('svg.animate-spin')).toBeNull()
+      );
+
+      await act(async () => finishBarcode({ source: 'none', food: null }));
+      expect(
+        screen.queryByRole('region', { name: 'Barcode results' })
+      ).toBeNull();
+      expect(screen.getByPlaceholderText('Search for foods...')).toHaveValue(
+        'yogurt'
+      );
+      expect(container.querySelector('svg.animate-spin')).toBeNull();
+    } finally {
+      client.clear();
+    }
+  }
+);

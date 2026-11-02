@@ -1,4 +1,7 @@
-import { lookupBarcodeV2 } from '../../src/services/api/externalFoodSearchApi';
+import {
+  lookupBarcodeV2,
+  _transformNormalizedFood,
+} from '../../src/services/api/externalFoodSearchApi';
 import { apiFetch } from '../../src/services/api/apiClient';
 import type { BarcodeLookupResponse } from '@workspace/shared';
 
@@ -7,6 +10,39 @@ jest.mock('../../src/services/api/apiClient', () => ({ apiFetch: jest.fn() }));
 const mockApiFetch = jest.mocked(apiFetch);
 
 describe('barcode lookup metadata', () => {
+  it.each(['carb', 'protein', 'fat', null, undefined] as const)(
+    'preserves macro role %s in search and local/provider barcode mappings',
+    async (macro_role) => {
+      const food = {
+        id: 'local-food',
+        name: 'Rice',
+        brand: null,
+        is_custom: true,
+        macro_role,
+        default_variant: {
+          serving_size: 100,
+          serving_unit: 'g',
+          calories: 120,
+          protein: 2,
+          carbs: 28,
+          fat: 0,
+          is_default: true,
+        },
+      };
+      for (const source of ['local', 'usda']) {
+        mockApiFetch.mockResolvedValue({ source, food });
+        expect((await lookupBarcodeV2('1234567890123')).food).toHaveProperty(
+          'macro_role',
+          macro_role
+        );
+      }
+      expect(_transformNormalizedFood(food, 'usda')).toHaveProperty(
+        'macro_role',
+        macro_role
+      );
+    }
+  );
+
   it.each([
     ['11111111-1111-4111-8111-111111111111', 'Configured source'],
     ['openfoodfacts-fallback', 'Open Food Facts fallback'],

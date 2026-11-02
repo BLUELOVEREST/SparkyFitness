@@ -71,7 +71,7 @@ async function events(owner: string, after = 0) {
   try {
     const result = await client.query<{ source_cursor: string; body: string }>(
       `SELECT source_cursor::text,body FROM sparkygym_outbox
-      WHERE user_id=$1 AND resource=$2 AND source_cursor>$3 ORDER BY source_cursor`,
+      WHERE user_id=$1 AND resource=$2 AND source_cursor>$3 ORDER BY sparkygym_outbox.source_cursor`,
       [owner, 'schedule_summary', after]
     );
     return result.rows.map((row) => ({
