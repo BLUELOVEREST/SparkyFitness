@@ -14,11 +14,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Edit, Trash2, Settings, Play } from 'lucide-react';
+import { Edit, Trash2, Settings, Play, Link2 } from 'lucide-react';
 import { isOpenGymOwned } from '@/utils/openGymSource';
 import { formatWeight } from '@/utils/numberFormatting';
 import { usePreferences } from '@/contexts/PreferencesContext';
-import { carryDistanceFromKm, carryDistanceUnitLabel } from '@workspace/shared';
+import {
+  carryDistanceFromKm,
+  carryDistanceUnitLabel,
+  isAppLoggedWorkoutSource,
+} from '@workspace/shared';
 import { formatMinutesToHHMM } from '@/utils/timeFormatters';
 import { ExerciseEntry, Exercise } from '@/types/exercises';
 import {
@@ -32,6 +36,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  entryCaloriesCounted,
   resolveExerciseModality,
   setsDurationMinutes,
 } from '@workspace/shared';
@@ -46,6 +51,8 @@ interface ExerciseEntryDisplayProps {
   handleEdit: (entry: ExerciseEntry) => void;
   handleDelete: (entryId: string) => void;
   handleEditExerciseDatabase: (exerciseId: string) => void;
+  /** Opens the dialog that links this workout to a synced one; omitted when the diary is read-only. */
+  onLink?: (entryId: string) => void;
   setExerciseToPlay: (exercise: Exercise | null) => void;
   setIsPlaybackModalOpen: (isOpen: boolean) => void;
   energyUnit: 'kcal' | 'kJ';
@@ -86,6 +93,7 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
   handleEdit,
   handleDelete,
   handleEditExerciseDatabase,
+  onLink,
   setExerciseToPlay,
   setIsPlaybackModalOpen,
   energyUnit,
@@ -146,7 +154,7 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
 
   const caloriesDisplay = isOpenGymOwned(exerciseEntry)
     ? '—'
-    : `${Math.round(convertEnergy(exerciseEntry.calories_burned || 0, 'kcal', energyUnit))} ${getEnergyUnitString(energyUnit)}`;
+    : `${Math.round(convertEnergy(entryCaloriesCounted(exerciseEntry), 'kcal', energyUnit))} ${getEnergyUnitString(energyUnit)}`;
 
   const hasSets =
     exerciseEntry.sets &&
@@ -276,6 +284,17 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
                   <span>{formatDistance(exerciseEntry.distance)}</span>
                 </>
               )}
+              {exerciseEntry.workout_effort != null && (
+                <>
+                  <span className="text-gray-300 dark:text-gray-600">·</span>
+                  <span>
+                    {t('exerciseCard.effortValue', {
+                      defaultValue: 'Effort {{rating}}/10',
+                      rating: exerciseEntry.workout_effort,
+                    })}
+                  </span>
+                </>
+              )}
               <span className="text-gray-300 dark:text-gray-600">·</span>
               <span className="text-orange-600 dark:text-orange-400 font-medium">
                 {caloriesDisplay}
@@ -391,6 +410,12 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
               .join(', ')}
           </div>
         )}
+        {exerciseEntry.calorie_link_resolution && (
+          <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+            <Link2 className="w-3 h-3" />
+            {t('exercise.calorieLink.badge', 'Linked')}
+          </div>
+        )}
         {exerciseEntry.notes && (
           <div className="text-[10px] italic text-gray-400 dark:text-gray-500 mt-0.5">
             {exerciseEntry.notes}
@@ -417,6 +442,18 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
             colorClass="hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50"
           />
         )}
+        {!readOnly &&
+          onLink &&
+          isAppLoggedWorkoutSource(exerciseEntry.source) &&
+          !exerciseEntry.exercise_preset_entry_id &&
+          !isActiveCalories && (
+            <ActionButton
+              icon={<Link2 className="w-3.5 h-3.5" />}
+              label={t('exercise.calorieLink.action', 'Link a synced workout')}
+              onClick={() => onLink(exerciseEntry.id)}
+              colorClass="hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
+            />
+          )}
         {readOnly && (
           <span className="text-xs text-muted-foreground">
             {t('sparkyGym.edit', 'Edit in openGym')}

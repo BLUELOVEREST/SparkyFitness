@@ -1,4 +1,5 @@
 import type { PresetSessionResponse } from '../schemas/api/ExerciseEntries.api.zod.ts';
+import { entryCaloriesCounted } from './calorieCalculations.ts';
 
 /** A source summary is authoritative, including null (unknown). */
 export function workoutCalories(
@@ -7,7 +8,7 @@ export function workoutCalories(
   if (session.source_summary != null)
     return session.source_summary.calories_kcal;
   return session.exercises.reduce(
-    (sum, exercise) => sum + (exercise.calories_burned ?? 0),
+    (sum, exercise) => sum + entryCaloriesCounted(exercise),
     0
   );
 }

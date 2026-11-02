@@ -23,6 +23,7 @@ import {
   useLoginGarminMutation,
   useSyncHevyMutation,
   useSyncLiftosaurMutation,
+  useSyncIntervalsMutation,
 } from '@/hooks/Integrations/useIntegrations';
 import {
   useCreateExternalProviderMutation,
@@ -62,6 +63,8 @@ const AddExternalProviderForm = ({
     useSyncHevyMutation();
   const { mutateAsync: syncLiftosaurData, isPending: isSyncingLiftosaur } =
     useSyncLiftosaurMutation();
+  const { mutateAsync: syncIntervalsData, isPending: isSyncingIntervals } =
+    useSyncIntervalsMutation();
   const { mutateAsync: loginGarmin, isPending: isLoggingInGarmin } =
     useLoginGarminMutation();
   const { mutateAsync: createExternalProvider, isPending: isCreatingProvider } =
@@ -87,6 +90,7 @@ const AddExternalProviderForm = ({
   const isAnyIntegrationPending =
     isSyncingHevy ||
     isSyncingLiftosaur ||
+    isSyncingIntervals ||
     isLoggingInGarmin ||
     isCreatingProvider ||
     isCreatingGlobal ||
@@ -237,6 +241,16 @@ const AddExternalProviderForm = ({
             fullSync: fullSyncOnConnect,
             providerId: createdProvider.id,
           });
+        } catch (error: unknown) {
+          if (error instanceof Error) {
+            console.error(error);
+          }
+        }
+      }
+
+      if (newProvider.provider_type === 'intervals' && newProvider.is_active) {
+        try {
+          await syncIntervalsData({ providerId: createdProvider.id });
         } catch (error: unknown) {
           if (error instanceof Error) {
             console.error(error);

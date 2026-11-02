@@ -17,6 +17,7 @@ SparkyFitness supports integration with the following health and fitness data pr
 - Polar Flow (partially tested)
 - Hevy (not tested)
 - [Liftosaur](/features/settings/liftosaur)
+- [Intervals.icu](/features/settings/intervals)
 - [Canadian Nutrient File (Health Canada)](/features/settings/canadian-nutrient-file)
 - [Swedish Food Agency (Livsmedelsverket)](/features/settings/livsmedelsverket)
 - Swiss Food Composition Database
@@ -25,6 +26,7 @@ SparkyFitness supports integration with the following health and fitness data pr
 - Fatsecret
 - Nutritionix
 - Mealie
+- [Valhalla routing](/features/exercises/route-generation) (route generation and Follow roads; a base URL and an optional API key)
 - Tandoor
 - Strava (partially tested)
 - [COROS](/features/settings/coros)

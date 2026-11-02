@@ -10,6 +10,9 @@ import measurementRepository from '../models/measurementRepository.js';
 import exerciseEntryRepository from '../models/exerciseEntry.js';
 import customNutrientService from '../services/customNutrientService.js';
 
+vi.mock('../models/calorieRuleHistoryRepository.js', () => ({
+  default: { getCalorieRuleHistory: async () => [] },
+}));
 vi.mock('../models/goalRepository');
 vi.mock('../models/mealMacroTargetRepository');
 vi.mock('../models/weeklyGoalPlanRepository');
@@ -31,8 +34,8 @@ describe('Water goal adjustment by exercise water loss', () => {
     vi.clearAllMocks();
 
     vi.mocked(
-      weeklyGoalPlanRepository.getActiveWeeklyGoalPlan
-    ).mockResolvedValue(null);
+      weeklyGoalPlanRepository.getActiveWeeklyGoalPlansInRange
+    ).mockResolvedValue([]);
     vi.mocked(goalRepository.getGoalsInRange).mockResolvedValue([]);
     vi.mocked(
       mealMacroTargetRepository.getMealMacroTargetsForRange
@@ -153,8 +156,18 @@ describe('Water goal adjustment by exercise water loss', () => {
   it('maps a weekly plan preset water_goal column to water_goal_ml', async () => {
     // 2026-06-22 is a Monday.
     vi.mocked(
-      weeklyGoalPlanRepository.getActiveWeeklyGoalPlan
-    ).mockResolvedValue({ monday_preset_id: 'preset-1' });
+      weeklyGoalPlanRepository.getActiveWeeklyGoalPlansInRange
+    ).mockResolvedValue([
+      {
+        id: 'plan-1',
+        user_id: userId,
+        plan_name: 'Plan',
+        is_active: true,
+        start_date: '2026-01-01',
+        end_date: null,
+        monday_preset_id: 'preset-1',
+      },
+    ]);
     vi.mocked(goalPresetRepository.getGoalPresetById).mockResolvedValue({
       id: 'preset-1',
       calories: 2000,
@@ -179,8 +192,18 @@ describe('Water goal adjustment by exercise water loss', () => {
 
   it('keeps the water goal in effect when a weekly plan preset has none', async () => {
     vi.mocked(
-      weeklyGoalPlanRepository.getActiveWeeklyGoalPlan
-    ).mockResolvedValue({ monday_preset_id: 'preset-1' });
+      weeklyGoalPlanRepository.getActiveWeeklyGoalPlansInRange
+    ).mockResolvedValue([
+      {
+        id: 'plan-1',
+        user_id: userId,
+        plan_name: 'Plan',
+        is_active: true,
+        start_date: '2026-01-01',
+        end_date: null,
+        monday_preset_id: 'preset-1',
+      },
+    ]);
     vi.mocked(goalPresetRepository.getGoalPresetById).mockResolvedValue({
       id: 'preset-1',
       calories: 2000,
@@ -206,8 +229,18 @@ describe('Water goal adjustment by exercise water loss', () => {
       water_goal_ml: null,
     });
     vi.mocked(
-      weeklyGoalPlanRepository.getActiveWeeklyGoalPlan
-    ).mockResolvedValue({ monday_preset_id: 'preset-1' });
+      weeklyGoalPlanRepository.getActiveWeeklyGoalPlansInRange
+    ).mockResolvedValue([
+      {
+        id: 'plan-1',
+        user_id: userId,
+        plan_name: 'Plan',
+        is_active: true,
+        start_date: '2026-01-01',
+        end_date: null,
+        monday_preset_id: 'preset-1',
+      },
+    ]);
     vi.mocked(goalPresetRepository.getGoalPresetById).mockResolvedValue({
       id: 'preset-1',
       calories: 2000,

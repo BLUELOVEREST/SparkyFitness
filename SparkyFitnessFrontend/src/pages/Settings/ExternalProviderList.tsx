@@ -291,6 +291,7 @@ const ExternalProviderList = ({
         editData.provider_type === 'googlehealth' ||
         editData.provider_type === 'hevy' ||
         editData.provider_type === 'liftosaur' ||
+        editData.provider_type === 'intervals' ||
         editData.provider_type === 'strava' ||
         editData.provider_type === 'polar' ||
         editData.provider_type === 'coros_mcp'
@@ -414,6 +415,7 @@ const ExternalProviderList = ({
       coros_last_sync_at: provider.coros_last_sync_at || '',
       coros_token_expires: provider.coros_token_expires || '',
       liftosaur_last_sync_at: provider.liftosaur_last_sync_at || '',
+      intervals_last_sync_at: provider.intervals_last_sync_at || '',
     });
   };
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { createOpenAI } from '@ai-sdk/openai';
+import { zodSchema } from 'ai';
 import { vi, describe, expect, it } from 'vitest';
 import { buildChatbotTools, buildChatToolSurface } from '../ai/tools/index.js';
 import { ENABLE_TOOLS_TOOL_NAME } from '../ai/tools/metaTools.js';
@@ -20,6 +21,7 @@ const EXPECTED_TOOLS = [
   'sparky_analyze_food_image',
   'sparky_analyze_trends',
   'sparky_check_engagement',
+  'sparky_compare_metrics',
   'sparky_daily_checkin_wizard',
   'sparky_detect_patterns',
   'sparky_generate_coaching_plan',
@@ -420,4 +422,20 @@ it('preserves lazy provider schemas while normalizing application Zod schemas', 
   expect(() =>
     z.toJSONSchema(tools.sparky_manage_food.inputSchema as z.ZodType)
   ).not.toThrow();
+});
+
+// Every chat request resends the tool schemas, so UUID fields publish only
+// `format: uuid`; the regex stays in validation.
+it('publishes UUID fields without the Zod UUID regex', async () => {
+  const { tools } = buildChatToolSurface('uuid-schema', 'UTC');
+  for (const name of ['sparky_manage_food', 'sparky_food_assistant_state']) {
+    const schema = tools[name].inputSchema as z.ZodType;
+    const published = JSON.stringify(zodSchema(schema).jsonSchema);
+    expect(published, name).toContain('"format":"uuid"');
+    expect(published, name).not.toContain('[0-9a-fA-F]{8}');
+  }
+  const parsed = await zodSchema(
+    tools.sparky_food_assistant_state.inputSchema as z.ZodType
+  ).validate!({ action: 'get_task', task_id: 'not-a-uuid' });
+  expect(parsed.success).toBe(false);
 });

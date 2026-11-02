@@ -1,11 +1,5 @@
+import type { NextFunction, Request, Response } from 'express';
 import { log } from '../config/logging.js';
-import type { Request, Response, NextFunction } from 'express';
-interface HandledError extends Error {
-  status?: number;
-  statusCode?: number;
-  code?: string;
-  type?: string;
-}
 function isSourceOwnedError(error: unknown): boolean {
   const seen = new Set<object>();
   let current = error;
@@ -21,30 +15,65 @@ function isSourceOwnedError(error: unknown): boolean {
   }
   return false;
 }
+import { isConnectionError } from '../db/connectRetry.js';
+import { describeError, isInternalError } from '../utils/errors.js';
+
+const unavailableRetryAfterSeconds = 5;
+
+interface ErrorFields {
+  name?: unknown;
+  message?: unknown;
+  code?: unknown;
+  type?: unknown;
+  stack?: unknown;
+  status?: unknown;
+  statusCode?: unknown;
+}
+
 const errorHandler = (
-  err: HandledError,
-  _req: Request,
+  err: unknown,
+  req: Request,
   res: Response,
   _next: NextFunction
 ) => {
+  const error: ErrorFields =
+    typeof err === 'object' && err !== null ? (err as ErrorFields) : {};
+  // The query string can carry credentials, such as a password reset token.
+  const path = req.originalUrl.split('?')[0];
   log(
     'error',
-    `Error caught by centralized handler: ${err.message}`,
-    err.stack
+    `Error caught by centralized handler on ${req.method} ${path}: ${describeError(err)}`,
+    error.stack
   );
+  const explicitStatus = [error.status, error.statusCode].find(
+    (status): status is number => typeof status === 'number'
+  );
+  // An unreachable database (restart, failover, outage) is temporary: tell
+  // the client to come back instead of reporting a server fault.
+  if (
+    isConnectionError(err) &&
+    (explicitStatus === undefined || explicitStatus >= 500)
+  ) {
+    res.set('Retry-After', String(unavailableRetryAfterSeconds));
+    res
+      .status(503)
+      .json({ error: 'Service temporarily unavailable. Please try again.' });
+    return;
+  }
   // Default to 500 Internal Server Error
-  let statusCode = err.status || err.statusCode || 500;
-  let message = err.message || 'Internal Server Error';
-  let code: string | undefined =
-    typeof err.code === 'string' ? err.code : undefined;
+  let statusCode = explicitStatus ?? 500;
+  let message =
+    (typeof error.message === 'string' && error.message) ||
+    'Internal Server Error';
+  let code = typeof error.code === 'string' ? error.code : undefined;
 
   if (isSourceOwnedError(err)) {
     statusCode = 409;
     code = 'source_owned';
     message = 'source_owned';
   } else if (
-    err.name === 'PayloadTooLargeError' ||
-    err.type === 'entity.too.large' ||
+    error.name === 'PayloadTooLargeError' ||
+    error.type === 'entity.too.large' ||
     statusCode === 413
   ) {
     statusCode = 413;
@@ -52,7 +81,7 @@ const errorHandler = (
     message = 'Request payload too large. Please reduce the image size.';
   } else {
     // Handle specific error types if needed (e.g., database errors, validation errors)
-    switch (err.name) {
+    switch (error.name) {
       case 'UnauthorizedError':
         statusCode = 401;
         message = 'Unauthorized: Invalid or missing token.';
@@ -64,13 +93,20 @@ const errorHandler = (
         break;
       case 'ValidationError':
         statusCode = 400;
-        message = err.message;
         break;
       default:
-        if (err.code === '23505') {
+        if (error.code === '23505') {
           statusCode = 409;
           message =
             'Conflict: A resource with this unique identifier already exists.';
+        } else if (
+          statusCode >= 500 &&
+          process.env.NODE_ENV !== 'development' &&
+          isInternalError(err)
+        ) {
+          // The full error is in the log line above.
+          message = 'Internal Server Error';
+          code = undefined;
         }
         break;
     }
@@ -78,7 +114,7 @@ const errorHandler = (
   res.status(statusCode).json({
     error: message,
     code,
-    details: process.env.NODE_ENV === 'development' ? err.stack : undefined, // Only send stack in development
+    details: process.env.NODE_ENV === 'development' ? error.stack : undefined, // Only send stack in development
   });
 };
 export default errorHandler;

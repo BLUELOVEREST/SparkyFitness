@@ -63,6 +63,8 @@ import { useFavoritesQuery } from '@/hooks/Foods/useFavorites.ts';
 import FoodResultCard from './FoodResultCard.tsx';
 import { BarcodeScannerDialog } from './BarcodeScannerDialog.tsx';
 import { CsvImportDialog } from './CsvImportDialog.tsx';
+import { BarcodeSearchResult } from './BarcodeSearchResult';
+import { barcodeFoodToFood } from '@/utils/barcodeFood';
 import { FoodFormDialog } from './FoodFormDialog.tsx';
 import { useExternalProvidersQuery } from '@/hooks/Settings/useExternalProviderSettings.ts';
 import {
@@ -91,7 +93,12 @@ import {
   isFoodProviderSearchActive,
 } from '@/utils/foodSearchQuery.ts';
 import { shouldFetchFoodDetailsBeforeEdit } from './foodDetailFetch.ts';
-import { isPublicFoodProvider, type FoodProviderType } from '@workspace/shared';
+import {
+  isPublicFoodProvider,
+  BARCODE_FALLBACK_PROVIDER_ID,
+  type BarcodeLookupResponse,
+  type BarcodeCandidate,
+} from '@workspace/shared';
 
 // Stable empty fallback so the providers reference does not change each render
 // (an inline [] default would re-run the online search effect during loading).
@@ -204,7 +211,11 @@ const EnhancedFoodSearch = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [submittedSearchTerm, setSubmittedSearchTerm] = useState('');
   useEffect(() => {
-    if (searchTerm.trim()) setScannedFood(null);
+    if (searchTerm.trim()) {
+      barcodeRequest.current += 1;
+      setScannedBarcode(null);
+      setIsOnlineLoading(false);
+    }
   }, [searchTerm]);
   const [meals, setMeals] = useState<Meal[]>([]);
   const [isMealLoading, setIsMealLoading] = useState(false);
@@ -239,9 +250,22 @@ const EnhancedFoodSearch = ({
   // A product resolved from a barcode scan, shown even with an empty query.
   // Kept separate from live online-search results (which clear on an empty
   // query) so a scan result is not hidden or flickered away.
-  const [scannedFood, setScannedFood] = useState<ExternalResultWrapper | null>(
-    null
-  );
+  const [scannedBarcode, setScannedBarcode] = useState<{
+    barcode: string;
+    response: BarcodeLookupResponse;
+    accountId: string;
+    profileId: string;
+    requestId: number;
+  } | null>(null);
+  const barcodeRequest = useRef(0);
+  useEffect(() => {
+    barcodeRequest.current += 1;
+    setScannedBarcode(null);
+    setBarcodeProviderId(null);
+    setIsOnlineLoading(false);
+    setEditingProduct(null);
+    setShowEditDialog(false);
+  }, [user?.id, user?.activeUserId]);
 
   const queryClient = useQueryClient();
   const { data: customNutrients } = useCustomNutrients();
@@ -478,14 +502,14 @@ const EnhancedFoodSearch = ({
     selectedProvider?.provider_type === 'grocy' &&
     isFoodProviderSearchActive(submittedSearchTerm.trim());
 
-  // Barcode provider: prefer explicit user selection, then the dedicated barcode
-  // provider preference (set in External Provider Settings → Default Barcode Provider),
-  // then fall back to the first active barcode-capable provider.
+  // Keep the existing explicit/default provider selection for a normal scan.
   const selectedBarcodeProvider =
     barcodeProviderId ||
     defaultBarcodeProviderId ||
-    foodDataProviders.find((p) =>
-      ['openfoodfacts', 'usda', 'fatsecret', 'yazio'].includes(p.provider_type)
+    foodDataProviders.find((provider) =>
+      ['openfoodfacts', 'usda', 'fatsecret', 'yazio'].includes(
+        provider.provider_type
+      )
     )?.id ||
     null;
 
@@ -1109,6 +1133,13 @@ const EnhancedFoodSearch = ({
   ]);
 
   const searchBarcode = async (barcode: string) => {
+    if (!user) return;
+    const requestId = ++barcodeRequest.current;
+    const accountId = user.id;
+    const profileId = user.activeUserId;
+    const providerId = selectedBarcodeProvider || undefined;
+    setScannedBarcode(null);
+    setSearchTerm('');
     setIsOnlineLoading(true);
 
     toast({
@@ -1120,32 +1151,44 @@ const EnhancedFoodSearch = ({
 
     try {
       const data = await queryClient.fetchQuery(
-        searchBarcodeV2Options(barcode, selectedBarcodeProvider || undefined)
+        searchBarcodeV2Options(barcode, providerId, accountId, profileId)
       );
-
+      if (requestId !== barcodeRequest.current) return;
+      const configuredProvider = foodDataProviders.find(
+        (provider) => provider.id === providerId
+      );
+      let sourceMetadata: Pick<
+        BarcodeLookupResponse,
+        'providerId' | 'providerName'
+      > = {};
+      if (data.source === 'local') {
+        sourceMetadata = {
+          providerId: 'local',
+          providerName: t('barcodeLookup.yourFoods', 'Your foods'),
+        };
+      } else if (configuredProvider?.provider_type === data.source) {
+        sourceMetadata = {
+          providerId: configuredProvider.id,
+          providerName: configuredProvider.provider_name,
+        };
+      } else if (data.source === 'openfoodfacts') {
+        sourceMetadata = {
+          providerId: BARCODE_FALLBACK_PROVIDER_ID,
+          providerName: 'Open Food Facts',
+        };
+      }
+      setScannedBarcode({
+        barcode,
+        response: {
+          ...data,
+          providerId: data.providerId ?? sourceMetadata.providerId,
+          providerName: data.providerName ?? sourceMetadata.providerName,
+        },
+        accountId,
+        profileId,
+        requestId,
+      });
       if (data.food) {
-        if (data.source === 'local') {
-          onFoodSelect(data.food, 'food');
-          setShowBarcodeScanner(false);
-          toast({
-            title: t(
-              'foodSearch.foodFoundInDatabase',
-              'Food found in database'
-            ),
-            description: t('foodSearch.found', 'Found: {{name}}', {
-              name: data.food.name,
-            }),
-          });
-          return;
-        }
-
-        const mapped: ExternalResultWrapper = {
-          provider_type: data.source as FoodProviderType,
-          food: data.food,
-        } as ExternalResultWrapper;
-
-        setScannedFood(mapped);
-
         toast({
           title: t(
             'foodSearch.barcodeScannedSuccessfully',
@@ -1156,17 +1199,17 @@ const EnhancedFoodSearch = ({
           }),
         });
       } else {
-        setScannedFood(null);
         toast({
           title: t('foodSearch.productNotFound', 'Product not found'),
           description: t(
             'foodSearch.noProductFoundForThis',
-            'No product found for this barcode using selected provider.'
+            'No product found for this barcode. Check other sources or add a food manually.'
           ),
           variant: 'destructive',
         });
       }
     } catch {
+      if (requestId !== barcodeRequest.current) return;
       toast({
         title: t('common.error', 'Error'),
         description: t(
@@ -1176,8 +1219,21 @@ const EnhancedFoodSearch = ({
         variant: 'destructive',
       });
     } finally {
-      setIsOnlineLoading(false);
+      if (requestId === barcodeRequest.current) setIsOnlineLoading(false);
     }
+  };
+
+  const handleBarcodeFoodUse = (candidate: BarcodeCandidate) => {
+    if (!candidate.food) return;
+    const food = barcodeFoodToFood(candidate.food);
+    if (candidate.source === 'local') {
+      onFoodSelect(food, 'food');
+      return;
+    }
+    // Barcode results already contain complete details. Do not refetch via the
+    // old text-search provider or send the fallback sentinel as credentials.
+    setEditingProduct(food);
+    setShowEditDialog(true);
   };
 
   const handleSaveEditedFood = async (foodData: Food) => {
@@ -1564,69 +1620,72 @@ const EnhancedFoodSearch = ({
 
       <div className="space-y-2 max-h-96 overflow-y-auto">
         {/* Landing: recent + top foods and meals (local mode, empty query) */}
-        {showLocalFoods && isSearchEmpty && !localDatabaseOnly && (
-          <>
-            {(isLoadingRecentFoods ||
-              isLoadingFavorites ||
-              (showMeals && isLoadingRecentMeals)) && (
-              <div className="text-center py-8 text-gray-500">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
-                {t('enhancedFoodSearch.searchingFoods', 'Searching foods...')}
-              </div>
-            )}
-            {!isLoadingRecentFoods &&
-              !isLoadingFavorites &&
-              !(showMeals && isLoadingRecentMeals) && (
-                <>
-                  {/* Favorites: starred meals + foods, most recently starred first */}
-                  {filteredFavoriteEntries.length > 0 && (
-                    <>
-                      <SectionHeader>
-                        {t('enhancedFoodSearch.favorites', 'Favorites')}
-                      </SectionHeader>
-                      {filteredFavoriteEntries.map(renderLandingEntry)}
-                    </>
-                  )}
-                  {/* Recent: one timeline of meals + foods by last-used date */}
-                  {recentEntries.length > 0 && (
-                    <>
-                      <SectionHeader>
-                        {t('enhancedFoodSearch.recent', 'Recent')}
-                      </SectionHeader>
-                      {recentEntries.map(renderLandingEntry)}
-                    </>
-                  )}
-                  {/* Frequent: one list of most-used meals + foods (not in Recent) */}
-                  {frequentEntries.length > 0 && (
-                    <>
-                      <SectionHeader>
-                        {t('enhancedFoodSearch.frequent', 'Frequent')}
-                      </SectionHeader>
-                      {frequentEntries.map(renderLandingEntry)}
-                    </>
-                  )}
-                  {filteredFavoriteEntries.length === 0 &&
-                    recentEntries.length === 0 &&
-                    frequentEntries.length === 0 && (
-                      <div className="text-center py-8 text-gray-500">
-                        {showMeals
-                          ? t(
-                              'enhancedFoodSearch.noRecentOrTopItems',
-                              'No recent or frequent foods or meals found. Start logging to see them here.'
-                            )
-                          : t(
-                              'enhancedFoodSearch.noRecentOrTopFoods',
-                              'No recent or top foods found. Start logging foods to see them here.'
-                            )}
-                      </div>
-                    )}
-                </>
+        {showLocalFoods &&
+          isSearchEmpty &&
+          !localDatabaseOnly &&
+          !scannedBarcode && (
+            <>
+              {(isLoadingRecentFoods ||
+                isLoadingFavorites ||
+                (showMeals && isLoadingRecentMeals)) && (
+                <div className="text-center py-8 text-gray-500">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+                  {t('enhancedFoodSearch.searchingFoods', 'Searching foods...')}
+                </div>
               )}
-          </>
-        )}
+              {!isLoadingRecentFoods &&
+                !isLoadingFavorites &&
+                !(showMeals && isLoadingRecentMeals) && (
+                  <>
+                    {/* Favorites: starred meals + foods, most recently starred first */}
+                    {filteredFavoriteEntries.length > 0 && (
+                      <>
+                        <SectionHeader>
+                          {t('enhancedFoodSearch.favorites', 'Favorites')}
+                        </SectionHeader>
+                        {filteredFavoriteEntries.map(renderLandingEntry)}
+                      </>
+                    )}
+                    {/* Recent: one timeline of meals + foods by last-used date */}
+                    {recentEntries.length > 0 && (
+                      <>
+                        <SectionHeader>
+                          {t('enhancedFoodSearch.recent', 'Recent')}
+                        </SectionHeader>
+                        {recentEntries.map(renderLandingEntry)}
+                      </>
+                    )}
+                    {/* Frequent: one list of most-used meals + foods (not in Recent) */}
+                    {frequentEntries.length > 0 && (
+                      <>
+                        <SectionHeader>
+                          {t('enhancedFoodSearch.frequent', 'Frequent')}
+                        </SectionHeader>
+                        {frequentEntries.map(renderLandingEntry)}
+                      </>
+                    )}
+                    {filteredFavoriteEntries.length === 0 &&
+                      recentEntries.length === 0 &&
+                      frequentEntries.length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                          {showMeals
+                            ? t(
+                                'enhancedFoodSearch.noRecentOrTopItems',
+                                'No recent or frequent foods or meals found. Start logging to see them here.'
+                              )
+                            : t(
+                                'enhancedFoodSearch.noRecentOrTopFoods',
+                                'No recent or top foods found. Start logging foods to see them here.'
+                              )}
+                        </div>
+                      )}
+                  </>
+                )}
+            </>
+          )}
 
         {/* Online-only mode prompt (e.g. Foods page import) */}
-        {onlineOnly && isSearchEmpty && (
+        {onlineOnly && isSearchEmpty && !scannedBarcode && (
           <div className="text-center py-8 text-gray-500">
             {t(
               'enhancedFoodSearch.searchOnlineToImport',
@@ -1636,14 +1695,19 @@ const EnhancedFoodSearch = ({
         )}
 
         {/* Barcode scan result (shown even with an empty query) */}
-        {isSearchEmpty && scannedFood && (
-          <>
-            <SectionHeader>
-              {t('enhancedFoodSearch.scannedProduct', 'Scanned product')}
-            </SectionHeader>
-            {renderExternalCard(scannedFood)}
-          </>
-        )}
+        {isSearchEmpty &&
+          scannedBarcode &&
+          scannedBarcode.accountId === user?.id &&
+          scannedBarcode.profileId === user?.activeUserId && (
+            <BarcodeSearchResult
+              key={`${scannedBarcode.accountId}-${scannedBarcode.profileId}-${scannedBarcode.requestId}`}
+              barcode={scannedBarcode.barcode}
+              accountId={scannedBarcode.accountId}
+              profileId={scannedBarcode.profileId}
+              response={scannedBarcode.response}
+              onUseFood={handleBarcodeFoodUse}
+            />
+          )}
 
         {/* Search results */}
         {showLocalDatabaseResults && (

@@ -1,14 +1,18 @@
+import type { BarcodeLookupContext } from '../utils/barcodeFoods';
 import type { RunSummaryParams } from '../utils/runSummary';
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type {
   ExerciseActivityQueryItem,
+  FitnessTestType,
   ExerciseRecentSessionSet,
   FoodPhotoEstimateResponse,
   FoodPhotoLogItem,
   IndividualSessionResponse,
+  MedicationEntry,
   MindfulnessSessionResponse,
   PresetSessionResponse,
+  RaceDistance,
   SharedPregnancy,
   WorkoutFormat,
 } from '@workspace/shared';
@@ -23,7 +27,11 @@ import type {
 } from '../utils/workoutSession';
 import type { PhotoType } from './checkInPhotos';
 import type { Exercise } from './exercise';
-import type { FamilyDiaryUser } from './familyDiary';
+import type {
+  FamilyCopyDirection,
+  FamilyCopySource,
+  FamilyDiaryUser,
+} from './familyDiary';
 import type { FoodEntry } from './foodEntries';
 import type { FoodEntryMeal } from './foodEntryMeals';
 import type {
@@ -55,6 +63,30 @@ export type FoodPickerMode =
   // logging a diary entry. See services/waterContainerLinkSelection.ts.
   | 'container-link';
 
+/** The routes the guided check-in walks through, in order. */
+export type GuidedCheckInStep =
+  'MoodLog' | 'MeasurementsAdd' | 'ProgressPhotos';
+
+/**
+ * The guided check-in (AddSheet → Check-In) chains MoodLog → MeasurementsAdd →
+ * ProgressPhotos for one day. A step opened with this param shows "Step N of
+ * 3", can be skipped or left for the step before, and hands over to the next
+ * step instead of going back. Route params must stay serializable, so it
+ * carries plain values only.
+ */
+export interface GuidedCheckInParams {
+  /** A new mood check-in was saved: offer reminders once the flow finishes. */
+  offerReminders?: boolean;
+  /** Some step saved something, so Finish confirms the check-in. */
+  saved?: boolean;
+  /**
+   * The mood check-in step 1 created (servers with several a day), with the
+   * day it was saved on, so going back to step 1 edits it instead of adding
+   * another.
+   */
+  moodCheckin?: { id: string; date: string };
+}
+
 export type TabParamList = {
   Dashboard: undefined;
   Diary: { selectedDate?: string } | undefined;
@@ -66,8 +98,8 @@ export type TabParamList = {
 export type RootStackParamList = {
   Onboarding: undefined;
   Tabs: NavigatorScreenParams<TabParamList>;
-  FamilyMembers: undefined;
-  FamilyDiary: { familyUser: FamilyDiaryUser };
+  FamilyMembers: { copySource: FamilyCopySource } | undefined;
+  FamilyDiary: { familyUser: FamilyDiaryUser; date?: string };
   FamilyMealDetail: {
     familyUser: FamilyDiaryUser;
     sourceDate: string;
@@ -76,6 +108,7 @@ export type RootStackParamList = {
     entries: FoodEntry[];
   };
   FamilyCopyReview: {
+    direction?: FamilyCopyDirection;
     familyUser: FamilyDiaryUser;
     sourceDate: string;
     mealTypeId: string | null;
@@ -96,12 +129,16 @@ export type RootStackParamList = {
   RunPrograms: undefined;
   RunProgramCalendar: undefined;
   RunProgramWorkout: { index: number };
-  RunProgramRace: undefined;
+  RunProgramRace: { distance?: RaceDistance; raceDay?: string } | undefined;
+  FitnessTest: undefined;
+  FitnessTestResult: { id: string };
   RunProgramEdit: { id?: string; fromProgramId?: string } | undefined;
   PersonalRecords: undefined;
   Routes: undefined;
   RouteDetail: { id: string };
-  RouteDraw: undefined;
+  /** `routeId` opens a saved route in the editor and saves over it. */
+  RouteDraw: { routeId?: string } | undefined;
+  RouteGenerate: undefined;
   WatchRunLive: undefined;
   MealPlanForm:
     { template?: MealPlanAppTemplate; initialMeal?: Meal } | undefined;
@@ -170,6 +207,9 @@ export type RootStackParamList = {
       }
     | undefined;
   FoodEntryAdd: {
+    barcodeLookup?: BarcodeLookupContext;
+    entryNotes?: string;
+    entryTime?: string;
     item: FoodInfoItem;
     date?: string;
     adjustedValues?: FoodFormData;
@@ -215,7 +255,14 @@ export type RootStackParamList = {
   };
   ExerciseStatistics: undefined;
   /** `programWorkout` opens it with today's training-program workout chosen. */
-  RecordActivity: { programWorkout?: boolean } | undefined;
+  RecordActivity:
+    | {
+        programWorkout?: boolean;
+        fitnessTest?: FitnessTestType;
+        /** A fitness test opens on the treadmill option when true, outdoors when false. */
+        indoor?: boolean;
+      }
+    | undefined;
   RunSummary: RunSummaryParams;
   Reports: undefined;
   HydrationReport: undefined;
@@ -225,6 +272,8 @@ export type RootStackParamList = {
   NutritionReport: undefined;
   SleepAnalytics: undefined;
   MoodReport: undefined;
+  HeartRateReport: undefined;
+  CompareReport: undefined;
   CardioSession: {
     session: ExerciseActivityQueryItem;
     distanceUnit: 'km' | 'miles';
@@ -393,13 +442,15 @@ export type RootStackParamList = {
   Logs: undefined;
   Sync: undefined;
   ImportHistory: undefined;
-  MeasurementsAdd: { date?: string } | undefined;
+  MeasurementsAdd:
+    { date?: string; guidedCheckIn?: GuidedCheckInParams } | undefined;
   /**
    * Progress photos: one day's three angles with their management, over a
    * timeline of every check-in photo with that day's weight. `date` picks the
    * day the screen opens on.
    */
-  ProgressPhotos: { date?: string } | undefined;
+  ProgressPhotos:
+    { date?: string; guidedCheckIn?: GuidedCheckInParams } | undefined;
   /** Side-by-side comparison of two days for one angle. */
   ProgressPhotoCompare: { angle?: PhotoType } | undefined;
   /** Cross-fading time-lapse of every photo for one angle, oldest to newest. */
@@ -415,6 +466,7 @@ export type RootStackParamList = {
   Equipment: undefined;
   Shoes: undefined;
   ShoeForm: { shoeId?: string };
+  PlateInventory: undefined;
   FoodSettings: undefined;
   CustomNutrients: undefined;
   CustomNutrientForm: { nutrientId?: string } | undefined;
@@ -423,9 +475,13 @@ export type RootStackParamList = {
   DashboardSettings: undefined;
   HealthTrendsSettings: undefined;
   WatchSettings: undefined;
+  AddMenuSettings: undefined;
   DiarySettings: undefined;
+  CustomCategories: undefined;
+  CustomCategoryEdit: { categoryId?: string } | undefined;
   WorkoutSettings: undefined;
   WarmupSettings: undefined;
+  HeartRateZonesSettings: undefined;
   ServerSettings: undefined;
   PasskeySettings: undefined;
   AppSettings: undefined;
@@ -433,6 +489,8 @@ export type RootStackParamList = {
   About: undefined;
   WhatsNew: undefined;
   MedicationsList: undefined;
+  MedicationAdherence: undefined;
+  MedicationEntryEdit: { entry: MedicationEntry };
   MedicationDetail: { medicationId: string };
   MedicationForm: {
     medicationId?: string;
@@ -453,7 +511,9 @@ export type RootStackParamList = {
         date?: string;
       }
     | undefined;
-  MoodLog: { date?: string; checkinId?: string } | undefined;
+  MoodLog:
+    | { date?: string; checkinId?: string; guidedCheckIn?: GuidedCheckInParams }
+    | undefined;
   MoodDay: { date?: string } | undefined;
   SymptomHistory: { symptomId?: string } | undefined;
   SymptomEpisodeDetail: { entryId: string };

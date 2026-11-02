@@ -21,10 +21,14 @@ import * as workoutTelemetryRepo from '../models/workoutTelemetryRepository.js';
 import * as mindfulnessRepository from '../models/mindfulnessRepository.js';
 import { resolveActivityMapping } from './workoutActivityMapping.js';
 import {
-  computeHrZones,
-  resolveMaxHr,
+  computeTimeInZones,
+  bucketsFromAppleWorkoutZones,
+  appleWorkoutZonesFromWire,
+  observedMaxBpm,
   type HrSample,
-} from './hrZoneCalculator.js';
+  type HrZoneBucket,
+} from '@workspace/shared';
+import heartRateZoneService from './heartRateZoneService.js';
 import {
   deriveLaps,
   deriveWorkoutTelemetry,
@@ -1855,6 +1859,21 @@ function sanitizeGpsPoints(raw: unknown): TelemetryGpsPoint[] {
     .sort((a, b) => byInstant(a.t, b.t));
 }
 
+/**
+ * Apple's zone group on a synced workout, or undefined when the client did
+ * not send one (or it was not five usable zones). An empty array is a real
+ * answer: Apple reported five zones and no time in any of them.
+ */
+function appleDeviceZones(
+  entry: Record<string, unknown>
+): HrZoneBucket[] | undefined {
+  if (!Object.prototype.hasOwnProperty.call(entry, 'hr_zones'))
+    return undefined;
+  const parsed = appleWorkoutZonesFromWire(entry.hr_zones);
+  if (!parsed) return undefined;
+  return bucketsFromAppleWorkoutZones(parsed) ?? undefined;
+}
+
 /** Keeps only well-formed bpm readings. */
 function sanitizeHrSamples(raw: unknown): HrSample[] {
   if (!Array.isArray(raw)) return [];
@@ -1966,10 +1985,33 @@ async function persistWorkoutTelemetry(
         .filter((p) => typeof p.hr === 'number' && Number.isFinite(p.hr))
         .map((p) => ({ t: p.t, bpm: p.hr as number }));
 
-  if (zoneSamples.length > 1) {
-    const { userProfile } = await ctx.getSleepContext();
-    const { maxHr } = resolveMaxHr(userProfile?.date_of_birth, zoneSamples);
-    const zones = computeHrZones(zoneSamples, maxHr);
+  // Apple already summed these on the workout. Re-bucketing the series with
+  // Sparky's settings would disagree, including by dropping time below zone 1
+  // that Apple counts as zone 1. Absent or unusable zones fall through.
+  const deviceZones = appleDeviceZones(entry);
+  if (deviceZones !== undefined) {
+    if (deviceZones.length > 0) {
+      await workoutTelemetryRepo.bulkInsertExerciseEntryHrZones(
+        ctx.userId,
+        ctx.actingUserId,
+        deviceZones.map((zone) => ({
+          user_id: ctx.userId,
+          exercise_entry_id: exerciseEntryId,
+          entry_date: entryDate,
+          zone_index: zone.zone_index,
+          zone_lower_bpm: zone.zone_lower_bpm,
+          zone_upper_bpm: zone.zone_upper_bpm,
+          seconds_in_zone: zone.seconds_in_zone,
+          zone_method: 'device',
+        }))
+      );
+    }
+  } else if (zoneSamples.length > 1) {
+    const resolved = await heartRateZoneService.resolveZonesForUser(
+      ctx.userId,
+      observedMaxBpm(zoneSamples)
+    );
+    const zones = computeTimeInZones(zoneSamples, resolved.floors);
     if (zones.length > 0) {
       await workoutTelemetryRepo.bulkInsertExerciseEntryHrZones(
         ctx.userId,
@@ -1982,6 +2024,7 @@ async function persistWorkoutTelemetry(
           zone_lower_bpm: zone.zone_lower_bpm,
           zone_upper_bpm: zone.zone_upper_bpm,
           seconds_in_zone: zone.seconds_in_zone,
+          zone_method: resolved.effectiveMethod,
         }))
       );
     }
@@ -2224,7 +2267,12 @@ const workoutHandler: HealthTypeHandler = {
             }
           : {}
       );
-      if (gpsPoints.length > 0 || hrSamples.length > 0 || entry.laps) {
+      if (
+        gpsPoints.length > 0 ||
+        hrSamples.length > 0 ||
+        entry.laps ||
+        Array.isArray(entry.hr_zones)
+      ) {
         try {
           await persistWorkoutTelemetry(
             entry,
