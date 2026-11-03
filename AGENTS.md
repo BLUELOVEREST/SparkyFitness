@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-11-02_
+_Last updated: 2026-11-03_
 
 This is the repo-root monorepo guide for SparkyFitness. Use it to choose the right package, understand shared repo-level rules, and find the next guide to read.
 
@@ -93,6 +93,8 @@ These fork-specific rules supplement the upstream package guides.
 - Android releases now produce separate arm64 phone and Wear OS APKs, signed with the same formal certificate and verified against the configured keystore before publication. Keep the signing identity stable across releases. GitHub Secrets and private recovery material are documented in `docs/superpowers/specs/2026-11-02-android-release-signing.md`; never commit signing material. The owner approved the one-time signing transition on 2026-11-02, including possible uninstall/reinstall of the older phone app after syncing local-only data.
 
 ### Local Test Environment
+
+- Active v1.11.0 source preview (2026-11-03): SF uses the accepted source in `/tmp/sparkyfitness-merge-v1.11.0`, with existing Node and nginx images, not a published v1.11.0 image. Restart from the SF deployment directory with `docker compose -p eric-sparkyfitness-test --env-file .env -f docker-compose.yml -f compose.preview-v1.11.0.json up -d --no-build --pull never`. Preserve the worktree and its dependencies while this preview is active. Verified database and configuration/uploads backups are in `backups/pre-v111-source-2026-11-03T00-20-52-377Z/`; the newer migrations have been applied, so returning to old images alone is not a database rollback. openGym is unchanged. The base `.env` still names the previous image release.
 
 - Active built-image mode (2026-11-02): SF uses `v1.9.0-eric.61` and openGym uses `v1.4.3-eric.4`, persisted in each test `.env`. Use base Compose only; obsolete source-preview containers were removed and no application-source mounts remain. See SF `README.image-test.md` and openGym `README.md` in their deployment directories. All historical test backups were deleted at the user's request on 2026-11-02; current databases/uploads remain. `current-image-verification.json` and `cleanup-20261102.json` contain verification metadata, not recovery copies. Take fresh verified backups before future upgrades; production backup policy is unchanged.
 
