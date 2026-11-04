@@ -33,6 +33,7 @@ import { getModelOptions, requiresApiKey } from '@/utils/aiServiceUtils';
 import {
   useAIServices,
   useActiveAIService,
+  useActiveVisionAIService,
   useUserAIPreferences,
   useAddAIService,
   useUpdateAIService,
@@ -63,17 +64,25 @@ const AIServiceSettings = () => {
     useUserAiConfigAllowed();
   const { data: services = [] } = useAIServices();
   const { data: activeService } = useActiveAIService(!!user);
+  const {
+    data: activeVisionService,
+    isPending: visionLoading,
+    isError: visionError,
+  } = useActiveVisionAIService(!!user);
   const { data: preferencesData } = useUserAIPreferences();
 
   // Services the user has enabled (many can be on). The active-provider
   // dropdown and the global "Active" badge both key off the single selection
   // below, validated against this set so a stale pointer can never win.
-  const enabledServices = services.filter((s) => s.is_active);
+  const enabledServices = services.filter(
+    (s) => s.is_active && (isUserConfigAllowed || s.is_public)
+  );
   const activeServiceId =
+    enabledServices.find((s) => s.id === activeService?.id)?.id ??
     enabledServices.find((s) => s.id === preferencesData?.active_ai_service_id)
       ?.id ??
-    enabledServices.find((s) => s.id === activeService?.id)?.id ??
     '';
+  const selectedChatService = services.find((s) => s.id === activeServiceId);
 
   // Optional vision override. Validated against enabledServices so a stale or
   // disabled pointer falls back to "Same as default" rather than a dead value.
@@ -126,16 +135,21 @@ const AIServiceSettings = () => {
     custom_model_name: '',
   });
   const [showAddForm, setShowAddForm] = useState(false);
+  const [copiedGlobal, setCopiedGlobal] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [serviceToDelete, setServiceToDelete] = useState<string | null>(null);
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
 
   const hasUserOverride = () => {
-    return services.some((s) => !s.is_public && s.is_active);
+    return !!services.find((s) => s.id === activeServiceId && !s.is_public);
   };
 
   const getActiveGlobalSetting = () => {
-    return services.find((s) => s.is_public && s.is_active);
+    return (
+      services.find(
+        (s) => s.id === activeServiceId && s.is_public && s.is_active
+      ) ?? services.find((s) => s.is_public && s.is_active)
+    );
   };
 
   const handleOverrideGlobal = async () => {
@@ -173,7 +187,7 @@ const AIServiceSettings = () => {
     }
 
     try {
-      const overrideData = {
+      const overrideData: CreateAiServiceSettingsFormInput = {
         service_name: `${globalSetting.service_name} (My Override)`,
         service_type: globalSetting.service_type,
         custom_url: globalSetting.custom_url || undefined,
@@ -183,10 +197,16 @@ const AIServiceSettings = () => {
         max_tokens: globalSetting.max_tokens ?? null,
         chat_tool_profile: globalSetting.chat_tool_profile ?? 'full',
         reasoning_effort: globalSetting.reasoning_effort ?? 'medium',
+        profile_settings: { ...globalSetting.profile_settings },
         supports_audio_input: globalSetting.supports_audio_input,
+        api_key: '',
+        showCustomModelInput: true,
+        custom_model_name: globalSetting.model_name ?? '',
       };
-      await addService(overrideData);
-      // Success toast is handled by the mutation meta
+      resetTestStatus();
+      setNewService(overrideData);
+      setCopiedGlobal(true);
+      setShowAddForm(true);
     } catch (error) {
       // Error toast is handled by the mutation meta
       console.error('Error overriding global settings:', error);
@@ -218,15 +238,9 @@ const AIServiceSettings = () => {
     }
 
     try {
-      const userSettings = services.filter((s) => !s.is_public);
-      // Delete all user settings sequentially
-      for (const setting of userSettings) {
-        await deleteService(setting.id);
-      }
-      toast({
-        title: t('settings.aiService.userSettings.success'),
-        description: t('settings.aiService.userSettings.successReverting'),
-      });
+      const globalSetting = getActiveGlobalSetting();
+      if (!globalSetting) return;
+      await updatePreferences({ active_ai_service_id: globalSetting.id });
       setRevertDialogOpen(false);
     } catch (error) {
       console.error('Error reverting to global settings:', error);
@@ -265,7 +279,7 @@ const AIServiceSettings = () => {
     if (
       !user ||
       !newService.service_name ||
-      (requiresApiKey(newService.service_type) && !newService.api_key)
+      (requiresApiKey(newService.service_type) && !newService.api_key?.trim())
     ) {
       toast({
         title: t('settings.aiService.userSettings.error'),
@@ -296,6 +310,7 @@ const AIServiceSettings = () => {
       });
 
       setShowAddForm(false);
+      setCopiedGlobal(false);
       // Success toast is handled by the mutation meta
     } catch (error: unknown) {
       // Check for 403 errors and show appropriate message
@@ -543,6 +558,9 @@ const AIServiceSettings = () => {
         is_active: isActive,
         model_name: originalService.model_name ?? '',
         max_tokens: originalService.max_tokens ?? null,
+        profile_settings: originalService.profile_settings ?? {},
+        reasoning_effort: originalService.reasoning_effort,
+        chat_tool_profile: originalService.chat_tool_profile,
         showCustomModelInput: false,
         custom_model_name: '',
         supports_audio_input: originalService.supports_audio_input,
@@ -598,6 +616,7 @@ const AIServiceSettings = () => {
       is_active: service.is_active,
       model_name: isCustomModel ? '' : service.model_name || '',
       max_tokens: service.max_tokens ?? null,
+      profile_settings: { ...service.profile_settings },
       showCustomModelInput: isCustomModel,
       custom_model_name: service.model_name ?? '',
       chat_tool_profile: service.chat_tool_profile ?? 'full',
@@ -644,6 +663,10 @@ const AIServiceSettings = () => {
             {t('settings.aiService.userSettings.note')}
           </p>
           <GlobalOverrideBanner
+            selectedService={selectedChatService}
+            visionService={activeVisionService}
+            visionLoading={visionLoading}
+            visionError={visionError}
             activeGlobalSetting={getActiveGlobalSetting()}
             hasUserOverride={hasUserOverride()}
             onOverride={handleOverrideGlobal}
@@ -657,6 +680,7 @@ const AIServiceSettings = () => {
             <Button
               onClick={() => {
                 resetTestStatus();
+                setCopiedGlobal(false);
                 setShowAddForm(true);
               }}
               variant="outline"
@@ -680,6 +704,7 @@ const AIServiceSettings = () => {
                 onCancel={() => {
                   resetTestStatus();
                   setShowAddForm(false);
+                  setCopiedGlobal(false);
                 }}
                 loading={loading}
                 translationPrefix="settings.aiService.userSettings"
@@ -691,11 +716,20 @@ const AIServiceSettings = () => {
                     model_name: model,
                     max_tokens: newService.max_tokens ?? null,
                     profile_settings: newService.profile_settings,
+                    reasoning_effort: newService.reasoning_effort,
                   })
                 }
                 testing={isTesting}
                 testStatus={testStatus}
               />
+              {copiedGlobal && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  {t(
+                    'settings.aiService.selection.copyHint',
+                    'Copy these parameters to a personal service. Supply your own API key when the provider requires it; administrator credentials are never copied.'
+                  )}
+                </p>
+              )}
             </div>
           )}
 
@@ -719,6 +753,12 @@ const AIServiceSettings = () => {
               </h3>
 
               {/* Vision can inherit Chat; voice is configured separately above. */}
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  'settings.aiService.selection.enabledHint',
+                  'Enabled services are available for selection. Chat and Vision selections are independent; profile parameters belong to each service.'
+                )}
+              </p>
               {enabledServices.length > 0 && (
                 <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
                   <div className="space-y-2 sm:max-w-sm sm:flex-1">
@@ -794,8 +834,8 @@ const AIServiceSettings = () => {
                       <SelectContent>
                         <SelectItem value={SAME_AS_DEFAULT}>
                           {t(
-                            'settings.aiService.userSettings.sameAsDefault',
-                            'Same as Chat configuration'
+                            'settings.aiService.selection.automaticVision',
+                            'Automatic (resolved by server)'
                           )}
                         </SelectItem>
                         {enabledServices.map((service) => (
@@ -848,6 +888,7 @@ const AIServiceSettings = () => {
                             model_name: model,
                             max_tokens: editData.max_tokens ?? null,
                             profile_settings: editData.profile_settings,
+                            reasoning_effort: editData.reasoning_effort,
                           })
                         }
                         testing={isTesting}
@@ -908,20 +949,23 @@ const AIServiceSettings = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t('settings.aiService.userSettings.revertConfirm')}
+              {t(
+                'settings.aiService.selection.switchTitle',
+                'Switch default chat to global?'
+              )}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t('settings.aiService.userSettings.revertConfirm')}
+              {t(
+                'settings.aiService.selection.switchDescription',
+                'Your personal services and their settings will be kept. The independent Vision selection will not change.'
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setRevertDialogOpen(false)}>
               {t('settings.aiService.userSettings.cancel')}
             </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleRevertToGlobal}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
+            <AlertDialogAction onClick={handleRevertToGlobal}>
               {t('settings.aiService.userSettings.useGlobalSettings')}
             </AlertDialogAction>
           </AlertDialogFooter>

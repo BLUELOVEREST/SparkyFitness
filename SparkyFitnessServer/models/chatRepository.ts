@@ -138,6 +138,7 @@ async function getDecryptedAiServiceSettingById(
   | (Pick<
       AiServiceSettings,
       | 'service_type'
+      | 'user_id'
       | 'custom_url'
       | 'model_name'
       | 'reasoning_effort'
@@ -174,6 +175,7 @@ async function getDecryptedAiServiceSettingById(
     }
     return {
       service_type: setting.service_type,
+      user_id: setting.user_id,
       api_key: decryptedApiKey,
       custom_url: setting.custom_url,
       model_name: setting.model_name,
@@ -194,6 +196,31 @@ async function getAiServiceSettingById(id: string, userId: string) {
       [id]
     );
     return result.rows[0];
+  } finally {
+    client.release();
+  }
+}
+
+// Metadata is read before decryption so discovery can authorize credential use.
+async function getAiServiceDiscoverySetting(
+  id: string,
+  userId: string
+): Promise<Pick<
+  AiServiceSettings,
+  'user_id' | 'is_public' | 'service_type' | 'custom_url'
+> | null> {
+  const client = await getClient(userId);
+  try {
+    const result: {
+      rows: Pick<
+        AiServiceSettings,
+        'user_id' | 'is_public' | 'service_type' | 'custom_url'
+      >[];
+    } = await client.query(
+      'SELECT user_id, is_public, service_type, custom_url FROM ai_service_settings WHERE id = $1 AND (user_id = $2 OR is_public = TRUE)',
+      [id, userId]
+    );
+    return result.rows[0] ?? null;
   } finally {
     client.release();
   }
@@ -632,6 +659,7 @@ async function deleteGlobalAiServiceSetting(id: string) {
 }
 export { upsertAiServiceSetting };
 export { getAiServiceSettingById };
+export { getAiServiceDiscoverySetting };
 export { getAiServiceSettingForBackend };
 export { getDecryptedAiServiceSettingById };
 export { deleteAiServiceSetting };
@@ -653,6 +681,7 @@ export { deleteGlobalAiServiceSetting };
 export default {
   upsertAiServiceSetting,
   getAiServiceSettingById,
+  getAiServiceDiscoverySetting,
   getAiServiceSettingForBackend,
   getDecryptedAiServiceSettingById,
   deleteAiServiceSetting,

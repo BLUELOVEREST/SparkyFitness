@@ -20,6 +20,42 @@ const completeMockService = {
 };
 
 describe('aiServiceSettingsService', () => {
+  it('posts model discovery drafts through the API wrapper and validates model IDs', async () => {
+    mockApiCall.mockResolvedValue({ models: [{ id: 'vendor/model' }] });
+    const payload = {
+      id: 'own-id',
+      service_type: 'openai_compatible' as const,
+      custom_url: 'https://example.com/v1',
+      api_key: 'own-key',
+    };
+    await expect(
+      aiServiceSettingsService.discoverAIServiceModels(payload)
+    ).resolves.toEqual({ models: [{ id: 'vendor/model' }] });
+    expect(mockApiCall).toHaveBeenCalledWith(
+      '/chat/ai-service-settings/models',
+      expect.objectContaining({
+        method: 'POST',
+        body: payload,
+        suppressErrorToast: true,
+        sensitiveBody: true,
+      })
+    );
+    mockApiCall.mockResolvedValue({ models: [{ id: 123 }] });
+    await expect(
+      aiServiceSettingsService.discoverAIServiceModels(payload)
+    ).rejects.toThrow();
+  });
+
+  it('loads the actual vision service separately from chat selection', async () => {
+    mockApiCall.mockResolvedValue(completeMockService);
+    await expect(
+      aiServiceSettingsService.getActiveVisionAiServiceSetting()
+    ).resolves.toEqual(completeMockService);
+    expect(mockApiCall).toHaveBeenCalledWith(
+      '/chat/ai-service-settings/active-vision',
+      { method: 'GET', suppress404Toast: true }
+    );
+  });
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -134,6 +170,7 @@ describe('aiServiceSettingsService', () => {
       const result = await aiServiceSettingsService.addAIService(serviceData);
 
       expect(mockApiCall).toHaveBeenCalledWith('/chat', {
+        sensitiveBody: true,
         method: 'POST',
         body: {
           action: 'save_ai_service_settings',
@@ -165,6 +202,7 @@ describe('aiServiceSettingsService', () => {
       );
 
       expect(mockApiCall).toHaveBeenCalledWith('/chat', {
+        sensitiveBody: true,
         method: 'POST',
         body: {
           action: 'save_ai_service_settings',
@@ -206,6 +244,7 @@ describe('aiServiceSettingsService', () => {
       expect(mockApiCall).toHaveBeenCalledWith(
         '/chat/ai-service-settings/test',
         {
+          sensitiveBody: true,
           method: 'POST',
           body: payload,
         }
@@ -306,6 +345,7 @@ describe('aiServiceSettingsService', () => {
         '/admin/ai-service-settings/global',
         {
           method: 'POST',
+          sensitiveBody: true,
           body: serviceData,
         }
       );
@@ -336,6 +376,7 @@ describe('aiServiceSettingsService', () => {
         `/admin/ai-service-settings/global/${serviceId}`,
         {
           method: 'PUT',
+          sensitiveBody: true,
           body: updateData,
         }
       );

@@ -682,7 +682,7 @@ function buildOpenAiFamilyRequest(ctx: BuildContext): BuiltRequest {
       ? `${ctx.prompt}\n\nRespond with a single JSON object that conforms to this JSON Schema:\n${JSON.stringify(toStrictJsonSchema(ctx.jsonSchema))}`
       : ctx.prompt;
   const content =
-    ctx.images.length > 0
+    ctx.images.length > 0 || ctx.provider.service_type === 'openai_compatible'
       ? [
           ...ctx.images.map((img) => ({
             type: 'image_url',

@@ -10,6 +10,38 @@
 - **Calorie target review**: Ask whether your calorie target is right. The assistant compares the target with your estimated maintenance (the same adaptive estimate as the Goals screen) and your weight trend, and gives the calories for the weekly change you want. It never lowers a target below the safe minimum and changes your goal only after you agree.
 - **Training, run and plan reviews**: See [Adaptive coaching](/features/exercises/adaptive-coaching) for the strength and run reviews and for plan weight changes.
 
+### Choosing an AI Configuration
+
+Administrator-provided services and personal services use the same four task
+profiles: chat, intent classification, vision, and structured output. Selecting a
+service uses its complete configuration; it does not inherit individual parameters
+from another service. The personal settings page distinguishes enabled services
+from the service currently selected for chat, and shows the effective vision
+service separately. Voice transcription remains independently selected.
+
+Copying an administrator configuration into a personal one copies its task
+parameters, not the administrator's API key. Supply your own credential when the
+provider requires one. Switching back to an administrator-provided service retains
+personal configurations; deleting a personal service is a separate action.
+
+For an OpenAI-compatible service, enter its base URL and credential, then explicitly
+fetch its model list. The server performs discovery; credentials are not returned
+to the browser. Editing a saved configuration can reuse its stored credential only
+for the original provider URL and with the appropriate owner/admin authorization.
+Changing the connection invalidates fetched results but preserves the selected
+model. Fetched model IDs are sorted alphabetically. Search is independent of the
+selected ID and resets when the list reopens; manual model entry remains available
+when discovery is unsupported or fails. The connection test uses the current draft
+model without requiring you to save first.
+A listed model is not a guarantee of invocation permission or image support; use
+the connection test and check the provider's capabilities.
+
+The read-only global task summary shows concrete parameter values, including
+task overrides, the service-wide token budget and built-in task defaults. Chat
+reasoning uses its task override before the service setting. Providers and models
+may still ignore unsupported parameters. Additional request-body contents are
+not printed in this summary.
+
 ### Chat Interface
 - **Image Upload**: Send photos for food analysis
 - **Text Input**: Natural language food descriptions, questions, and commands

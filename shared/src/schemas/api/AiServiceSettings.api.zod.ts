@@ -74,6 +74,7 @@ export const testAiServiceConnectionRequestSchema = z.object({
   custom_url: z.string().optional(),
   max_tokens: z.number().int().positive().nullable().optional(),
   model_name: z.string().optional(),
+  reasoning_effort: aiServiceSettingsSchema.shape.reasoning_effort,
   profile_settings: aiServiceSettingsSchema.shape.profile_settings,
 });
 
@@ -101,4 +102,24 @@ export type TestAiServiceConnectionRequest = z.infer<
 >;
 export type TestAiServiceConnectionResponse = z.infer<
   typeof testAiServiceConnectionResponseSchema
+>;
+
+export const aiServiceModelsRequestSchema = z.object({
+  id: z.uuid().optional(),
+  service_type: z.literal('openai_compatible'),
+  custom_url: z.string().max(4096).optional(),
+  api_key: z.string().max(16384).optional(),
+});
+
+export const aiServiceModelsResponseSchema = z.object({
+  models: z
+    .array(z.object({ id: z.string().trim().min(1).max(512) }))
+    .max(1000),
+});
+
+export type AiServiceModelsRequest = z.infer<
+  typeof aiServiceModelsRequestSchema
+>;
+export type AiServiceModelsResponse = z.infer<
+  typeof aiServiceModelsResponseSchema
 >;

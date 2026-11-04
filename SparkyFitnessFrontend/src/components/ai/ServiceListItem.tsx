@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Edit, Trash2 } from 'lucide-react';
 import { getServiceTypes } from '@/utils/aiServiceUtils';
@@ -50,17 +49,23 @@ export const ServiceListItem = ({
 
   if (isEditing) {
     const formData: UpdateAiServiceSettingsFormInput = {
-      service_name: editData.service_name || service.service_name,
+      service_name: editData.service_name ?? service.service_name,
       service_type: editData.service_type || service.service_type,
       api_key: editData.api_key || '',
-      custom_url: editData.custom_url || service.custom_url || '',
-      system_prompt: editData.system_prompt || service.system_prompt || '',
+      custom_url: editData.custom_url ?? service.custom_url ?? '',
+      system_prompt: editData.system_prompt ?? service.system_prompt ?? '',
       is_active:
         editData.is_active !== undefined
           ? editData.is_active
           : service.is_active,
-      model_name: editData.model_name || service.model_name || '',
-      max_tokens: editData.max_tokens ?? service.max_tokens ?? null,
+      model_name: editData.model_name ?? service.model_name ?? '',
+      max_tokens:
+        editData.max_tokens !== undefined
+          ? editData.max_tokens
+          : (service.max_tokens ?? null),
+      reasoning_effort: editData.reasoning_effort ?? service.reasoning_effort,
+      supports_audio_input:
+        editData.supports_audio_input ?? service.supports_audio_input,
       profile_settings:
         editData.profile_settings ?? service.profile_settings ?? {},
       showCustomModelInput: editData.showCustomModelInput ?? false,
@@ -70,56 +75,82 @@ export const ServiceListItem = ({
     };
 
     return (
-      <div className="border rounded-lg p-4">
-        <ServiceForm
-          formData={formData}
-          onFormDataChange={(data) => {
-            onEditDataChange(data);
-          }}
-          onSubmit={onUpdate}
-          onCancel={onCancelEdit}
-          loading={loading}
-          isEdit={true}
-          translationPrefix={translationPrefix}
-          onTestConnection={onTestConnection}
-          testing={testing}
-          testStatus={testStatus}
-        />
+      <div className="overflow-hidden rounded-md border">
+        <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-3">
+          <h4 className="min-w-0 break-words text-sm font-medium">
+            {service.service_name}
+          </h4>
+          <span className="text-xs text-muted-foreground">
+            {serviceTypeLabel}
+          </span>
+        </div>
+        <div className="p-4">
+          <ServiceForm
+            serviceId={service.id}
+            formData={formData}
+            onFormDataChange={(data) => {
+              onEditDataChange(data);
+            }}
+            onSubmit={onUpdate}
+            onCancel={onCancelEdit}
+            loading={loading}
+            isEdit={true}
+            translationPrefix={translationPrefix}
+            onTestConnection={onTestConnection}
+            testing={testing}
+            testStatus={testStatus}
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="border rounded-lg p-4">
+    <div className="rounded-md border p-4">
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="font-medium">{service.service_name}</h4>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 basis-48">
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="min-w-0 break-words text-sm font-medium">
+                {service.service_name}
+              </h4>
               {showGlobalBadge && service.is_public && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                <span className="rounded border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                   {t(`${translationPrefix}.global`)}
                 </span>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="mt-1 break-all text-xs text-muted-foreground">
               {serviceTypeLabel}
               {service.model_name && <span>{` - ${service.model_name}`}</span>}
               {service.custom_url && <span>{` - ${service.custom_url}`}</span>}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1">
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
+              aria-label={t(
+                'ai.userServiceListItem.editService',
+                'Edit Service'
+              )}
+              title={t('ai.userServiceListItem.editService', 'Edit Service')}
               onClick={onStartEdit}
               disabled={loading}
             >
               <Edit className="h-4 w-4" />
             </Button>
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
+              aria-label={t(
+                'ai.userServiceListItem.deleteService',
+                'Delete Service'
+              )}
+              title={t(
+                'ai.userServiceListItem.deleteService',
+                'Delete Service'
+              )}
               onClick={onDelete}
               disabled={loading}
             >
@@ -129,14 +160,14 @@ export const ServiceListItem = ({
         </div>
 
         {service.system_prompt && (
-          <div>
-            <Label className="text-xs">
+          <details className="border-t pt-3">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
               {t(`${translationPrefix}.systemPrompt`)}:
-            </Label>
-            <p className="text-sm text-muted-foreground mt-1 p-2 bg-muted rounded">
+            </summary>
+            <p className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap break-words text-xs text-muted-foreground">
               {service.system_prompt}
             </p>
-          </div>
+          </details>
         )}
       </div>
     </div>

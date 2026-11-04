@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { globalSettingsService } from '@/api/Admin/globalSettingsService';
-import { mockDataKeys, settingsKeys } from '@/api/keys/admin';
+import { aiServiceKeys, mockDataKeys, settingsKeys } from '@/api/keys/admin';
 import { authKeys } from '@/api/keys/auth';
 import { openFoodFactsContributionKeys } from '@/api/keys/settings';
 import { authClient } from '@/lib/auth-client';
@@ -49,6 +49,7 @@ export const useUpdateSettings = () => {
     onSuccess: () => {
       void refetch();
       return Promise.all([
+        queryClient.invalidateQueries({ queryKey: aiServiceKeys.active() }),
         queryClient.invalidateQueries({ queryKey: settingsKeys.all }),
         queryClient.invalidateQueries({
           queryKey: openFoodFactsContributionKeys.all,

@@ -88,6 +88,91 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 
 const USER_ID = 'user-123';
 
+describe('connection-test reasoning effort', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockResolveIsAdmin.mockResolvedValue(true);
+    mockDispatch.mockResolvedValue(okDispatch);
+  });
+
+  it('honors explicit draft reasoning effort through shared route validation', async () => {
+    const response = await request(app)
+      .post('/chat/ai-service-settings/test')
+      .send({
+        service_type: 'openai',
+        api_key: 'draft',
+        reasoning_effort: 'high',
+      });
+    expect(response.statusCode).toBe(200);
+    expect(mockDispatch.mock.calls[0][0]).toMatchObject({
+      provider: { reasoning_effort: 'high' },
+      timeoutMs: 15000,
+      temperature: 0,
+    });
+  });
+
+  it.each([
+    ['openai', 'low'],
+    ['anthropic', undefined],
+  ] as const)(
+    'only falls back to stored reasoning for the same provider (%s)',
+    async (service_type, expected) => {
+      mockGetDecrypted.mockResolvedValue({
+        service_type: 'openai',
+        api_key: 'stored',
+        custom_url: null,
+        model_name: 'gpt-6',
+        reasoning_effort: 'low',
+        max_tokens: null,
+        profile_settings: null,
+        is_public: false,
+      });
+      await chatService.testAiServiceConnection(
+        { id: 'stored', service_type },
+        USER_ID,
+        true
+      );
+      expect(mockDispatch.mock.calls[0][0].provider.reasoning_effort).toBe(
+        expected
+      );
+    }
+  );
+
+  it('prefers explicit reasoning over the saved same-provider value', async () => {
+    mockGetDecrypted.mockResolvedValue({
+      service_type: 'openai',
+      api_key: 'stored',
+      custom_url: null,
+      model_name: 'gpt-6',
+      reasoning_effort: 'low',
+      max_tokens: null,
+      profile_settings: null,
+      is_public: false,
+    });
+    const payload = {
+      id: 'stored',
+      service_type: 'openai',
+      reasoning_effort: 'high' as const,
+    };
+    await chatService.testAiServiceConnection(payload, USER_ID, true);
+    expect(mockDispatch.mock.calls[0][0].provider.reasoning_effort).toBe(
+      'high'
+    );
+  });
+
+  it('rejects invalid reasoning effort through shared validation', async () => {
+    const response = await request(app)
+      .post('/chat/ai-service-settings/test')
+      .send({
+        service_type: 'openai',
+        api_key: 'draft',
+        reasoning_effort: 'invalid',
+      });
+    expect(response.statusCode).toBe(400);
+    expect(mockDispatch).not.toHaveBeenCalled();
+  });
+});
+
 describe('POST /chat/ai-service-settings/test — gate #1 (per-user AI config)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

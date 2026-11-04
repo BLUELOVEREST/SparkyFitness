@@ -161,6 +161,8 @@ jest.mock('@/api/Settings/aiServiceSettingsService', () => ({
     mockUpdateUserPreferences(...args),
   getActiveAiServiceSetting: (...args: unknown[]) =>
     mockGetActiveAiServiceSetting(...args),
+  getActiveVisionAiServiceSetting: (...args: unknown[]) =>
+    mockGetActiveVisionAiServiceSetting(...args),
 }));
 
 jest.mock('@/api/Admin/globalSettingsService', () => ({
@@ -214,7 +216,218 @@ const mockPreferences: UserPreferencesChat = {
   auto_clear_history: '7days',
 };
 
+const mockGetActiveVisionAiServiceSetting = jest.fn();
+
 describe('AIServiceSettings', () => {
+  const globalService: AiServiceSettingsResponse = {
+    ...mockUserServices[0]!,
+    id: 'global',
+    user_id: 'admin',
+    service_name: 'Global profile',
+    is_public: true,
+    source: 'global',
+    profile_settings: {
+      chat: {
+        temperature: 0.4,
+        extra_body_json: { thinking: { enabled: true } },
+      },
+      intent: { max_tokens: 789, reasoning_effort: 'high' },
+      vision: { timeout_seconds: 60 },
+      structured: { max_tokens: 1024, reasoning_effort: 'low' },
+    },
+    reasoning_effort: 'high',
+  };
+
+  it('copies global parameters into a draft with no key, requiring a personal key', async () => {
+    mockGetAIServices.mockResolvedValue([globalService]);
+    mockGetActiveAiServiceSetting.mockResolvedValue(globalService);
+    renderWithClient(<AIServiceSettings />);
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Copy to personal configuration',
+      })
+    );
+    expect(await screen.findByLabelText(/API Key/)).toHaveValue('');
+    expect(mockAddAIService).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(/API Key/), {
+      target: { value: 'my-key' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Service' }));
+    await waitFor(() =>
+      expect(mockAddAIService).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api_key: 'my-key',
+          profile_settings: globalService.profile_settings,
+          reasoning_effort: 'high',
+        })
+      )
+    );
+  });
+
+  it('switches to global by preference without deleting personal services', async () => {
+    mockGetAIServices.mockResolvedValue([globalService, ...mockUserServices]);
+    mockGetPreferences.mockResolvedValue({
+      ...mockPreferences,
+      active_ai_service_id: 'user-service1',
+    });
+    mockUpdateUserPreferences.mockResolvedValue({});
+    renderWithClient(<AIServiceSettings />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use Global Settings' })
+    );
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Use Global Settings',
+      })
+    );
+    await waitFor(() =>
+      expect(mockUpdateUserPreferences).toHaveBeenCalledWith(
+        expect.objectContaining({ active_ai_service_id: 'global' })
+      )
+    );
+    expect(mockDeleteAIService).not.toHaveBeenCalled();
+    expect(mockUpdateUserPreferences).toHaveBeenCalledWith({
+      active_ai_service_id: 'global',
+    });
+  });
+
+  it('allows a copied compatible local service without an API key or global credential fallback', async () => {
+    mockGetAIServices.mockResolvedValue([
+      {
+        ...globalService,
+        service_type: 'openai_compatible',
+        custom_url: 'http://localhost:1234/v1',
+      },
+    ]);
+    renderWithClient(<AIServiceSettings />);
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Copy to personal configuration',
+      })
+    );
+    expect(await screen.findByLabelText(/API Key/)).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'Add Service' }));
+    await waitFor(() =>
+      expect(mockAddAIService).toHaveBeenCalledWith(
+        expect.objectContaining({
+          service_type: 'openai_compatible',
+          api_key: '',
+        })
+      )
+    );
+    expect(mockAddAIService.mock.calls[0]?.[0]).not.toHaveProperty('id');
+  });
+
+  it('shows the actual independent Vision service from the server', async () => {
+    mockGetAIServices.mockResolvedValue([globalService, ...mockUserServices]);
+    mockGetPreferences.mockResolvedValue({
+      ...mockPreferences,
+      active_ai_service_id: 'user-service1',
+    });
+    mockGetActiveVisionAiServiceSetting.mockResolvedValue(globalService);
+    renderWithClient(<AIServiceSettings />);
+    expect(
+      await screen.findByText(/Vision:.*Global profile/)
+    ).toBeInTheDocument();
+  });
+
+  it('groups real chat and vision sources in one compact AI summary', async () => {
+    mockGetAIServices.mockResolvedValue([globalService, ...mockUserServices]);
+    mockGetActiveAiServiceSetting.mockResolvedValue(globalService);
+    mockGetActiveVisionAiServiceSetting.mockResolvedValue(globalService);
+    renderWithClient(<AIServiceSettings />);
+    const summary = await screen.findByTestId('ai-source-summary');
+    expect(
+      await within(summary).findByText(/Using global setting:.*Global profile/)
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        within(summary).getByText(/Vision:.*Global profile/)
+      ).toBeInTheDocument()
+    );
+    expect(screen.getAllByText(/Vision:.*Global profile/)).toHaveLength(1);
+  });
+
+  it('shows all four configured global profiles read-only without dumping extra request bodies', async () => {
+    mockGetAIServices.mockResolvedValue([globalService]);
+    mockGetActiveAiServiceSetting.mockResolvedValue(globalService);
+    renderWithClient(<AIServiceSettings />);
+    fireEvent.click(await screen.findByText('Task profile values (read-only)'));
+    const summary = screen.getByTestId('global-profile-summary');
+    expect(within(summary).getByText('Chat')).toBeInTheDocument();
+    expect(within(summary).getByText('Intent')).toBeInTheDocument();
+    expect(within(summary).getByText('Vision')).toBeInTheDocument();
+    expect(within(summary).getByText('Structured')).toBeInTheDocument();
+    expect(within(summary).getByText('789')).toBeInTheDocument();
+    expect(within(summary).getAllByText('4096').length).toBeGreaterThan(0);
+    expect(within(summary).queryByText('Default')).not.toBeInTheDocument();
+    expect(within(summary).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(summary).not.toHaveTextContent('thinking');
+  });
+
+  it('describes the selected global service even when personal services remain enabled', async () => {
+    mockGetAIServices.mockResolvedValue([globalService, ...mockUserServices]);
+    mockGetPreferences.mockResolvedValue({
+      ...mockPreferences,
+      active_ai_service_id: 'global',
+    });
+    mockGetActiveAiServiceSetting.mockResolvedValue(globalService);
+    renderWithClient(<AIServiceSettings />);
+    expect(
+      await screen.findByText(/Using global setting:.*Global profile/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Copy to personal configuration' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Use Global Settings' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('preserves profiles on edit while allowing prompt, URL and token limit clearing', async () => {
+    mockGetAIServices.mockResolvedValue([
+      {
+        ...mockUserServices[0],
+        service_type: 'openai_compatible',
+        custom_url: 'https://example.com',
+        max_tokens: 2000,
+        profile_settings: globalService.profile_settings,
+        reasoning_effort: 'high',
+      },
+    ]);
+    renderWithClient(<AIServiceSettings />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Edit Service' })
+    );
+    fireEvent.change(screen.getByLabelText(/System Prompt/i), {
+      target: { value: '' },
+    });
+    fireEvent.change(screen.getByLabelText('Custom URL'), {
+      target: { value: '' },
+    });
+    fireEvent.change(
+      screen.getByLabelText('Max tokens', { selector: '#max_tokens' }),
+      { target: { value: '' } }
+    );
+    expect(screen.getByLabelText(/System Prompt/i)).toHaveValue('');
+    expect(screen.getByLabelText('Custom URL')).toHaveValue('');
+    expect(
+      screen.getByLabelText('Max tokens', { selector: '#max_tokens' })
+    ).toHaveValue(null);
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() =>
+      expect(mockUpdateAIService).toHaveBeenCalledWith(
+        'user-service1',
+        expect.objectContaining({
+          system_prompt: '',
+          max_tokens: null,
+          profile_settings: globalService.profile_settings,
+          reasoning_effort: 'high',
+        })
+      )
+    );
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsUserAiConfigAllowed.mockResolvedValue(true);
@@ -223,6 +436,7 @@ describe('AIServiceSettings', () => {
     // Resolve to null so the AI-assisted-conversions row (gated on an active
     // service) stays hidden by default, keeping switch counts predictable.
     mockGetActiveAiServiceSetting.mockResolvedValue(null);
+    mockGetActiveVisionAiServiceSetting.mockResolvedValue(null);
   });
 
   it('renders the component', async () => {

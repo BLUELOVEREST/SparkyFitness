@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Edit, Trash2, Globe } from 'lucide-react';
 import { getServiceTypes } from '@/utils/aiServiceUtils';
 import { ServiceForm } from './ServiceForm';
+import { GlobalProfileSummary } from './GlobalProfileSummary';
 import { AiServiceSettingsResponse } from '@workspace/shared';
 import { UpdateAiServiceSettingsFormInput } from '@/schemas/form/AiServiceSettings.form.zod';
 import type { TestConnectionStatus } from '@/hooks/AI/useTestAIServiceConnection';
@@ -56,17 +56,21 @@ export const UserServiceListItem = ({
 
   if (isEditing) {
     const formData: UpdateAiServiceSettingsFormInput = {
-      service_name: editData.service_name || service.service_name,
+      service_name: editData.service_name ?? service.service_name,
       service_type: editData.service_type || service.service_type,
       api_key: editData.api_key || '',
-      custom_url: editData.custom_url || service.custom_url || '',
-      system_prompt: editData.system_prompt || service.system_prompt || '',
+      custom_url: editData.custom_url ?? service.custom_url ?? '',
+      system_prompt: editData.system_prompt ?? service.system_prompt ?? '',
       is_active:
         editData.is_active !== undefined
           ? editData.is_active
           : service.is_active,
-      model_name: editData.model_name || service.model_name || '',
-      max_tokens: editData.max_tokens ?? service.max_tokens ?? null,
+      model_name: editData.model_name ?? service.model_name ?? '',
+      max_tokens:
+        editData.max_tokens !== undefined
+          ? editData.max_tokens
+          : (service.max_tokens ?? null),
+      reasoning_effort: editData.reasoning_effort ?? service.reasoning_effort,
       profile_settings:
         editData.profile_settings ?? service.profile_settings ?? {},
       showCustomModelInput: editData.showCustomModelInput ?? false,
@@ -78,52 +82,77 @@ export const UserServiceListItem = ({
     };
 
     return (
-      <div className="border rounded-lg p-4">
-        <ServiceForm
-          formData={formData}
-          onFormDataChange={(data) => {
-            onEditDataChange(data);
-          }}
-          onSubmit={onUpdate}
-          onCancel={onCancelEdit}
-          loading={loading}
-          isEdit={true}
-          translationPrefix="settings.aiService.userSettings"
-          onTestConnection={onTestConnection}
-          testing={testing}
-          testStatus={testStatus}
-        />
+      <div className="overflow-hidden rounded-md border">
+        <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-3">
+          <h4 className="min-w-0 break-words text-sm font-medium">
+            {service.service_name}
+          </h4>
+          {isActiveProvider && (
+            <span className="rounded bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+              {t(
+                'settings.aiService.selection.selectedChat',
+                t('settings.aiService.userSettings.active')
+              )}
+            </span>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {serviceTypeLabel}
+          </span>
+        </div>
+        <div className="p-4">
+          <ServiceForm
+            serviceId={service.id}
+            formData={formData}
+            onFormDataChange={(data) => {
+              onEditDataChange(data);
+            }}
+            onSubmit={onUpdate}
+            onCancel={onCancelEdit}
+            loading={loading}
+            isEdit={true}
+            translationPrefix="settings.aiService.userSettings"
+            onTestConnection={onTestConnection}
+            testing={testing}
+            testStatus={testStatus}
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="border rounded-lg p-4">
+    <div className="rounded-md border p-4">
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 basis-48">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="font-medium">{service.service_name}</h4>
+              <h4 className="min-w-0 break-words text-sm font-medium">
+                {service.service_name}
+              </h4>
 
               {/* Admin-managed global setting */}
               {service.is_public && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full text-xs flex items-center gap-1">
+                <span className="flex items-center gap-1 rounded border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                   <Globe className="h-3 w-3" />
                   {t('settings.aiService.userSettings.global')}
                 </span>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="mt-1 break-all text-xs text-muted-foreground">
               {serviceTypeLabel}
               {service.model_name && <span>{` - ${service.model_name}`}</span>}
               {service.custom_url && <span>{` - ${service.custom_url}`}</span>}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Active toggle — owner only, non-admin services */}
             {isOwner && !service.is_public && isUserConfigAllowed && (
               <Switch
+                aria-label={t(
+                  'settings.aiService.selection.enabled',
+                  'Enabled'
+                )}
                 checked={service.is_active}
                 onCheckedChange={onToggleActive}
                 disabled={loading}
@@ -131,9 +160,12 @@ export const UserServiceListItem = ({
             )}
 
             {/* Admin global: show active badge when it's the selected provider */}
-            {service.is_public && isActiveProvider && (
-              <span className="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-full text-xs">
-                {t('settings.aiService.userSettings.active')}
+            {isActiveProvider && (
+              <span className="rounded bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+                {t(
+                  'settings.aiService.selection.selectedChat',
+                  t('settings.aiService.userSettings.active')
+                )}
               </span>
             )}
 
@@ -141,9 +173,14 @@ export const UserServiceListItem = ({
             {!service.is_public && isUserConfigAllowed && isOwner && (
               <>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   onClick={onStartEdit}
+                  disabled={loading}
+                  title={t(
+                    'ai.userServiceListItem.editService',
+                    'Edit Service'
+                  )}
                   aria-label={t(
                     'ai.userServiceListItem.editService',
                     'Edit Service'
@@ -152,10 +189,14 @@ export const UserServiceListItem = ({
                   <Edit className="h-4 w-4" />
                 </Button>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   onClick={onDelete}
                   disabled={loading}
+                  title={t(
+                    'ai.userServiceListItem.deleteService',
+                    'Delete Service'
+                  )}
                   aria-label={t(
                     'ai.userServiceListItem.deleteService',
                     'Delete Service'
@@ -176,15 +217,16 @@ export const UserServiceListItem = ({
         </div>
 
         {service.system_prompt && (
-          <div>
-            <Label className="text-xs">
+          <details className="border-t pt-3">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
               {t('settings.aiService.userSettings.systemPrompt')}:
-            </Label>
-            <p className="text-sm text-muted-foreground mt-1 p-2 bg-muted rounded">
+            </summary>
+            <p className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap break-words text-xs text-muted-foreground">
               {service.system_prompt}
             </p>
-          </div>
+          </details>
         )}
+        {service.is_public && <GlobalProfileSummary service={service} />}
       </div>
     </div>
   );

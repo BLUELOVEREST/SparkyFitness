@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-11-02_
+_Last updated: 2026-11-04_
 
 SparkyFitness Frontend is the React web app for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessFrontend/`.
 
@@ -47,6 +47,20 @@ Features are organized by domain, and the same domain folder name appears in `sr
 - Example: a Medications bug lives in `src/pages/Medications/` + `src/api/Medications/` + `src/hooks/` medication hooks. Start there, not with a repo-wide search.
 
 ## Source Map
+
+- AI service forms share explicit OpenAI-compatible model discovery. Fetch only on
+  command, invalidate results when connection identity changes, ignore stale
+  responses, and retain manual model entry. Personal/global switching preserves
+  saved personal services. Copy full task profiles but never administrator keys.
+  Model-list search is independent of the saved model ID and resets on opening;
+  do not use native datalist filtering against the selected model value.
+  Shared service editors keep the service prompt outside task tabs; extra JSON
+  is disclosed on demand. Validate every profile before saving, including
+  inactive tabs, and reveal the offending profile/field on invalid input.
+  Discovered model IDs are alphabetically sorted. Read-only global summaries show
+  concrete defaults through the shared profile resolver, not opaque Default labels.
+  Display effective chat and vision configurations independently using server
+  resolver results; enabled and selected are different states.
 
 - openGym pairing form accepts explicit local and peer LAN URLs, not browser origins. Resource/network scopes are fixed server-side. Full history is a confirmed one-shot action, not a persistent checkbox; pending delivery disables the action.
 

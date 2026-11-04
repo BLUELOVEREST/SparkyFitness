@@ -13,10 +13,25 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { Save, X, Plug, Loader2, AlertTriangle } from 'lucide-react';
+import {
+  Save,
+  X,
+  Plug,
+  Loader2,
+  AlertTriangle,
+  ChevronRight,
+  RotateCcw,
+} from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   AI_SERVICE_PROFILE_KEYS,
   DEFAULT_AI_SERVICE_PROFILE_SETTINGS,
+  aiServiceProfileOverrideSchema,
   type AiServiceProfileKey,
   type AiServiceProfileOverride,
   type AiServiceProfileSettings,
@@ -33,6 +48,7 @@ import {
   UpdateAiServiceSettingsFormInput,
 } from '@/schemas/form/AiServiceSettings.form.zod';
 import type { TestConnectionStatus } from '@/hooks/AI/useTestAIServiceConnection';
+import { ModelDiscovery } from './ModelDiscovery';
 
 type ProfileFormOverride = AiServiceProfileOverride & {
   extra_body_json_draft?: string;
@@ -41,6 +57,20 @@ type ProfileFormOverride = AiServiceProfileOverride & {
 type ProfileFormSettings = Partial<
   Record<AiServiceProfileKey, ProfileFormOverride>
 >;
+
+const profileNumericSchema = aiServiceProfileOverrideSchema.pick({
+  max_tokens: true,
+  timeout_seconds: true,
+  temperature: true,
+});
+
+function validateProfileNumbers(profile: ProfileFormOverride) {
+  return profileNumericSchema.safeParse({
+    max_tokens: profile.max_tokens,
+    timeout_seconds: profile.timeout_seconds,
+    temperature: profile.temperature,
+  });
+}
 
 const PROFILE_DESCRIPTIONS: Record<AiServiceProfileKey, string> = {
   chat: 'settings.aiService.profileSettings.descriptions.chat',
@@ -81,6 +111,17 @@ function getProfileDraft(profile: ProfileFormOverride): string {
   return JSON.stringify(profile.extra_body_json ?? {}, null, 2);
 }
 
+function hasInvalidProfileJson(profile: ProfileFormOverride): boolean {
+  try {
+    const parsed: unknown = JSON.parse(getProfileDraft(profile));
+    return (
+      typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)
+    );
+  } catch {
+    return true;
+  }
+}
+
 function hasProfileOverride(profile: ProfileFormOverride | undefined): boolean {
   if (!profile) return false;
   return (
@@ -94,6 +135,7 @@ function hasProfileOverride(profile: ProfileFormOverride | undefined): boolean {
 }
 
 interface ServiceFormProps {
+  serviceId?: string;
   formData: AiServiceSettingsFormInput;
   onFormDataChange: (data: UpdateAiServiceSettingsFormInput) => void;
   onSubmit: () => void;
@@ -110,6 +152,7 @@ interface ServiceFormProps {
 }
 
 export const ServiceForm = ({
+  serviceId,
   formData,
   onFormDataChange,
   onSubmit,
@@ -125,6 +168,9 @@ export const ServiceForm = ({
   const { toast } = useToast();
   const [selectedProfile, setSelectedProfile] =
     useState<AiServiceProfileKey>('intent');
+  const [jsonOpen, setJsonOpen] = useState<
+    Partial<Record<AiServiceProfileKey, boolean>>
+  >({});
   const serviceTypes = getServiceTypes(t);
   const modelOptions = getModelOptions(formData.service_type ?? '');
   const profileSettings = getProfileSettings(formData);
@@ -150,22 +196,38 @@ export const ServiceForm = ({
   const resetSelectedProfile = () => {
     const nextSettings: ProfileFormSettings = { ...profileSettings };
     delete nextSettings[selectedProfile];
+    setJsonOpen((previous) => ({ ...previous, [selectedProfile]: false }));
     onFormDataChange({
       profile_settings: nextSettings as AiServiceProfileSettings,
     });
   };
 
   const selectedJsonDraft = getProfileDraft(selectedProfileData);
-  const selectedJsonIsInvalid = (() => {
-    try {
-      const parsed = JSON.parse(selectedJsonDraft);
-      return (
-        typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)
-      );
-    } catch {
-      return true;
-    }
-  })();
+  const profileValidation = AI_SERVICE_PROFILE_KEYS.map((profile) => ({
+    profile,
+    invalidJson: hasInvalidProfileJson(profileSettings[profile] ?? {}),
+    numbers: validateProfileNumbers(profileSettings[profile] ?? {}),
+  }));
+  const invalidProfiles = profileValidation
+    .filter(
+      (validation) => validation.invalidJson || !validation.numbers.success
+    )
+    .map((validation) => validation.profile);
+  const selectedValidation = profileValidation.find(
+    (validation) => validation.profile === selectedProfile
+  );
+  const selectedJsonIsInvalid = selectedValidation?.invalidJson ?? false;
+  const selectedNumericIssues =
+    selectedValidation?.numbers.success === false
+      ? selectedValidation.numbers.error.issues
+      : [];
+  const invalidParametersMessage = t(
+    'settings.aiService.profileSettings.invalidParameters',
+    'Enter valid values for the highlighted profile parameters.'
+  );
+  const numericFieldInvalid = (
+    field: 'max_tokens' | 'timeout_seconds' | 'temperature'
+  ) => selectedNumericIssues.some((issue) => issue.path[0] === field);
   const voiceRoutingSupported = supportsVoiceTranscriptionServiceType(
     formData.service_type
   );
@@ -186,13 +248,25 @@ export const ServiceForm = ({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (selectedJsonIsInvalid) {
+        const invalidProfile = invalidProfiles[0];
+        if (invalidProfile) {
+          const invalidJson = profileValidation.find(
+            (validation) => validation.profile === invalidProfile
+          )?.invalidJson;
+          setSelectedProfile(invalidProfile);
+          if (invalidJson)
+            setJsonOpen((previous) => ({
+              ...previous,
+              [invalidProfile]: true,
+            }));
           toast({
             title: t(`${translationPrefix}.error`),
-            description: t(
-              'settings.aiService.profileSettings.invalidJson',
-              'Extra request body must be a valid JSON object.'
-            ),
+            description: invalidJson
+              ? t(
+                  'settings.aiService.profileSettings.invalidJson',
+                  'Extra request body must be a valid JSON object.'
+                )
+              : invalidParametersMessage,
             variant: 'destructive',
           });
           return;
@@ -211,9 +285,9 @@ export const ServiceForm = ({
         }
         onSubmit();
       }}
-      className="space-y-4"
+      className="space-y-4 [&_input]:h-9 [&_label]:text-xs [&_[role=combobox]]:h-9"
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <Label htmlFor="service_name">
             {t(`${translationPrefix}.serviceName`)}
@@ -235,11 +309,14 @@ export const ServiceForm = ({
             onValueChange={(value) =>
               onFormDataChange({
                 service_type: value,
-                model_name: '',
-                custom_model_name: '',
+                // Keep the chosen ID; discovery is invalidated separately.
+                model_name: selectedModel ?? '',
+                custom_model_name: selectedModel ?? '',
                 // Types without preset models (openai_compatible/custom/ollama)
                 // have no dropdown, so reveal the custom-model input directly.
-                showCustomModelInput: getModelOptions(value).length === 0,
+                showCustomModelInput:
+                  getModelOptions(value).length === 0 ||
+                  !getModelOptions(value).includes(selectedModel ?? ''),
                 // Default all services to the 'full' tool profile.
                 // Users can manually select 'core' if they wish to optimize
                 // their local system performance, and are guided by warnings.
@@ -262,31 +339,60 @@ export const ServiceForm = ({
         </div>
       </div>
 
-      <div>
-        <Label htmlFor="api_key">
-          {requiresApiKey(formData.service_type)
-            ? t(`${translationPrefix}.apiKey`)
-            : t(`${translationPrefix}.apiKeyOptional`)}
-        </Label>
-        <Input
-          id="api_key"
-          type="password"
-          value={formData.api_key}
-          onChange={(e) => onFormDataChange({ api_key: e.target.value })}
-          placeholder={
-            formData.service_type === 'ollama'
-              ? t(`${translationPrefix}.apiKeyPlaceholderOllama`)
-              : isEdit
-                ? t(`${translationPrefix}.enterNewApiKey`)
-                : t(`${translationPrefix}.apiKeyPlaceholder`)
-          }
-          autoComplete={isEdit ? 'off' : 'new-password'}
-        />
-        {isEdit && formData.service_type !== 'ollama' && (
-          <p className="text-xs text-muted-foreground mt-1">
-            {t(`${translationPrefix}.apiKeyUpdateDescription`)}
-          </p>
+      <div
+        data-testid="ai-connection-fields"
+        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+      >
+        {requiresCustomUrl && (
+          <div className="min-w-0 space-y-1.5">
+            <Label htmlFor="custom_url">
+              {t(`${translationPrefix}.customUrl`)}
+            </Label>
+            <Input
+              id="custom_url"
+              value={formData.custom_url ?? ''}
+              onChange={(e) => onFormDataChange({ custom_url: e.target.value })}
+              className="font-mono text-xs"
+              placeholder={
+                formData.service_type === 'ollama'
+                  ? t(`${translationPrefix}.customUrlPlaceholderOllama`)
+                  : t(`${translationPrefix}.customUrlPlaceholder`)
+              }
+            />
+          </div>
         )}
+        <div
+          className={
+            requiresCustomUrl
+              ? 'min-w-0 space-y-1.5'
+              : 'min-w-0 space-y-1.5 sm:col-span-2'
+          }
+        >
+          <Label htmlFor="api_key">
+            {requiresApiKey(formData.service_type)
+              ? t(`${translationPrefix}.apiKey`)
+              : t(`${translationPrefix}.apiKeyOptional`)}
+          </Label>
+          <Input
+            id="api_key"
+            type="password"
+            value={formData.api_key}
+            onChange={(e) => onFormDataChange({ api_key: e.target.value })}
+            placeholder={
+              formData.service_type === 'ollama'
+                ? t(`${translationPrefix}.apiKeyPlaceholderOllama`)
+                : isEdit
+                  ? t(`${translationPrefix}.enterNewApiKey`)
+                  : t(`${translationPrefix}.apiKeyPlaceholder`)
+            }
+            autoComplete={isEdit ? 'off' : 'new-password'}
+          />
+          {isEdit && formData.service_type !== 'ollama' && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {t(`${translationPrefix}.apiKeyUpdateDescription`)}
+            </p>
+          )}
+        </div>
       </div>
 
       {formData.service_type === 'openai' &&
@@ -322,24 +428,6 @@ export const ServiceForm = ({
             </p>
           </div>
         )}
-
-      {requiresCustomUrl && (
-        <div>
-          <Label htmlFor="custom_url">
-            {t(`${translationPrefix}.customUrl`)}
-          </Label>
-          <Input
-            id="custom_url"
-            value={formData.custom_url ?? ''}
-            onChange={(e) => onFormDataChange({ custom_url: e.target.value })}
-            placeholder={
-              formData.service_type === 'ollama'
-                ? t(`${translationPrefix}.customUrlPlaceholderOllama`)
-                : t(`${translationPrefix}.customUrlPlaceholder`)
-            }
-          />
-        </div>
-      )}
 
       {/* Self-hosted types (ollama/openai_compatible/custom) can point at
           small local models with no prompt cache, where the full 35-tool
@@ -412,116 +500,140 @@ export const ServiceForm = ({
         </>
       )}
 
-      <div className="flex items-center space-x-2 mb-4">
-        <Switch
-          id="use_custom_model"
-          checked={formData.showCustomModelInput ?? false}
-          onCheckedChange={(checked) =>
-            onFormDataChange({ showCustomModelInput: checked })
-          }
-        />
-        <Label htmlFor="use_custom_model">
-          {t(`${translationPrefix}.useCustomModel`)}
-        </Label>
-      </div>
-
-      {!formData.showCustomModelInput && modelOptions.length > 0 && (
-        <div>
-          <Label htmlFor="model_name_select">
-            {t(`${translationPrefix}.model`)}
-          </Label>
-          <Select
-            value={formData.model_name ?? ''}
-            onValueChange={(value) => onFormDataChange({ model_name: value })}
-          >
-            <SelectTrigger id="model_name_select">
-              <SelectValue
-                placeholder={t(`${translationPrefix}.selectModel`)}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {modelOptions.map((model) => (
-                <SelectItem key={model} value={model}>
-                  {model}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t(`${translationPrefix}.recommendedModel`, {
-              model: modelOptions[0],
-            })}
-          </p>
-        </div>
-      )}
-
-      {formData.showCustomModelInput && (
-        <div>
-          <Label htmlFor="custom_model_name_input">
-            {t(`${translationPrefix}.customModelName`)}
-          </Label>
-          <Input
-            id="custom_model_name_input"
-            value={formData.custom_model_name ?? ''}
-            onChange={(e) =>
-              onFormDataChange({ custom_model_name: e.target.value })
-            }
-            placeholder={t(`${translationPrefix}.customModelNamePlaceholder`)}
-          />
-        </div>
-      )}
-
-      {voiceRoutingSupported ? (
-        <div className="space-y-1">
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="supports_audio_input"
-              checked={formData.supports_audio_input ?? false}
-              onCheckedChange={(checked) =>
-                onFormDataChange({ supports_audio_input: checked })
-              }
-            />
-            <Label htmlFor="supports_audio_input">
-              {t(`${translationPrefix}.supportsAudioInput`)}
-            </Label>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {t(`${translationPrefix}.supportsAudioInputDescription`)}
-          </p>
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          {t(`${translationPrefix}.audioInputProviderUnsupported`)}
-        </p>
-      )}
-
-      <div>
-        <Label htmlFor="max_tokens">
-          {t(`${translationPrefix}.maxTokens`, 'Max tokens')}
-        </Label>
-        <Input
-          id="max_tokens"
-          type="number"
-          min={1}
-          step={1}
-          value={formData.max_tokens ?? ''}
-          onChange={(e) =>
+      {formData.service_type === 'openai_compatible' && (
+        <ModelDiscovery
+          serviceId={serviceId}
+          serviceType={formData.service_type}
+          customUrl={formData.custom_url}
+          apiKey={formData.api_key}
+          value={selectedModel ?? ''}
+          onChange={(value) =>
             onFormDataChange({
-              max_tokens: e.target.value ? Number(e.target.value) : null,
+              model_name: value,
+              custom_model_name: value,
+              showCustomModelInput: true,
             })
           }
-          placeholder={t(
-            `${translationPrefix}.maxTokensPlaceholder`,
-            'Leave blank for provider default'
-          )}
-          inputMode="numeric"
         />
-        <p className="text-xs text-muted-foreground mt-1">
-          {t(
-            `${translationPrefix}.maxTokensDescription`,
-            'Optional output token limit sent with AI requests.'
-          )}
-        </p>
+      )}
+
+      {formData.service_type !== 'openai_compatible' && (
+        <div className="flex items-center space-x-2 mb-4">
+          <Switch
+            id="use_custom_model"
+            checked={formData.showCustomModelInput ?? false}
+            onCheckedChange={(checked) =>
+              onFormDataChange({ showCustomModelInput: checked })
+            }
+          />
+          <Label htmlFor="use_custom_model">
+            {t(`${translationPrefix}.useCustomModel`)}
+          </Label>
+        </div>
+      )}
+
+      {formData.service_type !== 'openai_compatible' &&
+        !formData.showCustomModelInput &&
+        modelOptions.length > 0 && (
+          <div>
+            <Label htmlFor="model_name_select">
+              {t(`${translationPrefix}.model`)}
+            </Label>
+            <Select
+              value={formData.model_name ?? ''}
+              onValueChange={(value) => onFormDataChange({ model_name: value })}
+            >
+              <SelectTrigger id="model_name_select">
+                <SelectValue
+                  placeholder={t(`${translationPrefix}.selectModel`)}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {modelOptions.map((model) => (
+                  <SelectItem key={model} value={model}>
+                    {model}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t(`${translationPrefix}.recommendedModel`, {
+                model: modelOptions[0],
+              })}
+            </p>
+          </div>
+        )}
+
+      {formData.service_type !== 'openai_compatible' &&
+        formData.showCustomModelInput && (
+          <div>
+            <Label htmlFor="custom_model_name_input">
+              {t(`${translationPrefix}.customModelName`)}
+            </Label>
+            <Input
+              id="custom_model_name_input"
+              value={formData.custom_model_name ?? ''}
+              onChange={(e) =>
+                onFormDataChange({ custom_model_name: e.target.value })
+              }
+              placeholder={t(`${translationPrefix}.customModelNamePlaceholder`)}
+            />
+          </div>
+        )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+        {voiceRoutingSupported ? (
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="supports_audio_input"
+                checked={formData.supports_audio_input ?? false}
+                onCheckedChange={(checked) =>
+                  onFormDataChange({ supports_audio_input: checked })
+                }
+              />
+              <Label htmlFor="supports_audio_input">
+                {t(`${translationPrefix}.supportsAudioInput`)}
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t(`${translationPrefix}.supportsAudioInputDescription`)}
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {t(`${translationPrefix}.audioInputProviderUnsupported`)}
+          </p>
+        )}
+
+        <div>
+          <Label htmlFor="max_tokens">
+            {t(`${translationPrefix}.maxTokens`, 'Max tokens')}
+          </Label>
+          <Input
+            id="max_tokens"
+            type="number"
+            min={1}
+            step={1}
+            value={formData.max_tokens ?? ''}
+            onChange={(e) =>
+              onFormDataChange({
+                max_tokens: e.target.value ? Number(e.target.value) : null,
+              })
+            }
+            placeholder={t(
+              `${translationPrefix}.maxTokensPlaceholder`,
+              'Leave blank for provider default'
+            )}
+            inputMode="numeric"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            {t(
+              `${translationPrefix}.maxTokensDescription`,
+              'Optional output token limit sent with AI requests.'
+            )}
+          </p>
+        </div>
       </div>
 
       <div>
@@ -537,12 +649,13 @@ export const ServiceForm = ({
             'Additional instructions for this AI service'
           )}
           rows={3}
+          className="mt-1.5 font-mono text-xs"
         />
       </div>
 
       <div
         data-testid="ai-profile-settings"
-        className="mt-2 space-y-5 border-t border-border/80 py-6"
+        className="space-y-3 border-t border-border/80 pt-4"
       >
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
@@ -556,7 +669,7 @@ export const ServiceForm = ({
               )}
             </p>
           </div>
-          <span className="rounded-full border px-2 py-1 text-xs text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {t(
               'settings.aiService.profileSettings.builtInPromptBadge',
               'Built-in prompts'
@@ -564,215 +677,346 @@ export const ServiceForm = ({
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {AI_SERVICE_PROFILE_KEYS.map((profile) => {
-            const active = selectedProfile === profile;
-            const custom = hasProfileOverride(profileSettings[profile]);
-            return (
-              <button
-                key={profile}
-                type="button"
-                onClick={() => setSelectedProfile(profile)}
-                className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
-                  active
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-input bg-background text-foreground hover:bg-muted'
-                }`}
-              >
-                <span>
-                  {t(
-                    profileLabelKey(profile),
-                    PROFILE_LABEL_FALLBACKS[profile]
+        <Tabs
+          value={selectedProfile}
+          onValueChange={(value) =>
+            setSelectedProfile(value as AiServiceProfileKey)
+          }
+        >
+          <TabsList
+            aria-label={t(
+              'settings.aiService.profileSettings.title',
+              'Task profiles'
+            )}
+            className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4"
+          >
+            {AI_SERVICE_PROFILE_KEYS.map((profile) => {
+              const custom = hasProfileOverride(profileSettings[profile]);
+              return (
+                <TabsTrigger
+                  key={profile}
+                  value={profile}
+                  className="min-w-0 flex-wrap gap-x-1.5 gap-y-0.5 px-2 py-1.5 text-xs whitespace-normal"
+                >
+                  <span>
+                    {t(
+                      profileLabelKey(profile),
+                      PROFILE_LABEL_FALLBACKS[profile]
+                    )}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {custom
+                      ? t('settings.aiService.profileSettings.custom', 'Custom')
+                      : t(
+                          'settings.aiService.profileSettings.default',
+                          'Default'
+                        )}
+                  </span>
+                  {invalidProfiles.includes(profile) && (
+                    <AlertTriangle
+                      className="h-3.5 w-3.5 shrink-0 text-destructive"
+                      aria-label={
+                        profileValidation.find(
+                          (validation) => validation.profile === profile
+                        )?.invalidJson
+                          ? t(
+                              'settings.aiService.profileSettings.invalidJsonBadge',
+                              'Invalid JSON'
+                            )
+                          : t(
+                              'settings.aiService.profileSettings.invalidParametersBadge',
+                              'Invalid parameters'
+                            )
+                      }
+                    />
                   )}
-                </span>
-                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                  {custom
-                    ? t('settings.aiService.profileSettings.custom', 'Custom')
-                    : t(
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+
+          <TabsContent
+            value={selectedProfile}
+            className="mt-3 space-y-3 bg-muted/40 p-3 rounded-md"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h5 className="text-sm font-medium">
+                  {t(
+                    profileLabelKey(selectedProfile),
+                    PROFILE_LABEL_FALLBACKS[selectedProfile]
+                  )}
+                </h5>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t(
+                    PROFILE_DESCRIPTIONS[selectedProfile],
+                    PROFILE_DESCRIPTION_FALLBACKS[selectedProfile]
+                  )}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={resetSelectedProfile}
+                className="h-8 shrink-0 text-xs"
+              >
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                {t(
+                  'settings.aiService.profileSettings.resetToDefaults',
+                  'Reset to defaults'
+                )}
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 min-[360px]:grid-cols-2 lg:grid-cols-4 gap-3 [&_input]:font-mono [&_input]:text-xs">
+              <div>
+                <Label htmlFor="profile_max_tokens">
+                  {t(
+                    'settings.aiService.profileSettings.maxTokens',
+                    'Max tokens'
+                  )}
+                </Label>
+                <Input
+                  id="profile_max_tokens"
+                  aria-invalid={numericFieldInvalid('max_tokens')}
+                  aria-describedby={
+                    numericFieldInvalid('max_tokens')
+                      ? 'profile-numeric-error'
+                      : undefined
+                  }
+                  className={
+                    numericFieldInvalid('max_tokens')
+                      ? 'border-destructive'
+                      : undefined
+                  }
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={selectedProfileData.max_tokens ?? ''}
+                  onChange={(e) =>
+                    updateSelectedProfile({
+                      max_tokens: e.target.value
+                        ? Number(e.target.value)
+                        : null,
+                    })
+                  }
+                  inputMode="numeric"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="profile_timeout_seconds">
+                  {t(
+                    'settings.aiService.profileSettings.timeoutSeconds',
+                    'Timeout seconds'
+                  )}
+                </Label>
+                <Input
+                  id="profile_timeout_seconds"
+                  aria-invalid={numericFieldInvalid('timeout_seconds')}
+                  aria-describedby={
+                    numericFieldInvalid('timeout_seconds')
+                      ? 'profile-numeric-error'
+                      : undefined
+                  }
+                  className={
+                    numericFieldInvalid('timeout_seconds')
+                      ? 'border-destructive'
+                      : undefined
+                  }
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={selectedProfileData.timeout_seconds ?? ''}
+                  onChange={(e) =>
+                    updateSelectedProfile({
+                      timeout_seconds: e.target.value
+                        ? Number(e.target.value)
+                        : null,
+                    })
+                  }
+                  inputMode="numeric"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="profile_reasoning_effort">
+                  {t(
+                    'settings.aiService.profileSettings.reasoningEffort',
+                    'Reasoning effort'
+                  )}
+                </Label>
+                <Select
+                  value={selectedProfileData.reasoning_effort ?? '__default__'}
+                  onValueChange={(value) =>
+                    updateSelectedProfile({
+                      reasoning_effort:
+                        value === '__default__'
+                          ? null
+                          : (value as 'low' | 'high' | 'max'),
+                    })
+                  }
+                >
+                  <SelectTrigger id="profile_reasoning_effort">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default__">
+                      {t(
                         'settings.aiService.profileSettings.default',
                         'Default'
                       )}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                    </SelectItem>
+                    {(['low', 'high', 'max'] as const).map((effort) => (
+                      <SelectItem key={effort} value={effort}>
+                        {t(
+                          `settings.aiService.reasoningEffort.${effort}`,
+                          effort
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-        <div className="space-y-4 rounded-md border bg-muted/20 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <h5 className="text-sm font-medium">
-                {t(
-                  profileLabelKey(selectedProfile),
-                  PROFILE_LABEL_FALLBACKS[selectedProfile]
-                )}
-              </h5>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t(
-                  PROFILE_DESCRIPTIONS[selectedProfile],
-                  PROFILE_DESCRIPTION_FALLBACKS[selectedProfile]
-                )}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={resetSelectedProfile}
-            >
-              {t(
-                'settings.aiService.profileSettings.resetToDefaults',
-                'Reset to defaults'
-              )}
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="profile_max_tokens">
-                {t(
-                  'settings.aiService.profileSettings.maxTokens',
-                  'Max tokens'
-                )}
-              </Label>
-              <Input
-                id="profile_max_tokens"
-                type="number"
-                min={1}
-                step={1}
-                value={selectedProfileData.max_tokens ?? ''}
-                onChange={(e) =>
-                  updateSelectedProfile({
-                    max_tokens: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-                inputMode="numeric"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="profile_timeout_seconds">
-                {t(
-                  'settings.aiService.profileSettings.timeoutSeconds',
-                  'Timeout seconds'
-                )}
-              </Label>
-              <Input
-                id="profile_timeout_seconds"
-                type="number"
-                min={1}
-                step={1}
-                value={selectedProfileData.timeout_seconds ?? ''}
-                onChange={(e) =>
-                  updateSelectedProfile({
-                    timeout_seconds: e.target.value
-                      ? Number(e.target.value)
-                      : null,
-                  })
-                }
-                inputMode="numeric"
-              />
-            </div>
-
-            <div>
-              <Label>
-                {t(
-                  'settings.aiService.profileSettings.reasoningEffort',
-                  'Reasoning effort'
-                )}
-              </Label>
-              <div className="mt-2 inline-flex rounded-md border bg-background p-1">
-                {(['low', 'high', 'max'] as const).map((effort) => (
-                  <button
-                    key={effort}
-                    type="button"
-                    onClick={() =>
-                      updateSelectedProfile({ reasoning_effort: effort })
-                    }
-                    className={`rounded px-3 py-1.5 text-sm capitalize ${
-                      selectedProfileData.reasoning_effort === effort
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {effort}
-                  </button>
-                ))}
+              <div>
+                <Label htmlFor="profile_temperature">
+                  {t(
+                    'settings.aiService.profileSettings.temperature',
+                    'Temperature'
+                  )}
+                </Label>
+                <Input
+                  id="profile_temperature"
+                  aria-invalid={numericFieldInvalid('temperature')}
+                  aria-describedby={
+                    numericFieldInvalid('temperature')
+                      ? 'profile-numeric-error'
+                      : undefined
+                  }
+                  className={
+                    numericFieldInvalid('temperature')
+                      ? 'border-destructive'
+                      : undefined
+                  }
+                  type="number"
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  value={selectedProfileData.temperature ?? ''}
+                  onChange={(e) =>
+                    updateSelectedProfile({
+                      temperature: e.target.value
+                        ? Number(e.target.value)
+                        : null,
+                    })
+                  }
+                />
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="profile_temperature">
-                {t(
-                  'settings.aiService.profileSettings.temperature',
-                  'Temperature'
-                )}
-              </Label>
-              <Input
-                id="profile_temperature"
-                type="number"
-                min={0}
-                max={2}
-                step={0.1}
-                value={selectedProfileData.temperature ?? ''}
-                onChange={(e) =>
-                  updateSelectedProfile({
-                    temperature: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="profile_extra_body_json">
-              {t(
-                'settings.aiService.profileSettings.extraBodyJson',
-                'Extra request body JSON'
-              )}
-            </Label>
-            <Textarea
-              id="profile_extra_body_json"
-              value={selectedJsonDraft}
-              onChange={(e) => {
-                const draft = e.target.value;
-                try {
-                  const parsed = JSON.parse(draft) as unknown;
-                  updateSelectedProfile({
-                    extra_body_json:
-                      typeof parsed === 'object' &&
-                      parsed !== null &&
-                      !Array.isArray(parsed)
-                        ? (parsed as Record<string, unknown>)
-                        : {},
-                    extra_body_json_draft: draft,
-                  });
-                } catch {
-                  updateSelectedProfile({ extra_body_json_draft: draft });
-                }
-              }}
-              className="font-mono"
-              rows={4}
-            />
-            <p
-              className={`text-xs mt-1 ${
-                selectedJsonIsInvalid
-                  ? 'text-destructive'
-                  : 'text-green-600 dark:text-green-400'
-              }`}
+            {selectedNumericIssues.length > 0 && (
+              <p
+                id="profile-numeric-error"
+                role="alert"
+                className="text-xs text-destructive"
+              >
+                {invalidParametersMessage}
+              </p>
+            )}
+            <Collapsible
+              open={selectedJsonIsInvalid || jsonOpen[selectedProfile] === true}
+              onOpenChange={(open) =>
+                setJsonOpen((previous) => ({
+                  ...previous,
+                  [selectedProfile]: open,
+                }))
+              }
+              className="border-t border-border/80 pt-2"
             >
-              {selectedJsonIsInvalid
-                ? t(
-                    'settings.aiService.profileSettings.invalidJson',
-                    'Extra request body must be a valid JSON object.'
-                  )
-                : t(
-                    'settings.aiService.profileSettings.validJson',
-                    'Valid JSON object'
+              <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 py-1 text-left text-xs font-medium">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+                  {t(
+                    'settings.aiService.profileSettings.extraBodyJson',
+                    'Extra request body JSON'
                   )}
-            </p>
-          </div>
-        </div>
+                </span>
+                <span
+                  className={
+                    selectedJsonIsInvalid
+                      ? 'shrink-0 text-destructive'
+                      : 'shrink-0 text-muted-foreground'
+                  }
+                >
+                  {selectedJsonIsInvalid
+                    ? t(
+                        'settings.aiService.profileSettings.invalidJsonBadge',
+                        'Invalid JSON'
+                      )
+                    : Object.keys(selectedProfileData.extra_body_json ?? {})
+                          .length
+                      ? t('settings.aiService.profileSettings.custom', 'Custom')
+                      : t(
+                          'settings.aiService.profileSettings.default',
+                          'Default'
+                        )}
+                </span>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2">
+                <Label htmlFor="profile_extra_body_json">
+                  {t(
+                    'settings.aiService.profileSettings.extraBodyJson',
+                    'Extra request body JSON'
+                  )}
+                </Label>
+                <Textarea
+                  id="profile_extra_body_json"
+                  aria-invalid={selectedJsonIsInvalid}
+                  value={selectedJsonDraft}
+                  onChange={(e) => {
+                    const draft = e.target.value;
+                    try {
+                      const parsed = JSON.parse(draft) as unknown;
+                      updateSelectedProfile({
+                        extra_body_json:
+                          typeof parsed === 'object' &&
+                          parsed !== null &&
+                          !Array.isArray(parsed)
+                            ? (parsed as Record<string, unknown>)
+                            : {},
+                        extra_body_json_draft: draft,
+                      });
+                    } catch {
+                      updateSelectedProfile({ extra_body_json_draft: draft });
+                    }
+                  }}
+                  className="mt-1.5 font-mono text-xs"
+                  rows={4}
+                />
+                <p
+                  role={selectedJsonIsInvalid ? 'alert' : undefined}
+                  className={`text-xs mt-1 ${
+                    selectedJsonIsInvalid
+                      ? 'text-destructive'
+                      : 'text-green-600 dark:text-green-400'
+                  }`}
+                >
+                  {selectedJsonIsInvalid
+                    ? t(
+                        'settings.aiService.profileSettings.invalidJson',
+                        'Extra request body must be a valid JSON object.'
+                      )
+                    : t(
+                        'settings.aiService.profileSettings.validJson',
+                        'Valid JSON object'
+                      )}
+                </p>
+              </CollapsibleContent>
+            </Collapsible>
+          </TabsContent>
+        </Tabs>
       </div>
 
       <div className="flex items-center space-x-2">
@@ -790,17 +1034,10 @@ export const ServiceForm = ({
         </Label>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={loading}>
-          <Save className="h-4 w-4 mr-2" />
-          {isEdit
-            ? t(`${translationPrefix}.saveChanges`)
-            : t(`${translationPrefix}.addService`)}
-        </Button>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          <X className="h-4 w-4 mr-2" />
-          {t(`${translationPrefix}.cancel`)}
-        </Button>
+      <div
+        data-testid="ai-service-form-actions"
+        className="flex flex-wrap items-center justify-end gap-2 border-t pt-4 [&_button]:h-9 [&_button]:text-xs"
+      >
         {onTestConnection && (
           // type="button" is critical — the test must not submit the form.
           // Disabled with the same guard as submit so a config the form would
@@ -812,6 +1049,7 @@ export const ServiceForm = ({
             disabled={
               loading ||
               testing ||
+              invalidProfiles.length > 0 ||
               (modelOptions.length === 0 && !selectedModel) ||
               (requiresCustomUrl && !formData.custom_url?.trim())
             }
@@ -826,13 +1064,27 @@ export const ServiceForm = ({
               : t(`${translationPrefix}.testConnection`)}
           </Button>
         )}
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          <X className="h-4 w-4 mr-1.5" />
+          {t(`${translationPrefix}.cancel`)}
+        </Button>
+        <Button type="submit" disabled={loading}>
+          {loading ? (
+            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4 mr-1.5" />
+          )}
+          {isEdit
+            ? t(`${translationPrefix}.saveChanges`)
+            : t(`${translationPrefix}.addService`)}
+        </Button>
         {/* Inline result next to the button; hidden while a test is running. */}
         {onTestConnection && !testing && testStatus && (
           <span
             className={
               testStatus.state === 'success'
-                ? 'text-sm font-medium text-green-600 dark:text-green-400'
-                : 'text-sm font-medium text-destructive'
+                ? 'w-full break-words text-xs font-medium text-green-600 dark:text-green-400'
+                : 'w-full break-words text-xs font-medium text-destructive'
             }
           >
             {testStatus.state === 'success'

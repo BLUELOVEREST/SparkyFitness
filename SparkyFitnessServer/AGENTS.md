@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-11-02_
+_Last updated: 2026-11-04_
 
 SparkyFitness Server is the backend API package for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessServer/`.
 
@@ -14,6 +14,17 @@ SparkyFitness Server is the backend API package for the SparkyFitness monorepo. 
 If a task also touches `shared/`, the frontend, or the mobile app, read the relevant package guide before editing outside this directory. Use `../AGENTS.md` for monorepo-level context.
 
 ## Scope
+
+- AI model discovery stays in the existing authenticated chat route family:
+  `POST /api/chat/ai-service-settings/models`, with shared request/response schemas.
+  Use the guarded outbound network policy, bounded responses and server-held keys;
+  never reuse a stored key for a changed provider URL or expose it to clients.
+  `GET /api/chat/ai-service-settings/active-vision` reports the actual sanitized
+  vision resolver result; do not infer it from the chat selection.
+  Text-only OpenAI-compatible dispatch uses standard text content parts, matching
+  gateways that require `messages[].content` arrays. Task parameter resolution is
+  shared with web summaries in `shared/src/ai/serviceProfiles.ts`; the local
+  `ai/profileSettings.ts` is a compatibility re-export.
 
 - This file is for package-local work in `SparkyFitnessServer/`.
 - Keep changes inside this package unless the task clearly crosses package boundaries.

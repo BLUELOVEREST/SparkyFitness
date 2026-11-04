@@ -537,6 +537,49 @@ describe('dispatchAiRequest — preconditions', () => {
   });
 });
 
+describe('dispatchAiRequest — text-only connection request shapes', () => {
+  it('sends OpenAI-compatible text parts and the exact selected model', async () => {
+    const m = mockFetch(openAiBody('OK'));
+    const result = await dispatchAiRequest({
+      provider: makeProvider({
+        service_type: 'openai_compatible',
+        custom_url: 'https://llm.example.com/v1',
+        model_name: 'vendor/working-model-20261104',
+      }),
+      prompt: 'Reply with OK.',
+      temperature: 0,
+      timeoutMs: 15000,
+    });
+
+    expect(result).toEqual({ ok: true, text: 'OK', json: null });
+    expect(m).toHaveBeenCalledTimes(1);
+    expect(captured(m).body).toMatchObject({
+      model: 'vendor/working-model-20261104',
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'Reply with OK.' }] },
+      ],
+    });
+    expect(captured(m).body.response_format).toBeUndefined();
+  });
+
+  it.each(['openai', 'custom', 'groq', 'mistral', 'openrouter', 'xai', 'meta'])(
+    'preserves string content for %s',
+    async (service_type) => {
+      const m = mockFetch(openAiBody('OK'));
+      await dispatchAiRequest({
+        provider: makeProvider({
+          service_type,
+          custom_url: 'https://llm.example.com/v1/chat/completions',
+        }),
+        prompt: 'Reply with OK.',
+      });
+      expect(captured(m).body.messages).toEqual([
+        { role: 'user', content: 'Reply with OK.' },
+      ]);
+    }
+  );
+});
+
 describe('dispatchAiRequest — text-only structured request shapes', () => {
   it('preserves profile parameters on the Responses path without overriding protected fields', async () => {
     const m = mockFetch({ output_text: JSON.stringify(SAMPLE) });
@@ -846,33 +889,45 @@ describe('dispatchAiRequest — text-only structured request shapes', () => {
     const { url, body } = captured(m);
     expect(url).toBe('https://example.local/v1/chat/completions');
     expect((body.response_format as { type: string }).type).toBe('json_schema');
-    const messages = body.messages as Array<{ content: string }>;
-    expect(messages[0].content).toBe('Do the thing.');
+    expect(body.messages).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'Do the thing.' }] },
+    ]);
   });
 
-  it('DeepSeek OpenAI-compatible endpoints use json_object with schema in prompt', async () => {
-    const m = mockFetch(openAiBody(JSON.stringify(SAMPLE)));
-    await dispatchAiRequest(
-      baseRequest({
-        provider: makeProvider({
-          service_type: 'openai_compatible',
-          custom_url: 'https://api.deepseek.com/v1',
-        }),
-        images: [IMG],
-      })
-    );
-    const { url, body } = captured(m);
-    expect(url).toBe('https://api.deepseek.com/v1/chat/completions');
-    expect(body.response_format).toEqual({ type: 'json_object' });
-    const content = (
-      body.messages as Array<{ content: Array<Record<string, unknown>> }>
-    )[0].content;
-    const textPart = content.find((part) => part.type === 'text') as {
-      text: string;
-    };
-    expect(textPart.text).toContain(JSON.stringify(toStrictJsonSchema(SCHEMA)));
-    expect(content.some((part) => part.type === 'image_url')).toBe(true);
-  });
+  it.each([{ images: [] }, { images: [IMG] }])(
+    'DeepSeek OpenAI-compatible endpoints use json_object with schema in prompt (images: %j)',
+    async ({ images }) => {
+      const m = mockFetch(openAiBody(JSON.stringify(SAMPLE)));
+      await dispatchAiRequest(
+        baseRequest({
+          provider: makeProvider({
+            service_type: 'openai_compatible',
+            custom_url: 'https://api.deepseek.com/v1',
+          }),
+          images,
+        })
+      );
+      const { url, body } = captured(m);
+      expect(url).toBe('https://api.deepseek.com/v1/chat/completions');
+      expect(body.response_format).toEqual({ type: 'json_object' });
+      const content = (
+        body.messages as Array<{ content: Array<Record<string, unknown>> }>
+      )[0].content;
+      const textPart = content.find((part) => part.type === 'text') as {
+        text: string;
+      };
+      expect(textPart.text).toContain(
+        JSON.stringify(toStrictJsonSchema(SCHEMA))
+      );
+      expect(textPart.text).toContain('Do the thing.');
+      expect(content.filter((part) => part.type === 'image_url')).toEqual(
+        images.map((img) => ({
+          type: 'image_url',
+          image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+        }))
+      );
+    }
+  );
 
   it('does not treat lookalike domains as DeepSeek', async () => {
     const m = mockFetch(openAiBody(JSON.stringify(SAMPLE)));

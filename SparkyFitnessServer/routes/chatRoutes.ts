@@ -4,6 +4,8 @@ import multer from 'multer';
 import { pipeUIMessageStreamToResponse } from 'ai';
 import { authenticate } from '../middleware/authMiddleware.js';
 import chatService from '../services/chatService.js';
+import chatRepository from '../models/chatRepository.js';
+import { discoverAiServiceModels } from '../services/aiServiceModelsService.js';
 import type { FoodOptionsErrorCategory } from '../services/chatService.js';
 import { transcribeVoiceAudio } from '../services/voiceTranscriptionService.js';
 import globalSettingsRepository from '../models/globalSettingsRepository.js';
@@ -15,6 +17,8 @@ import {
 } from '../utils/outboundUrlPolicy.js';
 import {
   testAiServiceConnectionRequestSchema,
+  aiServiceModelsRequestSchema,
+  aiServiceSettingsResponseSchema,
   normalizeChatToolCategories,
   aiServiceSettingsMutatorSchema,
   MAX_VOICE_UPLOAD_BYTES,
@@ -22,6 +26,133 @@ import {
   voiceTranscriptionRequestSchema,
 } from '@workspace/shared';
 const router = express.Router();
+
+/**
+ * @swagger
+ * /chat/ai-service-settings/models:
+ *   post:
+ *     summary: Discover OpenAI-compatible model IDs without saving configuration
+ *     description: Requires authentication and enabled per-user AI configuration (administrators bypass that gate). Saved personal settings must belong to the caller; saved global settings require an administrator. A saved key is reused only for the unchanged provider and compatible base URL. Draft keys are never returned. AI network policy applies, including authorized LAN endpoints; redirects are not followed.
+ *     tags: [AI & Insights]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [service_type]
+ *             properties:
+ *               id:
+ *                 type: string
+ *                 format: uuid
+ *               service_type:
+ *                 type: string
+ *                 enum: [openai_compatible]
+ *               custom_url:
+ *                 type: string
+ *               api_key:
+ *                 type: string
+ *                 writeOnly: true
+ *     responses:
+ *       200:
+ *         description: Unique model IDs (at most 1000); no capability or invocation permission guarantee.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [models]
+ *               properties:
+ *                 models:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     required: [id]
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *       400:
+ *         description: Invalid input or changed saved provider/URL without a draft key.
+ *       401:
+ *         description: Authentication required.
+ *       403:
+ *         description: Configuration, ownership, global-key or network policy denial.
+ *       404:
+ *         description: Saved setting not found.
+ *       502:
+ *         description: Provider failure; fixed optional codes ai_models_auth_failed, ai_models_unsupported, ai_models_rate_limited. No provider diagnostics are returned.
+ *       504:
+ *         description: Discovery exceeded 15 seconds (ai_models_timeout).
+ */
+router.post(
+  '/ai-service-settings/models',
+  authenticate,
+  async (req, res, next) => {
+    const parsed = aiServiceModelsRequestSchema.safeParse(req.body);
+    if (!parsed.success)
+      return res
+        .status(400)
+        .json({ error: 'Invalid model discovery request.' });
+    try {
+      const isAdmin = await resolveIsAdmin(req.user, req.authenticatedUserId);
+      if (
+        !isAdmin &&
+        !(await globalSettingsRepository.isUserAiConfigAllowed())
+      ) {
+        return res
+          .status(403)
+          .json({ error: 'Per-user AI service configuration is disabled.' });
+      }
+      const result = await discoverAiServiceModels(
+        parsed.data,
+        req.authenticatedUserId,
+        isAdmin
+      );
+      return res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /chat/ai-service-settings/active-vision:
+ *   get:
+ *     summary: Retrieve the effective vision AI service for the authenticated user
+ *     description: Uses the existing vision resolver, including personal override and global-default fallback rules. Returns AiServiceSettingsResponse or null, without API keys or encrypted credential fields. Does not change selection or routing.
+ *     tags: [AI & Insights]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Effective sanitized vision AI service setting, or null.
+ *       401:
+ *         description: Authentication required.
+ *       500:
+ *         description: Unable to resolve the active vision setting.
+ */
+router.get(
+  '/ai-service-settings/active-vision',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      const setting = await chatRepository.getActiveVisionAiServiceSetting(
+        req.authenticatedUserId
+      );
+      const safeSetting = setting
+        ? aiServiceSettingsResponseSchema.parse({
+            ...setting,
+            reasoning_effort: setting.reasoning_effort ?? undefined,
+          })
+        : null;
+      return res.json(safeSetting);
+    } catch {
+      next(new Error('Unable to retrieve active vision AI service setting.'));
+    }
+  }
+);
 const voiceUpload = multer({
   storage: multer.memoryStorage(),
   limits: {

@@ -8,6 +8,7 @@ import {
   deleteAIService,
   updateUserPreferences,
   getActiveAiServiceSetting,
+  getActiveVisionAiServiceSetting,
 } from '@/api/Settings/aiServiceSettingsService';
 import { aiServiceKeys, userPreferencesKeys } from '@/api/keys/admin';
 import { UserPreferencesChat } from '@/types/settings';
@@ -18,6 +19,17 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 
 // Query hooks for fetching data
+export const useActiveVisionAIService = (enabled: boolean) => {
+  const { user } = useAuth();
+  return useQuery({
+    // Descendant of active() so every existing service/default/preference
+    // invalidation also refreshes the effective Vision route.
+    queryKey: [...aiServiceKeys.active(), 'vision'],
+    queryFn: getActiveVisionAiServiceSetting,
+    enabled: enabled && user?.isDemo === false,
+  });
+};
+
 export const useAIServices = () => {
   const { t } = useTranslation();
   const { user } = useAuth();

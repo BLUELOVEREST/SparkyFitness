@@ -1,7 +1,14 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { useState } from 'react';
+import '@testing-library/jest-dom';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { renderWithClient } from '../test-utils';
 import { ServiceForm } from '@/components/ai/ServiceForm';
 import type { AiServiceSettingsFormInput } from '@/schemas/form/AiServiceSettings.form.zod';
+import { discoverAIServiceModels } from '@/api/Settings/aiServiceSettingsService';
+
+jest.mock('@/api/Settings/aiServiceSettingsService', () => ({
+  discoverAIServiceModels: jest.fn(),
+}));
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -51,6 +58,62 @@ function renderForm(
 }
 
 describe('ServiceForm — model validation', () => {
+  it.each([
+    'settings.aiService.userSettings',
+    'settings.aiService.globalSettings',
+  ])(
+    'tests a freshly fetched selected model without saving for %s',
+    async (translationPrefix) => {
+      jest
+        .mocked(discoverAIServiceModels)
+        .mockResolvedValue({ models: [{ id: 'Vendor/New:latest' }] });
+      const onSubmit = jest.fn();
+      const onTestConnection = jest.fn();
+      function Editor({ translationPrefix }: { translationPrefix: string }) {
+        const [formData, setFormData] = useState(
+          makeFormData({
+            service_type: 'openai_compatible',
+            custom_url: 'https://provider.example/v1',
+            model_name: 'old-model',
+            custom_model_name: 'old-model',
+            showCustomModelInput: true,
+          })
+        );
+        return (
+          <ServiceForm
+            formData={formData}
+            onFormDataChange={(patch) =>
+              setFormData((previous) => ({ ...previous, ...patch }))
+            }
+            onSubmit={onSubmit}
+            onCancel={jest.fn()}
+            onTestConnection={onTestConnection}
+            translationPrefix={translationPrefix}
+          />
+        );
+      }
+      const { unmount } = renderWithClient(
+        <Editor translationPrefix={translationPrefix} />
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Fetch models' }));
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Choose model' })
+      );
+      fireEvent.click(
+        screen.getByRole('option', { name: 'Vendor/New:latest' })
+      );
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: `${translationPrefix}.testConnection`,
+        })
+      );
+      expect(onTestConnection).toHaveBeenLastCalledWith('Vendor/New:latest');
+      expect(onSubmit).not.toHaveBeenCalled();
+      unmount();
+      expect(onTestConnection).toHaveBeenCalledTimes(1);
+    },
+    15000
+  );
   afterEach(() => {
     mockToast.mockClear();
   });
@@ -124,14 +187,199 @@ describe('ServiceForm — model validation', () => {
 });
 
 describe('ServiceForm — task profile overrides', () => {
+  beforeEach(() => mockToast.mockClear());
+  it.each([
+    'settings.aiService.userSettings',
+    'settings.aiService.globalSettings',
+  ])(
+    'groups the connection fields and uses four compact profile tabs for %s',
+    (translationPrefix) => {
+      const { container } = renderWithClient(
+        <ServiceForm
+          formData={makeFormData({ service_type: 'openai_compatible' })}
+          onFormDataChange={jest.fn()}
+          onSubmit={jest.fn()}
+          onCancel={jest.fn()}
+          translationPrefix={translationPrefix}
+          onTestConnection={jest.fn()}
+        />
+      );
+      const connection = screen.getByTestId('ai-connection-fields');
+      expect(connection).toContainElement(
+        container.querySelector('#custom_url')
+      );
+      expect(connection).toContainElement(container.querySelector('#api_key'));
+      expect(connection).toHaveClass('sm:grid-cols-2');
+      const tablist = screen.getByRole('tablist', { name: 'Task profiles' });
+      expect(within(tablist).getAllByRole('tab')).toHaveLength(4);
+      expect(
+        container
+          .querySelector('#system_prompt')!
+          .compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      const footer = screen.getByTestId('ai-service-form-actions');
+      expect(within(footer).getAllByRole('button')).toHaveLength(3);
+    }
+  );
+
+  it('starts extra JSON collapsed and reveals its editable contents on demand', () => {
+    renderForm(makeFormData());
+    expect(
+      screen.queryByRole('textbox', { name: 'Extra request body JSON' })
+    ).not.toBeInTheDocument();
+    const disclosure = screen.getByRole('button', {
+      name: /Extra request body JSON/,
+    });
+    expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(disclosure);
+    expect(
+      screen.getByRole('textbox', { name: 'Extra request body JSON' })
+    ).toHaveValue('{}');
+  });
+
+  it.each([
+    ['max_tokens', 'profile_max_tokens', '0'],
+    ['max_tokens', 'profile_max_tokens', '1.5'],
+    ['timeout_seconds', 'profile_timeout_seconds', '-1'],
+    ['timeout_seconds', 'profile_timeout_seconds', '0.5'],
+    ['temperature', 'profile_temperature', '2.1'],
+    ['temperature', 'profile_temperature', '-0.1'],
+  ])(
+    'blocks hidden invalid %s using %s=%s, reveals Intent and clears the error after correction',
+    (_field, inputId, invalidValue) => {
+      const onSubmit = jest.fn();
+      const onTestConnection = jest.fn();
+      function Editor() {
+        const [formData, setFormData] = useState(makeFormData());
+        return (
+          <ServiceForm
+            formData={formData}
+            onFormDataChange={(patch) =>
+              setFormData((previous) => ({ ...previous, ...patch }))
+            }
+            onSubmit={onSubmit}
+            onCancel={jest.fn()}
+            onTestConnection={onTestConnection}
+          />
+        );
+      }
+      const { container } = renderWithClient(<Editor />);
+      fireEvent.change(container.querySelector(`#${inputId}`)!, {
+        target: { value: invalidValue },
+      });
+      fireEvent.mouseDown(screen.getByRole('tab', { name: /Vision/ }), {
+        button: 0,
+      });
+      const testButton = screen.getByRole('button', { name: /testConnection/ });
+      expect(testButton).toBeDisabled();
+      fireEvent.submit(container.querySelector('form')!);
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(onTestConnection).not.toHaveBeenCalled();
+      expect(screen.getByRole('tab', { name: /Intent/ })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      );
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Enter valid values for the highlighted profile parameters.'
+      );
+      const invalidInput = container.querySelector(`#${inputId}`)!;
+      expect(invalidInput).toHaveAttribute('aria-invalid', 'true');
+      fireEvent.change(invalidInput, { target: { value: '1' } });
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(invalidInput).toHaveAttribute('aria-invalid', 'false');
+      expect(testButton).toBeEnabled();
+      fireEvent.submit(container.querySelector('form')!);
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it('accepts nullable profile defaults and zero temperature across inactive profiles', () => {
+    const { container, onSubmit } = renderForm(
+      makeFormData({
+        profile_settings: {
+          chat: { max_tokens: null, timeout_seconds: null, temperature: null },
+          vision: { temperature: 0 },
+          structured: { max_tokens: 1, timeout_seconds: 1, temperature: 2 },
+        },
+      })
+    );
+    fireEvent.submit(container.querySelector('form')!);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it.each(['chat', 'vision', 'structured'] as const)(
+    'blocks save and exposes invalid %s JSON even while Intent is selected',
+    (profile) => {
+      const onSubmit = jest.fn();
+      const { container } = renderForm(
+        makeFormData({
+          profile_settings: { [profile]: { extra_body_json_draft: '{broken' } },
+        }),
+        onSubmit
+      );
+      fireEvent.submit(container.querySelector('form')!);
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole('tab', { name: new RegExp(profile, 'i') })
+      ).toHaveAttribute('aria-selected', 'true');
+      expect(
+        screen.getByRole('textbox', { name: 'Extra request body JSON' })
+      ).toHaveValue('{broken');
+    }
+  );
+
+  it('keeps an invalid draft discoverable after changing tabs and allows save once corrected', () => {
+    const onSubmit = jest.fn();
+    function Editor() {
+      const [formData, setFormData] = useState(makeFormData());
+      return (
+        <ServiceForm
+          formData={formData}
+          onFormDataChange={(patch) =>
+            setFormData((previous) => ({ ...previous, ...patch }))
+          }
+          onSubmit={onSubmit}
+          onCancel={jest.fn()}
+        />
+      );
+    }
+    const { container } = renderWithClient(<Editor />);
+    fireEvent.click(
+      screen.getByRole('button', { name: /Extra request body JSON/ })
+    );
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Extra request body JSON' }),
+      { target: { value: '[]' } }
+    );
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /Vision/ }), {
+      button: 0,
+    });
+    fireEvent.submit(container.querySelector('form')!);
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole('tab', { name: /Intent/ })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Extra request body JSON' }),
+      { target: { value: '{"safe":true}' } }
+    );
+    fireEvent.submit(container.querySelector('form')!);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('renders the profile override section with the intent defaults', () => {
     renderForm(makeFormData());
 
     expect(screen.getByText('Task profiles')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Intent/ })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /Intent/ })).toBeTruthy();
     expect(screen.getByDisplayValue('1024')).toBeTruthy();
     expect(screen.getByDisplayValue('30')).toBeTruthy();
     expect(screen.getByDisplayValue('0')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Extra request body JSON/ })
+    );
     expect(screen.getByDisplayValue('{}')).toBeTruthy();
   });
 
@@ -149,7 +397,7 @@ describe('ServiceForm — task profile overrides', () => {
       systemPrompt!.compareDocumentPosition(profileTitle) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
-    expect(profileSection?.className).toContain('py-6');
+    expect(profileSection?.className).toContain('pt-4');
   });
 
   it('uses readable fallback labels when profile translations are missing', () => {
@@ -200,6 +448,9 @@ describe('ServiceForm — task profile overrides', () => {
     fireEvent.change(document.getElementById('profile_max_tokens')!, {
       target: { value: '2048' },
     });
+    fireEvent.click(
+      screen.getByRole('button', { name: /Extra request body JSON/ })
+    );
     fireEvent.change(screen.getByLabelText('Extra request body JSON'), {
       target: { value: '{"reasoning_effort":"low"}' },
     });

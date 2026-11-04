@@ -12,6 +12,7 @@ interface ApiCallOptions extends RequestInit {
   // Still throws, but shows no toast for an HTTP or network error: for
   // secondary requests whose failure the caller already shows in place.
   suppressErrorToast?: boolean;
+  sensitiveBody?: boolean;
   externalApi?: boolean;
   isFormData?: boolean; // New option to indicate if the body is FormData
   responseType?: 'json' | 'text' | 'blob'; // Add responseType option
@@ -115,8 +116,7 @@ export function apiCall<T = any>(
   endpoint: string,
   options?: ApiCallOptions
 ): Promise<T>;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function apiCall<T = any>(
+export async function apiCall<T>(
   endpoint: string,
   options?: ApiCallOptions
 ): Promise<T> {
@@ -177,8 +177,9 @@ export async function apiCall<T = any>(
 
   // The Authorization header is no longer needed as authentication is handled by httpOnly cookies.
 
+  const { sensitiveBody, ...requestOptions } = options ?? {};
   const config: RequestInit = {
-    ...options,
+    ...requestOptions,
     headers,
   };
 
@@ -190,7 +191,7 @@ export async function apiCall<T = any>(
     logging.debug(
       userLoggingLevel,
       `API Call: Request body for ${endpoint}:`,
-      options.body
+      sensitiveBody ? '[redacted]' : options.body
     );
     if (!options.isFormData && typeof options.body === 'object') {
       config.body = JSON.stringify(options.body);
@@ -203,7 +204,7 @@ export async function apiCall<T = any>(
     logging.debug(
       userLoggingLevel,
       `API Call: Sending request to ${url} with config:`,
-      config
+      sensitiveBody ? { ...config, body: '[redacted]' } : config
     );
     const response = await fetch(url, config);
     logging.debug(
@@ -223,12 +224,19 @@ export async function apiCall<T = any>(
     }
 
     if (!response.ok) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let errorData: any;
+      let errorData: Record<string, unknown> & {
+        error?: unknown;
+        message?: unknown;
+        code?: unknown;
+      };
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.indexOf('application/json') !== -1) {
         try {
-          errorData = await response.json();
+          const parsedError: unknown = await response.json();
+          errorData =
+            typeof parsedError === 'object' && parsedError !== null
+              ? (parsedError as Record<string, unknown>)
+              : {};
         } catch (e) {
           errorData = {
             message: i18n.t(
@@ -244,9 +252,11 @@ export async function apiCall<T = any>(
         (errorData.error ? String(errorData.error) : '') ||
         (errorData.message ? String(errorData.message) : '') ||
         `API call failed with status ${response.status}`;
+      const errorCode =
+        typeof errorData.code === 'string' ? errorData.code : undefined;
       logging.error(userLoggingLevel, `API Call: Error response from ${url}:`, {
         status: response.status,
-        errorData,
+        errorData: sensitiveBody ? '[redacted]' : errorData,
       });
 
       // Special handling for 400 errors on recent/top endpoints
@@ -275,7 +285,7 @@ export async function apiCall<T = any>(
 
       // Suppress toast for 404 errors if suppress404Toast is true
       if (options?.suppressErrorToast) {
-        throw new HttpApiError(errorMessage, response.status);
+        throw new HttpApiError(errorMessage, response.status, errorCode);
       }
 
       if (response.status === 404 && options?.suppress404Toast) {
@@ -285,7 +295,6 @@ export async function apiCall<T = any>(
         );
         return null as unknown as T; // Return null for 404 with suppression
       } else {
-        const errorCode = errorData.code ? String(errorData.code) : undefined;
         const isDemoRestriction = errorCode?.startsWith('DEMO_') ?? false;
         // DEMO_UPLOAD_RESTRICTED is deliberately not memoized: the guard
         // decides it from the request's content type, not its route, so the
@@ -343,7 +352,7 @@ export async function apiCall<T = any>(
     logging.debug(
       userLoggingLevel,
       `API Call: Received JSON response from ${url}:`,
-      jsonResponse
+      sensitiveBody ? '[redacted]' : jsonResponse
     );
     //console.log(`API Call: Returning JSON response for ${url}:`, jsonResponse); // Added console.log
     return jsonResponse;
@@ -355,7 +364,11 @@ export async function apiCall<T = any>(
     }
 
     const errorMessage = err instanceof Error ? err.message : String(err);
-    logging.error(userLoggingLevel, 'API call network error:', err); // Log the raw error object for better debugging
+    logging.error(
+      userLoggingLevel,
+      'API call network error:',
+      sensitiveBody ? '[redacted]' : err
+    );
     if (!options?.suppressErrorToast) {
       toast({
         title: i18n.t('hooks.api.networkError', 'Network Error'),

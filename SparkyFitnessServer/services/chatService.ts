@@ -2611,6 +2611,7 @@ async function testAiServiceConnection(
   let customUrl = payload.custom_url?.trim() || undefined;
   let modelName = payload.model_name?.trim() || undefined;
   let maxTokens = payload.max_tokens ?? undefined;
+  let reasoningEffort = payload.reasoning_effort;
 
   // Stored-key fallback: the api_key field is blank by design on edit (the key
   // is encrypted server-side and never sent to the browser), so a test on a
@@ -2640,6 +2641,7 @@ async function testAiServiceConnection(
         customUrl = customUrl ?? stored.custom_url ?? undefined;
         modelName = modelName ?? stored.model_name ?? undefined;
         maxTokens = maxTokens ?? stored.max_tokens ?? undefined;
+        reasoningEffort = reasoningEffort ?? stored.reasoning_effort;
       }
     }
   }
@@ -2681,6 +2683,7 @@ async function testAiServiceConnection(
     model_name: modelName,
     custom_url: customUrl,
     max_tokens: maxTokens,
+    reasoning_effort: reasoningEffort,
   };
 
   const result = await dispatchAiRequest({

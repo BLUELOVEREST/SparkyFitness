@@ -281,6 +281,7 @@ const GlobalAISettings = () => {
       is_active: service.is_active,
       model_name: isCustomModel ? '' : service.model_name || '',
       max_tokens: service.max_tokens ?? null,
+      profile_settings: { ...service.profile_settings },
       showCustomModelInput: isCustomModel,
       custom_model_name: service.model_name ?? '',
       chat_tool_profile: service.chat_tool_profile ?? 'full',
@@ -446,6 +447,7 @@ const GlobalAISettings = () => {
                     model_name: model,
                     max_tokens: newService.max_tokens ?? null,
                     profile_settings: newService.profile_settings,
+                    reasoning_effort: newService.reasoning_effort,
                   })
                 }
                 testing={isTesting}
@@ -479,6 +481,7 @@ const GlobalAISettings = () => {
                 model_name: model,
                 max_tokens: editData.max_tokens ?? null,
                 profile_settings: editData.profile_settings,
+                reasoning_effort: editData.reasoning_effort,
               });
             }}
             testing={isTesting}

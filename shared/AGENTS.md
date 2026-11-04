@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-11-02_
+_Last updated: 2026-11-04_
 
 `@workspace/shared` is a source-first TypeScript workspace library package for schemas, constants, and timezone/day helpers consumed by SparkyFitnessServer, SparkyFitnessFrontend, and SparkyFitnessMobile.
 
@@ -15,6 +15,11 @@ _Last updated: 2026-11-02_
 `schemas/api/FoodAssistant.api.zod.ts` and `schemas/database/FoodAssistant.zod.ts` define lasting preferences, versioned tasks, unresolved ingredients and idempotent operation records. All state is owner-only; these additive contracts do not change existing chat clients.
 
 ## Structure
+
+- AI task defaults and `resolveAiProfileSettings` live in `src/ai/serviceProfiles.ts`.
+  Server dispatch and web configuration summaries share its token fallback,
+  timeout conversion and null/zero semantics. Provider-specific capability rules
+  and chat's service-level reasoning fallback remain consumer responsibilities.
 
 - SparkyGym has eleven tables: the ten owner-only tables below plus `sparkygym_archive_cleanup_jobs`, mirrored separately in `SparkyGymArchiveCleanupJobs.zod.ts`. Cleanup jobs are Tier 3 system/internal, default-deny to every request context, have no user FK, and expose no API contract.
 

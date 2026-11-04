@@ -12,7 +12,31 @@ import {
   TestAiServiceConnectionRequest,
   TestAiServiceConnectionResponse,
   testAiServiceConnectionResponseSchema,
+  AiServiceModelsRequest,
+  AiServiceModelsResponse,
+  aiServiceModelsResponseSchema,
 } from '@workspace/shared';
+
+export const discoverAIServiceModels = async (
+  payload: AiServiceModelsRequest
+): Promise<AiServiceModelsResponse> => {
+  const response = await apiCall('/chat/ai-service-settings/models', {
+    sensitiveBody: true,
+    method: 'POST',
+    body: payload,
+    suppressErrorToast: true,
+  });
+  return aiServiceModelsResponseSchema.parse(response);
+};
+
+export const getActiveVisionAiServiceSetting =
+  async (): Promise<AiServiceSettingsResponse | null> => {
+    const response = await apiCall('/chat/ai-service-settings/active-vision', {
+      method: 'GET',
+      suppress404Toast: true,
+    });
+    return response ? aiServiceSettingsResponseSchema.parse(response) : null;
+  };
 
 export const getAIServices = async (): Promise<AiServiceSettingsResponse[]> => {
   try {
@@ -73,6 +97,7 @@ export const addAIService = async (
   serviceData: CreateAiServiceSettingsRequest
 ): Promise<AiServiceSettingsPostResponse> => {
   const response = await apiCall('/chat', {
+    sensitiveBody: true,
     method: 'POST',
     body: { action: 'save_ai_service_settings', service_data: serviceData },
   });
@@ -84,6 +109,7 @@ export const updateAIService = async (
   serviceUpdateData: UpdateAiServiceSettingsRequest
 ): Promise<AiServiceSettingsPostResponse> => {
   const response = await apiCall('/chat', {
+    sensitiveBody: true,
     method: 'POST',
     body: {
       action: 'save_ai_service_settings',
@@ -106,6 +132,7 @@ export const testAIServiceConnection = async (
   payload: TestAiServiceConnectionRequest
 ): Promise<TestAiServiceConnectionResponse> => {
   const response = await apiCall('/chat/ai-service-settings/test', {
+    sensitiveBody: true,
     method: 'POST',
     body: payload,
   });
@@ -146,6 +173,7 @@ export const createGlobalAIService = async (
   serviceData: CreateAiServiceSettingsRequest
 ): Promise<AiServiceSettingsResponse> => {
   const response = await apiCall('/admin/ai-service-settings/global', {
+    sensitiveBody: true,
     method: 'POST',
     body: serviceData,
   });
@@ -159,6 +187,7 @@ export const updateGlobalAIService = async (
   const response = await apiCall(
     `/admin/ai-service-settings/global/${serviceId}`,
     {
+      sensitiveBody: true,
       method: 'PUT',
       body: serviceUpdateData,
     }
