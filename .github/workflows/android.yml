@@ -89,18 +89,21 @@ jobs:
         id: apk
         run: |
           set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
           APK_PATH=$(find SparkyFitnessMobile/android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
           WEAR_PATH=SparkyFitnessMobile/android/wearos/build/outputs/apk/release/wearos-release.apk
-          test -n "$APK_PATH"
-          test -f "$WEAR_PATH"
+          test -n "$APK_PATH" && test -f "$APK_PATH" || fail "Phone release APK is missing"
+          test -f "$WEAR_PATH" || fail "Wear OS release APK is missing at the expected path"
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
-          test -n "$APKSIGNER"
-          PHONE_CERT=$("$APKSIGNER" verify --print-certs "$APK_PATH" | awk '/Signer #1 certificate SHA-256 digest:/ {print $NF}')
-          WEAR_CERT=$("$APKSIGNER" verify --print-certs "$WEAR_PATH" | awk '/Signer #1 certificate SHA-256 digest:/ {print $NF}')
-          EXPECTED_CERT=$(keytool -exportcert -alias "$SPARKY_RELEASE_KEY_ALIAS" -keystore "$SPARKY_RELEASE_STORE_FILE" -storepass:env SPARKY_RELEASE_STORE_PASSWORD | sha256sum | awk '{print $1}')
-          test -n "$PHONE_CERT"
-          test "$PHONE_CERT" = "$EXPECTED_CERT"
-          test "$PHONE_CERT" = "$WEAR_CERT"
+          test -n "$APKSIGNER" || fail "Android apksigner is missing"
+          PHONE_CERT=$("$APKSIGNER" verify --print-certs "$APK_PATH" | awk '/Signer #1 certificate SHA-256 digest:/ {print $NF}') || fail "Phone APK signature verification failed"
+          WEAR_CERT=$("$APKSIGNER" verify --print-certs "$WEAR_PATH" | awk '/Signer #1 certificate SHA-256 digest:/ {print $NF}') || fail "Wear OS APK signature verification failed"
+          EXPECTED_CERT=$(keytool -exportcert -alias "$SPARKY_RELEASE_KEY_ALIAS" -keystore "$SPARKY_RELEASE_STORE_FILE" -storepass:env SPARKY_RELEASE_STORE_PASSWORD | sha256sum | awk '{print $1}') || fail "Cannot read the configured release certificate"
+          test -n "$PHONE_CERT" || fail "Phone APK signer certificate digest is missing"
+          test -n "$WEAR_CERT" || fail "Wear OS APK signer certificate digest is missing"
+          test "$PHONE_CERT" = "$EXPECTED_CERT" || fail "Phone APK is not signed with the configured release certificate"
+          test "$WEAR_CERT" = "$EXPECTED_CERT" || fail "Wear OS APK is not signed with the configured release certificate"
+          echo "Phone and Wear OS APK signatures match the configured release certificate"
           APK_NAME="SparkyFitness-${GITHUB_REF_NAME:-manual}-arm64-release.apk"
           WEAR_NAME="SparkyFitness-${GITHUB_REF_NAME:-manual}-wearos-release.apk"
           cp "$APK_PATH" "$APK_NAME"
