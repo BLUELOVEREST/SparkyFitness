@@ -1,9 +1,9 @@
 import * as Notifications from 'expo-notifications';
-import i18n from '../localization/i18n';
 import { addLog } from './LogService';
 import {
   ensureSymptomReminderChannel,
   hasNotificationPermission,
+  notificationCopy,
 } from './notifications';
 
 const SYMPTOM_REMINDER_CHANNEL_ID = 'symptom-reminders';
@@ -22,25 +22,22 @@ export async function ensureSymptomNotificationCategory(): Promise<void> {
       [
         {
           identifier: SYMPTOM_ACTION_END_EPISODE,
-          buttonTitle: i18n.t('symptoms.actions.endNow', {
-            defaultValue: 'End now',
-          }),
+          buttonTitle: notificationCopy('symptoms.actions.endNow', 'End now'),
           options: { isDestructive: false },
         },
         {
           identifier: SYMPTOM_ACTION_STILL_ONGOING,
-          buttonTitle: i18n.t('symptoms.actions.stillOngoing', {
-            defaultValue: 'Still ongoing',
-          }),
+          buttonTitle: notificationCopy(
+            'symptoms.actions.stillOngoing',
+            'Still ongoing'
+          ),
           options: { isDestructive: false },
         },
       ]
     );
   } catch (err) {
-    addLog(
-      `ensureSymptomNotificationCategory failed: ${(err as Error).message}`,
-      'ERROR'
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    addLog(`ensureSymptomNotificationCategory failed: ${message}`, 'ERROR');
   }
 }
 
@@ -63,15 +60,15 @@ export async function scheduleOngoingEpisodeNudge(
     await Notifications.scheduleNotificationAsync({
       identifier: notifId,
       content: {
-        title: i18n.t('symptoms.notification.nudgeTitle', {
-          defaultValue: 'Episode still active?',
-        }),
-        body: i18n.t('symptoms.notification.nudgeBody', {
-          defaultValue:
-            '{{name}} has been running for {{hours}} hours. Is it still ongoing or ended?',
-          name: symptomName,
-          hours: nudgeHours,
-        }),
+        title: notificationCopy(
+          'symptoms.notification.nudgeTitle',
+          'Episode still active?'
+        ),
+        body: notificationCopy(
+          'symptoms.notification.nudgeBody',
+          '{{name}} has been running for {{hours}} hours. Is it still ongoing or ended?',
+          { name: symptomName, hours: nudgeHours }
+        ),
         sound: true,
         categoryIdentifier: SYMPTOM_EPISODE_NUDGE_CATEGORY,
         data: { episodeId, symptomName },

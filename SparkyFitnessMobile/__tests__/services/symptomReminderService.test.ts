@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import i18n from '../../src/localization/i18n';
 import {
   ensureSymptomNotificationCategory,
   scheduleOngoingEpisodeNudge,
@@ -22,6 +23,9 @@ const mockSetCategory =
   >;
 
 describe('symptomReminderService', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetPerms.mockResolvedValue({
@@ -42,6 +46,38 @@ describe('symptomReminderService', () => {
       ])
     );
   });
+
+  it.each([undefined, null, ''])(
+    'provides notification copy when translation returns %p',
+    async (translation) => {
+      jest.spyOn(i18n, 't').mockReturnValue(translation as never);
+      await ensureSymptomNotificationCategory();
+      expect(mockSetCategory).toHaveBeenCalledWith('symptom-episode-nudge', [
+        expect.objectContaining({
+          identifier: 'symptom-end-episode',
+          buttonTitle: 'End now',
+        }),
+        expect.objectContaining({
+          identifier: 'symptom-still-ongoing',
+          buttonTitle: 'Still ongoing',
+        }),
+      ]);
+      await scheduleOngoingEpisodeNudge(
+        'ep-123',
+        'Migraine',
+        new Date().toISOString(),
+        24
+      );
+      expect(mockSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.objectContaining({
+            title: 'Episode still active?',
+            body: 'Migraine has been running for 24 hours. Is it still ongoing or ended?',
+          }),
+        })
+      );
+    }
+  );
 
   it('schedules ongoing episode nudge for future timestamp', async () => {
     const futureStart = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // 2 hours ago
