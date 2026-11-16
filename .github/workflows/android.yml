@@ -96,8 +96,10 @@ jobs:
           test -f "$WEAR_PATH" || fail "Wear OS release APK is missing at the expected path"
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
           test -n "$APKSIGNER" || fail "Android apksigner is missing"
-          PHONE_CERT=$("$APKSIGNER" verify --print-certs "$APK_PATH" | awk '/Signer #1 certificate SHA-256 digest:/ {print $NF}') || fail "Phone APK signature verification failed"
-          WEAR_CERT=$("$APKSIGNER" verify --print-certs "$WEAR_PATH" | awk '/Signer #1 certificate SHA-256 digest:/ {print $NF}') || fail "Wear OS APK signature verification failed"
+          echo "Using apksigner: $APKSIGNER"
+          node --test .github/scripts/apk-certificate-digest.test.cjs
+          PHONE_CERT=$("$APKSIGNER" verify --print-certs "$APK_PATH" | node .github/scripts/apk-certificate-digest.cjs) || fail "Phone APK signature verification or certificate parsing failed"
+          WEAR_CERT=$("$APKSIGNER" verify --print-certs "$WEAR_PATH" | node .github/scripts/apk-certificate-digest.cjs) || fail "Wear OS APK signature verification or certificate parsing failed"
           EXPECTED_CERT=$(keytool -exportcert -alias "$SPARKY_RELEASE_KEY_ALIAS" -keystore "$SPARKY_RELEASE_STORE_FILE" -storepass:env SPARKY_RELEASE_STORE_PASSWORD | sha256sum | awk '{print $1}') || fail "Cannot read the configured release certificate"
           test -n "$PHONE_CERT" || fail "Phone APK signer certificate digest is missing"
           test -n "$WEAR_CERT" || fail "Wear OS APK signer certificate digest is missing"
