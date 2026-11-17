@@ -26,6 +26,7 @@ import {
 import type { DailySummary } from '../types/dailySummary';
 import { getTodayDate } from '../utils/dateUtils';
 import { buildHydrationWidgetSnapshot } from '../utils/widgetSnapshots';
+import { useEnergyUnit } from './useEnergyUnit';
 
 const WIDGET_KIND = 'widget';
 const CALORIE_SNAPSHOT_KEY = 'calorieSnapshot';
@@ -52,6 +53,7 @@ export function useWidgetSync(
   const canLog = water?.canLog ?? false;
   const date = summary?.date;
   const isToday = date === getTodayDate();
+  const energyUnit = useEnergyUnit();
   const lastAndroidCalorieSnapshotKeyRef = useRef<string | null>(null);
   const lastAndroidMacroSnapshotKeyRef = useRef<string | null>(null);
   const lastAndroidHydrationSnapshotKeyRef = useRef<string | null>(null);
@@ -65,7 +67,7 @@ export function useWidgetSync(
     const lastUpdated = Math.floor(Date.now() / 1000);
 
     if (Platform.OS === 'ios') {
-      const calorieSnapshot = buildCalorieWidgetSnapshot(summary);
+      const calorieSnapshot = buildCalorieWidgetSnapshot(summary, energyUnit);
       try {
         if (!iosAppGroup) {
           addLog(
@@ -90,6 +92,7 @@ export function useWidgetSync(
           carbs: summary.carbs.consumed,
           fat: summary.fat.consumed,
           calories: summary.caloriesConsumed,
+          energyUnit,
           lastUpdated,
         });
 
@@ -131,7 +134,7 @@ export function useWidgetSync(
     }
 
     if (Platform.OS === 'android') {
-      const snapshots = buildAndroidWidgetSnapshots(summary);
+      const snapshots = buildAndroidWidgetSnapshots(summary, energyUnit);
       // An account change clears the widgets, so the same figures signed in
       // again (a session renewed by the same person) still have to be pushed.
       const generation = getAndroidWidgetGeneration();
@@ -234,7 +237,7 @@ export function useWidgetSync(
         }
       })();
     }
-  }, [summary, date, isToday, drinkMl, waterUnit, canLog]);
+  }, [summary, date, isToday, drinkMl, waterUnit, canLog, energyUnit]);
 }
 
 /**

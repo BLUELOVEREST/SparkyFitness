@@ -3,6 +3,8 @@ import '@testing-library/jest-dom';
 import MealPlanTemplateForm from '@/pages/Foods/MealPlanTemplateForm';
 import { renderWithClient } from '../test-utils';
 
+let mockEnergyUnit = 'kcal';
+
 jest.mock('react-i18next', () => ({
   initReactI18next: {
     type: '3rdParty',
@@ -14,7 +16,14 @@ jest.mock('react-i18next', () => ({
 }));
 
 jest.mock('@/contexts/PreferencesContext', () => ({
-  usePreferences: () => ({ loggingLevel: 'debug', firstDayOfWeek: 1 }),
+  usePreferences: () => ({
+    loggingLevel: 'debug',
+    firstDayOfWeek: 1,
+    energyUnit: mockEnergyUnit,
+    convertEnergy: (value: number) =>
+      mockEnergyUnit === 'kJ' ? value * 4.184 : value,
+    getEnergyUnitString: () => mockEnergyUnit,
+  }),
 }));
 
 jest.mock('@/hooks/use-toast', () => ({
@@ -113,6 +122,7 @@ jest.mock('@/hooks/Foods/useFoods', () => ({
 
 describe('MealPlanTemplateForm carb cycle mode', () => {
   beforeEach(() => {
+    mockEnergyUnit = 'kcal';
     jest.clearAllMocks();
     mockPreview.mockResolvedValue({
       weekStartDate: '2026-07-06',
@@ -141,64 +151,73 @@ describe('MealPlanTemplateForm carb cycle mode', () => {
     });
   });
 
-  it('generates carb-cycle meal targets from the most recent account weight', async () => {
-    const onSave = jest.fn();
+  it.each(['kcal', 'kJ'])(
+    'generates carb-cycle targets in kcal while displaying %s',
+    async (unit) => {
+      mockEnergyUnit = unit;
+      const onSave = jest.fn();
 
-    renderWithClient(
-      <MealPlanTemplateForm
-        template={{
-          plan_name: 'Next week',
-          start_date: '2026-07-06',
-          end_date: '2026-07-12',
-          is_active: false,
-          assignments: [],
-        }}
-        onSave={onSave}
-        onClose={jest.fn()}
-      />
-    );
+      renderWithClient(
+        <MealPlanTemplateForm
+          template={{
+            plan_name: 'Next week',
+            start_date: '2026-07-06',
+            end_date: '2026-07-12',
+            is_active: false,
+            assignments: [],
+          }}
+          onSave={onSave}
+          onClose={jest.fn()}
+        />
+      );
 
-    fireEvent.click(screen.getByRole('button', { name: /carb cycle/i }));
-    expect(screen.queryByLabelText(/body weight/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/82.4 kg/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /carb cycle/i }));
+      expect(screen.queryByLabelText(/body weight/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/82.4 kg/i)).toBeInTheDocument();
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /generate carb cycle targets/i })
-    );
+      fireEvent.click(
+        screen.getByRole('button', { name: /generate carb cycle targets/i })
+      );
 
-    await waitFor(() => {
-      expect(mockPreview).toHaveBeenCalledWith(
+      await waitFor(() => {
+        expect(mockPreview).toHaveBeenCalledWith(
+          expect.objectContaining({
+            weekStartDate: '2026-07-06',
+            bodyWeightKg: 82.4,
+            carbsPerKg: 3,
+            proteinPerKg: 2,
+            fatPerKg: 1,
+          })
+        );
+      });
+
+      expect(
+        await screen.findByText(
+          unit === 'kJ' ? /Target: 1255 kJ/i : /Target: 300 kcal/i
+        )
+      ).toBeInTheDocument();
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /common.saveChanges/i })
+      );
+
+      expect(onSave).toHaveBeenCalledWith(
         expect.objectContaining({
-          weekStartDate: '2026-07-06',
-          bodyWeightKg: 82.4,
-          carbsPerKg: 3,
-          proteinPerKg: 2,
-          fatPerKg: 1,
+          macro_targets: {
+            1: [
+              expect.objectContaining({
+                label: 'Pre-Workout',
+                calories: 300,
+                carbs: 30,
+                protein: 25,
+                fat: 0,
+              }),
+            ],
+          },
         })
       );
-    });
-
-    expect(await screen.findByText(/Target: 300 kcal/i)).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /common.saveChanges/i })
-    );
-
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({
-        macro_targets: {
-          1: [
-            expect.objectContaining({
-              label: 'Pre-Workout',
-              carbs: 30,
-              protein: 25,
-              fat: 0,
-            }),
-          ],
-        },
-      })
-    );
-  });
+    }
+  );
 
   it('normalizes carb-cycle generation without changing the plan effective dates', async () => {
     const onSave = jest.fn();

@@ -72,6 +72,10 @@ import {
   SafeFoodsLibrary,
   SafeMealsLibrary,
   SafeMealPlans,
+  SafeLabReportImport,
+  SafeLabResultAdd,
+  SafeLabResultDetail,
+  SafeLabResults,
   SafePersonalRecords,
   SafeWatchRunLive,
   SafeRunPrograms,
@@ -89,7 +93,11 @@ import {
   SafeWorkoutPlans,
   SafeWorkoutPlanForm,
   SafeWaterContainers,
+  SafeWaterLog,
   SafeWaterContainerEdit,
+  SafeActionTags,
+  SafeActionTagForm,
+  SafeActionTagScan,
   SafeExercisesLibrary,
   SafeWorkoutPresetsLibrary,
   SafeFoodDetail,
@@ -126,6 +134,8 @@ import {
   SafeImportHistory,
   SafeMeasurementsAdd,
   SafeMindfulnessLog,
+  SafeOralCare,
+  SafeOralCareLog,
   SafeProgressPhotos,
   SafeProgressPhotoCompare,
   SafeProgressPhotoTimelapse,
@@ -171,6 +181,7 @@ import {
   SafeHeartRateReport,
   SafeCompareReport,
   SafeHydrationReport,
+  SafeOralCareReport,
   SafeSubstancesReport,
   SafeMeasurementsReport,
   SafeReportsSettings,
@@ -229,10 +240,10 @@ import ActiveWorkoutBar, {
 import { ActiveWorkoutTransitionScreenLayout } from './src/components/ActiveWorkoutTransitionProbe';
 import PendingPresetUpdatePrompt from './src/components/PendingPresetUpdatePrompt';
 import { usePendingPresetUpdateStore } from './src/stores/pendingPresetUpdateStore';
-import { useAppPreferencesStore } from './src/stores/appPreferencesStore';
 import ActiveWorkoutKeepAwake from './src/components/ActiveWorkoutKeepAwake';
 import MedicationReminderReconciler from './src/components/MedicationReminderReconciler';
 import MoodCheckinReminderReconciler from './src/components/MoodCheckinReminderReconciler';
+import OralCareReminderReconciler from './src/components/OralCareReminderReconciler';
 import {
   useNativeIOSTabsActive,
   useNativeIOSHeadersActive,
@@ -423,15 +434,13 @@ function AppContent() {
     handleAddMood,
     handleStartCheckIn,
     handleAddMindfulness,
+    handleAddOralCare,
     handleRecordActivity,
     handleAskSparky,
     handleOpenCycle,
     handleSyncHealthData,
     handleAddSheetDismissWithoutAction,
   } = useAddSheetActions({ syncMutation });
-  const guidedCheckInEnabled = useAppPreferencesStore(
-    (s) => s.guidedCheckInEnabled
-  );
 
   const { enabled: cycleEnabled } = useCycleMode();
   const cycleSheetLabel = useCycleSheetLabel();
@@ -513,7 +522,7 @@ function AppContent() {
 
   const linking = useMemo<LinkingOptions<RootStackParamList>>(
     () => ({
-      prefixes: ['sparkyfitnessmobile://'],
+      prefixes: ['sparkyfitnessmobile://', 'https://tag.sparkyfitness.com'],
       config: {
         initialRouteName: 'Tabs',
         screens: {
@@ -535,8 +544,12 @@ function AppContent() {
           ActiveWorkout: 'active-workout',
           // The run Live Activity opens the recording screen.
           RecordActivity: 'record-activity',
+          // The brushing timer's Live Activity opens the oral care screen.
+          OralCare: 'oral-care',
           // Route generation; without a routing provider the screen explains that.
           RouteGenerate: 'routes/generate',
+          // An NFC tag tap: https://tag.sparkyfitness.com/t/<code> (#941).
+          ActionTagScan: 't/:code',
         },
       },
     }),
@@ -2311,6 +2324,127 @@ function AppContent() {
                 }
               )}
             />
+            <Stack.Screen
+              name="LabResults"
+              component={SafeLabResults}
+              options={createStackScreenOptions(
+                t('screens.labResults', { defaultValue: 'Lab results' }),
+                {
+                  headerBackTitle: t('navigation.library', {
+                    defaultValue: 'Library',
+                  }),
+                }
+              )}
+            />
+            <Stack.Screen
+              name="LabResultDetail"
+              component={SafeLabResultDetail}
+              options={createStackScreenOptions(
+                t('screens.labResultDetail', { defaultValue: 'Lab result' }),
+                {
+                  headerBackTitle: t('screens.labResults', {
+                    defaultValue: 'Lab results',
+                  }),
+                }
+              )}
+            />
+            <Stack.Screen
+              name="LabResultAdd"
+              component={SafeLabResultAdd}
+              options={createStackScreenOptions(
+                t('screens.labResultAdd', { defaultValue: 'Add lab result' }),
+                {
+                  presentation: 'modal',
+                  headerBackButtonDisplayMode: 'minimal',
+                  ...(Platform.OS === 'android' ? androidModalAnimation : {}),
+                }
+              )}
+            />
+            <Stack.Screen
+              name="LabReportImport"
+              component={SafeLabReportImport}
+              options={createStackScreenOptions(
+                t('screens.labReportImport', { defaultValue: 'Import report' }),
+                {
+                  presentation: 'modal',
+                  headerBackButtonDisplayMode: 'minimal',
+                  ...(Platform.OS === 'android' ? androidModalAnimation : {}),
+                }
+              )}
+            />
+            <Stack.Screen
+              name="WaterLog"
+              component={SafeWaterLog}
+              options={createStackScreenOptions(
+                t('waterLog.title', { defaultValue: 'Drinks' }),
+                {
+                  headerBackTitle: t('navigation.dashboard', {
+                    defaultValue: 'Dashboard',
+                  }),
+                }
+              )}
+            />
+            <Stack.Screen
+              name="ActionTags"
+              component={SafeActionTags}
+              options={createStackScreenOptions(
+                t('actionTags.title', { defaultValue: 'NFC tags' }),
+                {
+                  headerBackTitle: t('navigation.settings', {
+                    defaultValue: 'Settings',
+                  }),
+                }
+              )}
+            />
+            <Stack.Screen
+              name="ActionTagForm"
+              component={SafeActionTagForm}
+              options={createStackScreenOptions(
+                t('actionTags.form.createTitle', {
+                  defaultValue: 'Set up NFC tag',
+                }),
+                { headerBackTitle: t('common.back', { defaultValue: 'Back' }) }
+              )}
+            />
+            <Stack.Screen
+              name="ActionTagScan"
+              component={SafeActionTagScan}
+              options={createStackScreenOptions(
+                t('actionTags.scan.title', { defaultValue: 'NFC tag' })
+              )}
+            />
+            <Stack.Screen
+              name="OralCareReport"
+              component={SafeOralCareReport}
+              options={createStackScreenOptions(
+                t('oralCareReport.title', { defaultValue: 'Oral care' }),
+                { headerBackButtonDisplayMode: 'minimal' }
+              )}
+            />
+            <Stack.Screen
+              name="OralCare"
+              component={SafeOralCare}
+              options={createStackScreenOptions(
+                t('oralCare.title', { defaultValue: 'Oral care' }),
+                {
+                  headerBackTitle: t('navigation.dashboard', {
+                    defaultValue: 'Dashboard',
+                  }),
+                }
+              )}
+            />
+            <Stack.Screen
+              name="OralCareLog"
+              component={SafeOralCareLog}
+              options={createStackScreenOptions(
+                t('oralCare.log.addTitle', { defaultValue: 'Log oral care' }),
+                {
+                  presentation: 'modal',
+                  headerBackButtonDisplayMode: 'minimal',
+                  ...(Platform.OS === 'android' ? androidModalAnimation : {}),
+                }
+              )}
+            />
           </Stack.Navigator>
           <AddSheet
             ref={addSheetRef}
@@ -2325,10 +2459,10 @@ function AppContent() {
             onAddSymptoms={handleAddSymptoms}
             onAddMood={handleAddMood}
             onAddMindfulness={handleAddMindfulness}
+            onAddOralCare={handleAddOralCare}
             onRecordActivity={handleRecordActivity}
             onAskSparky={handleAskSparky}
             onStartCheckIn={handleStartCheckIn}
-            showCheckIn={guidedCheckInEnabled}
             onOpenCycle={handleOpenCycle}
             showCycleCard={cycleEnabled}
             cycleLabel={cycleSheetLabel}
@@ -2375,6 +2509,7 @@ function AppContent() {
           <ActiveWorkoutKeepAwake />
           <MedicationReminderReconciler />
           <MoodCheckinReminderReconciler />
+          <OralCareReminderReconciler />
           <SafeAreaToast />
         </LightboxProvider>
       </SafeAreaProvider>

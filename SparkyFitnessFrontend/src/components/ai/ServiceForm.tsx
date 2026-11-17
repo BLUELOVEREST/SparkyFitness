@@ -1,5 +1,5 @@
-import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { isGpt6Model } from '@workspace/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -48,6 +48,7 @@ import {
   UpdateAiServiceSettingsFormInput,
 } from '@/schemas/form/AiServiceSettings.form.zod';
 import type { TestConnectionStatus } from '@/hooks/AI/useTestAIServiceConnection';
+import { useOpenCodeGoModels } from '@/hooks/AI/useOpenCodeGoModels';
 import { ModelDiscovery } from './ModelDiscovery';
 
 type ProfileFormOverride = AiServiceProfileOverride & {
@@ -228,6 +229,23 @@ export const ServiceForm = ({
   const numericFieldInvalid = (
     field: 'max_tokens' | 'timeout_seconds' | 'temperature'
   ) => selectedNumericIssues.some((issue) => issue.path[0] === field);
+  const isOpenCodeGo = formData.service_type === 'opencode_go';
+  const modelRequestKey = `${('id' in formData && formData.id) || ''}\n${formData.api_key?.trim() ?? ''}`;
+  const [loadedOpenCodeModels, setLoadedOpenCodeModels] = useState<{
+    requestKey: string;
+    models: string[];
+  } | null>(null);
+  const opencodeModels =
+    loadedOpenCodeModels?.requestKey === modelRequestKey
+      ? loadedOpenCodeModels.models
+      : [];
+  const { loadModels, isLoading: loadingModels } = useOpenCodeGoModels();
+  const availableOpenCodeModels =
+    isOpenCodeGo &&
+    formData.model_name &&
+    !opencodeModels.includes(formData.model_name)
+      ? [formData.model_name, ...opencodeModels]
+      : opencodeModels;
   const voiceRoutingSupported = supportsVoiceTranscriptionServiceType(
     formData.service_type
   );
@@ -238,6 +256,25 @@ export const ServiceForm = ({
       ? formData.custom_model_name
       : formData.model_name
   )?.trim();
+
+  const loadOpenCodeModels = async () => {
+    const requestKey = modelRequestKey;
+    try {
+      const result = await loadModels({
+        ...('id' in formData && formData.id ? { id: formData.id } : {}),
+        ...(formData.api_key?.trim()
+          ? { api_key: formData.api_key.trim() }
+          : {}),
+      });
+      setLoadedOpenCodeModels({ requestKey, models: result.models });
+    } catch {
+      toast({
+        title: t(`${translationPrefix}.error`),
+        description: t(`${translationPrefix}.openCodeGoModelsLoadFailed`),
+        variant: 'destructive',
+      });
+    }
+  };
 
   const requiresCustomUrl =
     formData.service_type === 'custom' ||
@@ -315,8 +352,9 @@ export const ServiceForm = ({
                 // Types without preset models (openai_compatible/custom/ollama)
                 // have no dropdown, so reveal the custom-model input directly.
                 showCustomModelInput:
-                  getModelOptions(value).length === 0 ||
-                  !getModelOptions(value).includes(selectedModel ?? ''),
+                  value !== 'opencode_go' &&
+                  (getModelOptions(value).length === 0 ||
+                    !getModelOptions(value).includes(selectedModel ?? '')),
                 // Default all services to the 'full' tool profile.
                 // Users can manually select 'core' if they wish to optimize
                 // their local system performance, and are guided by warnings.
@@ -532,7 +570,56 @@ export const ServiceForm = ({
         </div>
       )}
 
-      {formData.service_type !== 'openai_compatible' &&
+      {isOpenCodeGo && !formData.showCustomModelInput && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex-1">
+              <Label htmlFor="model_name_select">
+                {t(`${translationPrefix}.model`)}
+              </Label>
+              <Select
+                value={formData.model_name ?? ''}
+                onValueChange={(value) =>
+                  onFormDataChange({ model_name: value })
+                }
+              >
+                <SelectTrigger id="model_name_select">
+                  <SelectValue
+                    placeholder={t(`${translationPrefix}.selectModel`)}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableOpenCodeModels.map((model) => (
+                    <SelectItem key={model} value={model}>
+                      {model}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void loadOpenCodeModels()}
+              disabled={
+                loadingModels ||
+                (!formData.api_key?.trim() &&
+                  !('id' in formData && formData.id))
+              }
+            >
+              {loadingModels && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              {loadingModels
+                ? t(`${translationPrefix}.loadingModels`)
+                : t(`${translationPrefix}.loadModels`)}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!isOpenCodeGo &&
+        formData.service_type !== 'openai_compatible' &&
         !formData.showCustomModelInput &&
         modelOptions.length > 0 && (
           <div>
@@ -1089,7 +1176,12 @@ export const ServiceForm = ({
           >
             {testStatus.state === 'success'
               ? t('settings.aiService.test.successTitle')
-              : `${t('settings.aiService.test.failureTitle')}: ${testStatus.message}`}
+              : [
+                  `${t('settings.aiService.test.failureTitle')}: ${testStatus.message}`,
+                  testStatus.detail,
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
           </span>
         )}
       </div>
