@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-11-04_
+_Last updated: 2026-11-17_
 
 This is the repo-root monorepo guide for SparkyFitness. Use it to choose the right package, understand shared repo-level rules, and find the next guide to read.
 
@@ -94,7 +94,9 @@ These fork-specific rules supplement the upstream package guides.
 
 ### Local Test Environment
 
-- Active AI-settings source preview (2026-11-04): SF now mounts this main workspace (`/home/zhangzhicheng/workspace/own/eric-sparkyfitness`) for both frontend and server, including the uncommitted AI-settings/model-discovery changes. Restart from the SF deployment directory with `docker compose -p eric-sparkyfitness-test --env-file .env -f docker-compose.yml -f compose.preview-ai-settings.json up -d --no-build --pull never`. Existing Node/nginx images are reused; `.env` image tags do not describe this source preview. The database and uploads are unchanged; a verified pre-switch database dump is retained as `backups/pre-ai-settings-preview-20261104.dump`. All four SF containers, the web entry and proxied `/api/health` were verified healthy. openGym is unchanged. Preserve this workspace and its dependencies while the preview is active.
+- Active v1.12.1 source preview (2026-11-17): frontend and server mount `/home/zhangzhicheng/workspace/own/eric-sparkyfitness/.worktrees/merge-v1.12.1`, source commit `fbd194fcf`, not the development main workspace. From the test deployment directory use base `docker-compose.yml` plus that worktree's `.local-preview/compose.preview-v1.12.1.json`, project `eric-sparkyfitness-test`, existing `.env`, and `up -d --no-build --pull never`. Both Node containers are limited to 0.5 CPU/768 MB; backend source stays read-only with writable uploads/backup/temp-upload mounts. Keep the worktree, dependencies, local override and mount-point directories while previewing. The `source-web-v111` name is only a retained nginx upstream alias, not the served version. All four containers, LAN page, frontend entry module and proxied health passed. Fifteen critical table counts and the complete uploads manifest are unchanged. Verified backup: `backups/pre-v1121-source-2026-11-17T03-08-22-508Z/` in the deployment directory; dump fully decoded and configuration/uploads archive compared. Database initialization has run with v1.12.1; old images alone are not a schema rollback. GitHub full mobile lint passed for the same source in run `44007034992`. No release tags or APK/image builds were triggered; production and openGym were not changed.
+
+- Previous AI-settings source preview (2026-11-04, superseded 2026-11-17): mounted the main workspace with `compose.preview-ai-settings.json`; the earlier verified `backups/pre-ai-settings-preview-20261104.dump` remains a historical backup. Do not restart the old preview configuration without considering the newer database migrations.
 
 - Previous v1.11.0 source preview (2026-11-03, superseded 2026-11-04): SF used the accepted source in `/tmp/sparkyfitness-merge-v1.11.0` with `compose.preview-v1.11.0.json`. Verified database and configuration/uploads backups remain in `backups/pre-v111-source-2026-11-03T00-20-52-377Z/`; the newer migrations have been applied, so returning to old images alone is not a database rollback.
 
@@ -112,7 +114,8 @@ These fork-specific rules supplement the upstream package guides.
 
 ### Production Environment
 
-- Verified deployment (2026-11-02): SF `v1.9.0-eric.61`; openGym `v1.4.3-eric.4`. Both use Gitea-built images. SF's 120 preexisting table counts, openGym's complete migrated profile/auth state, secrets and uploads were checked; local pairing is not copied to production.
+- Verified deployment (2026-11-05): SF `v1.11.0-eric.63`; openGym `v1.4.4-eric.6`, both using Gitea-built images. All four application containers are healthy; LAN/public pages and health endpoints passed. SF preexisting table counts, openGym profile contents and connection statuses, and both upload manifests are unchanged. Runtime configuration and mounts are preserved except release version metadata.
+- Latest verified production backups are under each deployment's `backups/production-upgrade-sf63-og6-20261105T021445Z/`: SF includes a fully decoded PostgreSQL `database.dump` and `configuration-uploads.tar.gz`; openGym includes `complete-service.tar.gz` with its entire stopped data directory. Archives were compared against stopped files; SQLite integrity passed. `backup-verified.json` and `upgrade-verified.json` record checks. Previous versions were SF `v1.11.0-eric.62` and openGym `v1.4.3-eric.4`; old images are pinned with local recovery tags. Retain private backups and restore the appropriate database/data backup if schema rollback requires it.
 - Verified pre-upgrade production backups are under each deployment's `backups/production-upgrade-20261102-eric61-og4/`. SF includes `database.dump` and `configuration-uploads.tar.gz`; openGym includes `complete-service.tar.gz`. These private backups are retained, unlike deleted local test backups. `backup-verified.json` and `upgrade-verified.json` record validation. openGym migrated JSON profiles to SQLite: restore the complete pre-upgrade data separately before an old-image rollback; never run old JSON code on migrated data.
 - openGym deployment: `/share/CACHEDEV1_DATA/Container/container-station-data/appdata/eric-openGym`, Compose project `eric-opengym`, `compose.yaml` and `.env` (`OPENGYM_CUSTOM_VERSION`). LAN `http://192.168.200.101:18080/`; public `https://opengym.blueloverest.site:44443/`. Preserve `/data`, the auth secret and existing public auth origin when updating.
 - SSH host: `ubuntu-nas`; NAS LAN IP: `192.168.200.101`.
