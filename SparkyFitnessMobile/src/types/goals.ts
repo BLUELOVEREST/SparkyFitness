@@ -1,3 +1,5 @@
+import type { CalorieCyclingDay } from '@workspace/shared';
+
 export interface DailyGoals {
   calories: number;
   protein: number;
@@ -31,6 +33,7 @@ export interface DailyGoals {
   snacks_percentage?: number;
   custom_nutrients?: Record<string, string | number>;
   custom_meal_percentages?: Record<string, number>;
+  calorie_cycling?: CalorieCyclingDay;
 }
 
 export type CarbCycleDayType = 'high' | 'medium' | 'low';

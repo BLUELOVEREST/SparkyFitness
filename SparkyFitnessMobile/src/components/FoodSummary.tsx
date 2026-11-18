@@ -20,6 +20,8 @@ import {
   getMealTargetCalories,
   type MealGroup,
 } from '../utils/mealNutrition';
+import { useEnergyUnit } from '../hooks/useEnergyUnit';
+import { energyUnitLabel, roundedEnergy } from '../utils/energyUnit';
 
 interface FoodSummaryProps {
   foodEntries: FoodEntry[];
@@ -97,6 +99,7 @@ const MealSection: React.FC<MealSectionProps> = ({
     : undefined;
   const icon = systemConfig?.icon ?? 'meal-snack';
 
+  const energyUnit = useEnergyUnit();
   const totalCalories = calculateMealNutrition(group.entries).values.calories;
   const targetCalories = React.useMemo(
     () => getMealTargetCalories(group.name, group.isSystem, goals, calorieGoal),
@@ -112,9 +115,11 @@ const MealSection: React.FC<MealSectionProps> = ({
       {(totalCalories > 0 || targetCalories > 0) && (
         <View className="bg-accent-primary/5 rounded-full px-2.5 py-0.5">
           <Text className="text-xs text-accent-primary font-semibold">
-            {totalCalories}
-            {targetCalories > 0 ? ` / ${targetCalories}` : ''}{' '}
-            {t('foodSummary.caloriesUnit', { defaultValue: 'Cal' })}
+            {roundedEnergy(totalCalories, energyUnit)}
+            {targetCalories > 0
+              ? ` / ${roundedEnergy(targetCalories, energyUnit)}`
+              : ''}{' '}
+            {energyUnitLabel(energyUnit, t)}
           </Text>
         </View>
       )}

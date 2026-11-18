@@ -122,7 +122,6 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
         return dayType;
     }
   };
-  const { loggingLevel, firstDayOfWeek } = usePreferences(); // Get loggingLevel from preferences
   const initialMacroTargets =
     Object.keys(mealMacroTargetsByDay).length > 0
       ? mealMacroTargetsByDay
@@ -139,6 +138,16 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
     proteinPerKg: '2',
     fatPerKg: '1',
   });
+  const {
+    loggingLevel,
+    firstDayOfWeek,
+    energyUnit,
+    convertEnergy,
+    getEnergyUnitString,
+  } = usePreferences();
+  // Assignments carry kcal; totals are shown in the account's energy unit.
+  const energyText = (kcal: number) =>
+    `${Math.round(convertEnergy(kcal, 'kcal', energyUnit))} ${getEnergyUnitString(energyUnit)}`;
   const [planName, setPlanName] = useState(template?.plan_name || '');
   const [description, setDescription] = useState(template?.description || '');
   const [startDate, setStartDate] = useState(
@@ -1048,7 +1057,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                       )}
                                     </div>
                                     <div className="text-muted-foreground">
-                                      {dayTarget.calories.toFixed(0)} kcal
+                                      {energyText(dayTarget.calories)}
                                     </div>
                                     <div className="space-y-1 font-medium">
                                       <div className="flex justify-between gap-2">
@@ -1148,7 +1157,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                               { day: day.name }
                             )}
                           </span>{' '}
-                          {dayTargetTotals.calories.toFixed(0)} kcal | C:{' '}
+                          {energyText(dayTargetTotals.calories)} | C:{' '}
                           {dayTargetTotals.carbs.toFixed(1)}g | P:{' '}
                           {dayTargetTotals.protein.toFixed(1)}g | F:{' '}
                           {dayTargetTotals.fat.toFixed(1)}g
@@ -1249,9 +1258,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                                               t('common.serving', 'serving')}
                                           </div>
                                           <div className="flex space-x-3 mt-1 sm:mt-0">
-                                            <span>
-                                              {calories.toFixed(0)} kcal
-                                            </span>
+                                            <span>{energyText(calories)}</span>
                                             <span className="text-green-500">
                                               C: {carbs.toFixed(1)}g
                                             </span>
@@ -1272,8 +1279,8 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                             {assignmentsForMealType.length > 0 && (
                               <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted rounded">
                                 <strong>{t('common.total', 'Total')}:</strong>{' '}
-                                {mealTypeTotals.totalCalories.toFixed(0)} kcal |{' '}
-                                C: {mealTypeTotals.totalCarbs.toFixed(1)}g | P:{' '}
+                                {energyText(mealTypeTotals.totalCalories)} | C:{' '}
+                                {mealTypeTotals.totalCarbs.toFixed(1)}g | P:{' '}
                                 {mealTypeTotals.totalProtein.toFixed(1)}g | F:{' '}
                                 {mealTypeTotals.totalFat.toFixed(1)}g
                               </div>
@@ -1282,7 +1289,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                               <div className="text-xs text-muted-foreground mt-2 p-2 border border-dashed rounded">
                                 <div className="font-medium text-foreground">
                                   {t('mealPlanTemplateForm.target', 'Target')}:{' '}
-                                  {mealTarget.calories} kcal | C:{' '}
+                                  {energyText(mealTarget.calories)} | C:{' '}
                                   {mealTarget.carbs}g | P: {mealTarget.protein}g
                                   | F: {mealTarget.fat}g
                                 </div>
@@ -1510,7 +1517,7 @@ const MealPlanTemplateForm: React.FC<MealPlanTemplateFormProps> = ({
                         </h4>
                         <div className="text-sm space-x-4">
                           <span className="font-medium">
-                            {dailyTotals.totalCalories.toFixed(0)} kcal
+                            {energyText(dailyTotals.totalCalories)}
                           </span>
 
                           <span className="text-green-500">

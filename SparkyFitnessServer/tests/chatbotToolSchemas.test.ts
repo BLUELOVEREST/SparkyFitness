@@ -298,6 +298,7 @@ describe('published (flat) chatbot tool schemas', () => {
         'get_fasting_status',
         'get_biometrics_history',
         'get_custom_metrics_history',
+        'get_oral_care_summary',
       ],
     },
     {
@@ -344,6 +345,7 @@ describe('published (flat) chatbot tool schemas', () => {
         'default_weight_unit',
         'default_measurement_unit',
         'default_distance_unit',
+        'default_temperature_unit',
         'water_display_unit',
       ],
       actions: [

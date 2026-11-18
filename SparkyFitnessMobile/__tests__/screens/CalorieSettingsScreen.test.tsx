@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 import i18n, { initializeI18n } from '../../src/localization/i18n';
 import CalorieSettingsScreen from '../../src/screens/CalorieSettingsScreen';
 
@@ -83,6 +84,31 @@ const navigation = { goBack: jest.fn(), setOptions: jest.fn() } as never;
 const route = { params: {} } as never;
 
 describe('CalorieSettingsScreen', () => {
+  it('does not expose duplicate calorie cycling controls in the Eric fork', () => {
+    const screen = render(
+      <CalorieSettingsScreen navigation={navigation} route={route} />
+    );
+    expect(screen.queryByTestId('calorie-cycling-card')).toBeNull();
+  });
+
+  it.each([false, true])(
+    'shows and updates the exercise macro preference from %s',
+    (enabled) => {
+      mockPreferences.adjust_macros_with_exercise = enabled;
+      const screen = render(
+        <CalorieSettingsScreen navigation={navigation} route={route} />
+      );
+      const toggle = screen.getByLabelText(
+        'Adjust percentage macro goals with exercise calories'
+      );
+      expect(toggle.props.value).toBe(enabled);
+      fireEvent(toggle, 'valueChange', !enabled);
+      expect(mockMutate).toHaveBeenCalledWith({
+        adjust_macros_with_exercise: !enabled,
+      });
+    }
+  );
+
   beforeEach(async () => {
     await act(async () => {
       await initializeI18n('en');
@@ -434,6 +460,32 @@ describe('CalorieSettingsScreen', () => {
     expect(mockMutate).toHaveBeenCalledWith({ use_external_bmr: true });
   });
 
+  it('saves the Move ring opt-in as an account setting on iPhone', () => {
+    const { getByLabelText } = render(
+      <CalorieSettingsScreen navigation={navigation} route={route} />
+    );
+
+    fireEvent(
+      getByLabelText('Use Move ring for active calories'),
+      'valueChange',
+      true
+    );
+
+    expect(mockMutate).toHaveBeenCalledWith({
+      use_move_ring_active_calories: true,
+    });
+  });
+
+  it('hides the Move ring opt-in on Android', () => {
+    const osSpy = jest.replaceProperty(Platform, 'OS', 'android');
+    const { queryByLabelText } = render(
+      <CalorieSettingsScreen navigation={navigation} route={route} />
+    );
+
+    expect(queryByLabelText('Use Move ring for active calories')).toBeNull();
+    osSpy.restore();
+  });
+
   it('saves a bounded custom Goal Mode percentage', () => {
     mockPreferences.goal_mode = 'manual';
     mockPreferences.goal_mode_custom_percentage = -10;
@@ -451,13 +503,13 @@ describe('CalorieSettingsScreen', () => {
   });
 
   it('offers standard, custom, and disabled safety floor modes', () => {
-    const { getByText } = render(
+    const { getByText, getAllByText } = render(
       <CalorieSettingsScreen navigation={navigation} route={route} />
     );
 
     expect(getByText('Safety Floor')).toBeTruthy();
     expect(getByText('Standard')).toBeTruthy();
-    expect(getByText('Custom')).toBeTruthy();
+    expect(getAllByText('Custom')).toHaveLength(1);
     expect(getByText('Disabled')).toBeTruthy();
   });
 

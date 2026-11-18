@@ -1,0 +1,46 @@
+name: Eric Mobile Lint
+
+on:
+  push:
+    branches:
+      - "codex/**"
+      - "sparky-custom-eric-flow"
+    paths:
+      - "SparkyFitnessMobile/**"
+      - "shared/**"
+      - ".github/workflows/eric-mobile-lint.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eric-mobile-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile-lint:
+    if: ${{ github.server_url == 'https://github.com' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install mobile workspace dependencies
+        run: pnpm install --frozen-lockfile --filter sparkyfitnessmobile...
+      - name: Run full mobile lint
+        working-directory: SparkyFitnessMobile
+        run: pnpm run lint

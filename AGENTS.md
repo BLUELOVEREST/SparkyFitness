@@ -39,6 +39,7 @@ For `docs/` and `SparkyFitnessGarmin/`, there is no package-level `AGENTS.md`. `
 - `docs/` - VitePress documentation site.
 - `docs/readme/` - translated copies of the root `README.md` (`README_<lang>.md`), outside the VitePress `srcDir`. The language bar at the top of `README.md` links to them; when the root README changes substantially, the translations go stale.
 - `SparkyFitnessGarmin/` - standalone Python integration service outside the current `pnpm` workspace.
+- `SparkyFitnessTag/` - static site behind `https://tag.sparkyfitness.com` (Cloudflare Workers static assets, deployed from this folder with `wrangler.jsonc`). It serves only Apple's `apple-app-site-association`, Android's `assetlinks.json` and a "get the app" page, so an NFC tag link (`/t/<code>`) opens the mobile app. Holds no secrets and stores no data; a new app ID, Apple team or signing key means editing the two `.well-known` files. Not a `pnpm` workspace package. Do not add a `_redirects` rule for `/t/*`: Cloudflare rejects it as a loop, and `not_found_handling: single-page-application` already serves the page.
 - `docker/`, `helm/`, `.github/` - infra and deployment assets.
 - `umbrel/sparkyfitness/` - Umbrel App Store package (manifest, compose, derived secrets), submitted to `getumbrel/umbrel-apps`. See `umbrel/README.md`.
 - `db_schema_backup.sql` - repo-root schema snapshot kept in sync by CI (`.github/workflows/schema-backup.yml`); never hand-edit or regenerate locally.
@@ -54,6 +55,11 @@ For `docs/` and `SparkyFitnessGarmin/`, there is no package-level `AGENTS.md`. `
 ## Eric Development, Releases, and Deployment
 
 These fork-specific rules supplement the upstream package guides.
+
+### Cycling Ownership
+
+- Eric carb-cycle planning is the only enabled nutrition cycle. Keep upstream calorie-cycling schemas, migrations and pure algorithms for upstream compatibility, but `UPSTREAM_CALORIE_CYCLING_ENABLED` in shared calorie constants is false. Web/mobile settings and goal hints must honor that policy, and server goal reads must never apply upstream cycling to custom daily/per-meal targets.
+- On this 8 GB development machine, run validation serially on one CPU at low priority, use single-worker focused tests without coverage, and cap Node heaps. Do not repeat concurrent large typechecks or increase heaps until the machine swaps heavily. Report resource-limited validation as incomplete.
 
 ### openGym Integration Work
 
@@ -78,6 +84,7 @@ These fork-specific rules supplement the upstream package guides.
 - Preserve upstream translations. For Simplified Chinese translation conflicts, upstream text wins; custom translation enhancements supplement upstream text rather than replace existing translations. Do not use blanket whole-file "ours" conflict resolution.
 - Preserve upstream translations, including official translation fixes. The user accepted the six known v1.8.0 German placeholder errors during that upgrade; v1.9.0 fixes those upstream, so retain the official fix.
 - Known v1.9.0 mobile audit failure: `zh-Hans` and `zh-Hant` duplicate `done` in `recordActivity.program.paused`. Keep these official catalogs unchanged and report the failure; do not disable the audit or claim full mobile validation passes.
+- The unchanged official v1.12.1 catalogs pass the current mobile i18n and watch audits. The v1.9.0 failure above is historical; always report the actual current audit result without editing official translations to force a pass.
 - Ask the user about unresolved semantic conflicts, data-model decisions, or removal of custom behavior. Routine adaptations to established upstream conventions can proceed.
 - Run the affected packages' validation and tests, report remaining failures, and complete local acceptance before production deployment.
 
@@ -90,6 +97,7 @@ These fork-specific rules supplement the upstream package guides.
 - Push the release tag to Gitea for frontend/server images and to GitHub for APK builds when those builds are requested. Check the workflows and confirm the pushes actually succeeded.
 - Registry repositories are independent of the Git repository name: `192.168.200.101:54453/zhangzhicheng/sparkyfitness` (frontend) and `192.168.200.101:54453/zhangzhicheng/sparkyfitness-server` (server).
 - Gitea builds the container images; local and production machines pull and run those images. Do not start expensive local APK builds unless requested.
+- Full mobile lint can run on GitHub via `.github/workflows/eric-mobile-lint.yml`: pushes affecting mobile/shared to `codex/**` or `sparky-custom-eric-flow` run only lint, without signing secrets, APK builds or release tags. Use this for full lint when the local resource budget is insufficient; retain targeted local checks.
 - Android releases now produce separate arm64 phone and Wear OS APKs, signed with the same formal certificate and verified against the configured keystore before publication. Keep the signing identity stable across releases. GitHub Secrets and private recovery material are documented in `docs/superpowers/specs/2026-11-02-android-release-signing.md`; never commit signing material. The owner approved the one-time signing transition on 2026-11-02, including possible uninstall/reinstall of the older phone app after syncing local-only data.
 
 ### Local Test Environment
@@ -153,7 +161,7 @@ Cheap ways to learn things:
   1. Create the migration file in `SparkyFitnessServer/db/migrations/YYYYMMDDHHMMSS_description.sql`.
   2. Update the Row-Level Security (RLS) policies in `SparkyFitnessServer/db/rls_policies.sql`, and classify the new table in the `DOMAIN` map of `SparkyFitnessServer/tests/rlsPermissionMatrix.integration.test.ts` (CI fails when an RLS table is missing).
   3. **Restart the server** (`pnpm start` from `SparkyFitnessServer/`) to apply the migration. Agents ask the user to do this rather than starting it themselves. Keep one re-runnable migration file per PR, edited in place.
-  4. Leave `db_schema_backup.sql` alone — after merge, CI regenerates it from the migrations and opens an automated sync PR (`.github/workflows/schema-backup.yml`). Never manually edit the backup file or commit a locally generated copy.
+  4. Leave `db_schema_backup.sql` alone — after merge, CI regenerates it from the migrations and opens a sync PR that merges itself (`.github/workflows/schema-backup.yml`). Never manually edit the backup file or commit a locally generated copy.
   5. Add or update the matching Zod schema in `shared/src/schemas/database/`.
   6. Update the user-facing documentation in `docs/src/features/family-friends-sharing.md`.
   7. Update the developer documentation in `docs/src/developer/database-security-tiers.md` to classify the table as Tier 1, Tier 2, or Tier 3.

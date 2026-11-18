@@ -83,6 +83,15 @@ export const testAiServiceConnectionResponseSchema = z.object({
   category: z.string().optional(),
   detail: z.string().optional(),
 });
+
+export const listOpenCodeGoModelsRequestSchema = z.object({
+  id: z.string().uuid().optional(),
+  api_key: z.string().optional(),
+});
+
+export const listOpenCodeGoModelsResponseSchema = z.object({
+  models: z.array(z.string()),
+});
 export type AiServiceSettingsResponse = z.infer<
   typeof aiServiceSettingsResponseSchema
 >;
@@ -122,4 +131,11 @@ export type AiServiceModelsRequest = z.infer<
 >;
 export type AiServiceModelsResponse = z.infer<
   typeof aiServiceModelsResponseSchema
+>;
+
+export type ListOpenCodeGoModelsRequest = z.infer<
+  typeof listOpenCodeGoModelsRequestSchema
+>;
+export type ListOpenCodeGoModelsResponse = z.infer<
+  typeof listOpenCodeGoModelsResponseSchema
 >;
